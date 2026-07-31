@@ -1,0 +1,29 @@
+{
+  "name": "@altai/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsup src/index.ts --format esm --out-dir dist",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@altai/shared": "workspace:*",
+    "@altai/contracts": "workspace:*",
+    "@altai/db": "workspace:*",
+    "fastify": "^5.1.0",
+    "@fastify/cookie": "^11.0.0",
+    "@fastify/cors": "^10.0.0",
+    "@fastify/oauth2": "^8.1.0",
+    "@fastify/websocket": "^11.0.0",
+    "drizzle-orm": "^0.36.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "tsx": "^4.19.0",
+    "tsup": "^8.3.0",
+    "@types/node": "^22.0.0"
+  }
+}

@@ -1,0 +1,30 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: altai
+      POSTGRES_PASSWORD: altai
+      POSTGRES_DB: altai
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+    depends_on:
+      - postgres
+
+  # api, web, bot Faz 0 ilerledikçe buraya eklenecek (Dockerfile'lar hazır olunca).
+
+volumes:
+  pgdata:
+  caddy_data:
