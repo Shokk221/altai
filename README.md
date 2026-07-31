@@ -87,6 +87,20 @@ pnpm dev
 Bundan sonrası (Faz 1: SquadJSAdapter + PersistenceWriter + bm-export) plandaki
 Bölüm 7'de tarif edildiği gibi devam eder.
 
+## Eski sistemle hizalanan bağımlılık sürümleri
+
+Eski (v1) Altai kod tabanı incelenip, v2'de de kullanılan paketlerin
+sürümleri production'da kanıtlanmış olanlarla hizalandı:
+- `discord.js`: `^14.14.1` (hem eski `discordBot.js` hem vendored SquadJS
+  fork'u bu sürümü kullanıyor, `package-lock.json`'da da bu çözümleniyor)
+- `ws`: `^8.18.3` (eski sistemde `socket.io`'nun transitive bağımlılığı
+  olarak bu sürüm çözümleniyor)
+
+Not: Eski sistem Express + MongoDB + kullanıcı adı/şifre login (`WebUser`)
+kullanıyor — bunlar v2'de bilerek kaldırılan/değiştirilen parçalar (plan
+Bölüm 8), o yüzden versiyon hizalaması sadece gerçekten örtüşen paketler
+için yapıldı; mimari farklar korunuyor.
+
 ## Doğrulama durumu (bu zip için)
 
 `pnpm install`, `pnpm lint` (Biome) ve `pnpm typecheck` (10/10 paket) bu

@@ -15,6 +15,6 @@
     "formatter": { "quoteStyle": "single", "semicolons": "always" }
   },
   "files": {
-    "ignore": ["dist/**", ".next/**", "node_modules/**"]
+    "ignore": ["dist/**", ".next/**", "node_modules/**", ".turbo/**"]
   }
 }

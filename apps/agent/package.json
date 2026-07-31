@@ -12,7 +12,7 @@
     "@altai/shared": "workspace:*",
     "@altai/contracts": "workspace:*",
     "@altai/squad": "workspace:*",
-    "ws": "^8.18.0"
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "typescript": "^5.6.0",
