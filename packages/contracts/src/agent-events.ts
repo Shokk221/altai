@@ -29,10 +29,21 @@ export const ChatMessageEvent = z.object({
   timestamp: z.string().datetime(),
 });
 
+// 60 sn'de bir agent tarafından üretilir (Bölüm 5: "Sunucu popülasyon geçmişi")
+export const ServerSnapshotEvent = z.object({
+  type: z.literal('SERVER_SNAPSHOT'),
+  serverId: z.string(),
+  playerCount: z.number().int().nonnegative(),
+  queueCount: z.number().int().nonnegative().default(0),
+  layer: z.string().optional(),
+  timestamp: z.string().datetime(),
+});
+
 export const AgentEvent = z.discriminatedUnion('type', [
   PlayerConnectedEvent,
   PlayerDisconnectedEvent,
   ChatMessageEvent,
+  ServerSnapshotEvent,
 ]);
 
 export type AgentEvent = z.infer<typeof AgentEvent>;

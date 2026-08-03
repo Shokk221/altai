@@ -17,6 +17,8 @@ const envSchema = z.object({
   // İkisi de boşsa /auth/break-glass endpoint'i devre dışı kalır.
   BREAK_GLASS_USER: z.string().optional(),
   BREAK_GLASS_PASSWORD_HASH: z.string().optional(),
+  // agent -> api WS bağlantısını doğrulamak için (agent'ın kendi .env'inde de aynı değer olmalı)
+  AGENT_SHARED_SECRET: z.string().optional(),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;
