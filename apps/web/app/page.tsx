@@ -1,5 +1,4 @@
 import { BreakGlassLogin } from '@/components/break-glass-login';
-import { LiveServerStatus } from '@/components/live-server-status';
 import { LogoutButton } from '@/components/logout-button';
 import { cookies } from 'next/headers';
 
@@ -49,37 +48,28 @@ function getInternalApiUrl(): string {
   return cleanBaseUrl(process.env.API_INTERNAL_URL) ?? getPublicApiUrl();
 }
 
-function getPublicWsUrl(): string {
-  return cleanBaseUrl(process.env.NEXT_PUBLIC_API_WS_URL) ?? 'ws://localhost:3001/ws';
-}
-
 export default async function HomePage() {
   const publicApiUrl = getPublicApiUrl();
   const internalApiUrl = getInternalApiUrl();
   const me = await getMe(internalApiUrl);
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center gap-4">
-      {me ? (
-        <>
-          <p>
-            Giriş yapıldı: {me.discordUsername} (
-            {me.isBreakGlass ? `${me.systemRole} - break-glass` : me.systemRole})
-          </p>
-          <LogoutButton apiUrl={publicApiUrl} />
-        </>
-      ) : (
-        <>
-          <a
-            href={`${publicApiUrl}/auth/discord`}
-            className="rounded bg-indigo-600 px-4 py-2 text-white"
-          >
-            Discord ile giriş yap
-          </a>
-          <BreakGlassLogin apiUrl={publicApiUrl} />
-        </>
-      )}
-      <LiveServerStatus wsUrl={getPublicWsUrl()} />
-    </main>
+      <main className="min-h-screen flex flex-col items-center justify-center gap-4">
+        {me ? (
+            <>
+              <p>
+                Giriş yapıldı: {me.discordUsername} ({me.isBreakGlass ? `${me.systemRole} - break-glass` : me.systemRole})
+              </p>
+              <LogoutButton apiUrl={publicApiUrl} />
+            </>
+        ) : (
+            <>
+              <a href={`${publicApiUrl}/auth/discord`} className="rounded bg-indigo-600 px-4 py-2 text-white">
+                Discord ile giriş yap
+              </a>
+              <BreakGlassLogin apiUrl={publicApiUrl} />
+            </>
+        )}
+      </main>
   );
 }
