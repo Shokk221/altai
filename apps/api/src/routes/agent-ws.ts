@@ -1,11 +1,15 @@
 import type { AgentToApiMessage } from '@altai/contracts';
 import { AgentToApiMessage as AgentToApiMessageSchema } from '@altai/contracts';
 import type { Db } from '@altai/db';
-import { presenceSchema } from '@altai/db';
 import type { AppConfig } from '@altai/shared';
-import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
+import {
+  closeAllOpenSessions,
+  createPersistenceWriter,
+  reconcileStaleSessions,
+} from '../lib/persistence-writer.js';
+import { resolveServerId } from '../lib/server-registry.js';
 import {
   applyPlayerConnected,
   applyPlayerDisconnected,
@@ -15,9 +19,50 @@ import {
 export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig }) {
   const { db, config } = opts;
 
+  // Tek yazıcı tüm agent bağlantıları için paylaşılır: raw_events batch'i
+  // sunucu bazında değil global tutulur, böylece iki sunucudan gelen eventler
+  // tek insert'te gider.
+  const writer = createPersistenceWriter(db);
+  app.addHook('onClose', async () => {
+    await writer.stop();
+  });
+
   app.get('/agent-ws', { websocket: true }, (socket: WebSocket) => {
-    let authenticated = false;
     let serverSlug: string | null = null;
+    let serverId: string | null = null;
+    // hello ile serverId çözülene kadar gelen eventler burada bekler. Agent
+    // hello'yu ilk mesaj olarak gönderiyor ama spool boşaltması hemen ardından
+    // başlıyor; çözümleme async olduğu için ilk paket bu kuyruğa düşebilir.
+    const pending: AgentToApiMessage[] = [];
+    // Çözümleme birkaç milisaniye sürer, ama askıda kalırsa bu kuyruk belleği
+    // yer bitirene kadar büyürdü. Üst sınıra gelinirse bağlantı kapatılır:
+    // agent yeniden bağlanır ve spool'undan tekrar gönderir, veri kaybolmaz.
+    const PENDING_MAX = 10_000;
+    let ready = false;
+
+    const persist = (msg: AgentToApiMessage) => {
+      if (!serverId || !serverSlug) return;
+      if (msg.type !== 'event') return;
+      const event = msg.event;
+
+      writer.write(serverId, event);
+
+      switch (event.type) {
+        case 'PLAYER_CONNECTED':
+          applyPlayerConnected(serverSlug, event.steamId, event.name, event.timestamp);
+          break;
+        case 'PLAYER_DISCONNECTED':
+          applyPlayerDisconnected(serverSlug, event.steamId);
+          break;
+        case 'SERVER_SNAPSHOT':
+          applyServerSnapshot(serverSlug, event.playerCount, event.queueCount, event.layer);
+          break;
+        case 'CHAT_MESSAGE':
+          // Faz 3'te bot'a / admin cam benzeri özelliklere yönlendirilecek.
+          // Şimdilik raw_events'te duruyor (writer yazdı).
+          break;
+      }
+    };
 
     socket.on('message', (raw: Buffer) => {
       let parsed: unknown;
@@ -37,46 +82,63 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
           socket.close();
           return;
         }
-        authenticated = true;
         serverSlug = msg.serverSlug;
         app.log.info({ serverSlug }, 'agent uplink bağlandı');
 
-        // servers tablosunda satırın var olduğunu doğrula (agent zaten kendi
-        // tarafında oluşturuyor, burada sadece id'yi hello_ack'e koymak için okunuyor)
-        void db
-          .select()
-          .from(presenceSchema.servers)
-          .where(eq(presenceSchema.servers.slug, msg.serverSlug))
-          .limit(1)
-          .then(([row]) => {
-            socket.send(JSON.stringify({ type: 'hello_ack', serverId: row?.id ?? 'unknown' }));
-          });
+        // Slug -> UUID çözümlemesi (yoksa satır oluşturulur) ve ardından
+        // reconciler: bir önceki çalıştırmadan crash nedeniyle açık kalmış
+        // session'ları 4 saat üst sınırıyla kapatır. Agent artık DB'ye
+        // dokunmadığı için bu iş buraya taşındı.
+        void (async () => {
+          try {
+            const id = await resolveServerId(db, msg.serverSlug, msg.serverSlug);
+            await reconcileStaleSessions(db, id);
+            serverId = id;
+            ready = true;
+            socket.send(JSON.stringify({ type: 'hello_ack', serverId: id }));
+            for (const queued of pending.splice(0)) persist(queued);
+          } catch (err) {
+            app.log.error({ err, serverSlug }, 'agent hello işlenemedi');
+            socket.send(JSON.stringify({ type: 'hello_reject', reason: 'server_error' }));
+            socket.close();
+          }
+        })();
         return;
       }
 
-      if (!authenticated || !serverSlug) return;
+      if (!serverSlug) return; // hello gelmeden hiçbir mesaj kabul edilmez
 
-      if (msg.type === 'event') {
-        const event = msg.event;
-        switch (event.type) {
-          case 'PLAYER_CONNECTED':
-            applyPlayerConnected(serverSlug, event.steamId, event.name, event.timestamp);
-            break;
-          case 'PLAYER_DISCONNECTED':
-            applyPlayerDisconnected(serverSlug, event.steamId);
-            break;
-          case 'SERVER_SNAPSHOT':
-            applyServerSnapshot(serverSlug, event.playerCount, event.queueCount, event.layer);
-            break;
-          case 'CHAT_MESSAGE':
-            // Faz 3'te bot'a / admin cam benzeri özelliklere yönlendirilecek.
-            break;
+      if (msg.type === 'shutdown') {
+        // Agent düzgün kapanıyor: açık session'ları gerçek zamanla kapat.
+        // WS'in kendiliğinden kopması bunu TETİKLEMEZ — geçici ağ kesintisi
+        // de aynı görünür ve oyuncular hâlâ oyunda olabilir.
+        const id = serverId;
+        if (id) {
+          app.log.info({ serverSlug }, "agent düzgün kapanıyor, session'lar kapatılıyor");
+          void closeAllOpenSessions(db, id).catch((err) =>
+            app.log.error({ err, serverSlug }, 'kapanışta session kapatma başarısız'),
+          );
         }
+        return;
       }
 
-      // command_result: Faz 2/3'te kick/ban gibi komutların sonucunu
-      // panelde göstermek için kullanılacak, şimdilik sadece loglanıyor.
+      if (msg.type === 'event') {
+        if (ready) {
+          persist(msg);
+        } else if (pending.length < PENDING_MAX) {
+          pending.push(msg);
+        } else {
+          app.log.error(
+            { serverSlug, pending: pending.length },
+            'hello çözümlemesi tamamlanmadan kuyruk doldu — bağlantı kapatılıyor',
+          );
+          socket.close();
+        }
+        return;
+      }
+
       if (msg.type === 'command_result') {
+        // Faz 2/3'te kick/ban gibi komutların sonucunu panelde göstermek için.
         app.log.info({ result: msg.result }, 'agent komut sonucu döndürdü');
       }
     });

@@ -1,8 +1,12 @@
 import { z } from 'zod';
 
 const envSchema = z.object({
-  DATABASE_URL: z.string().url(),
+  // DATABASE_URL YOK ve olmamalı: agent Postgres'e dokunmuyor, kalıcı veri
+  // api üzerinden yazılıyor (bkz. apps/agent/src/index.ts başındaki not).
   AGENT_API_WS_URL: z.string().url(),
+  // Bağlantı kopukken eventlerin biriktiği dizin. Oyun konteynerinde /data
+  // altında olmalı, yoksa konteyner yeniden yaratılınca kuyruk kaybolur.
+  AGENT_SPOOL_DIR: z.string().default('/data/altai-run/spool'),
   AGENT_SHARED_SECRET: z.string().min(8),
   SERVER_SLUG: z.string(),
   SERVER_NAME: z.string().default('Altai Squad Server'),

@@ -2,17 +2,21 @@ import type { AgentEvent, ApiToAgentMessage } from '@altai/contracts';
 import { ApiToAgentMessage as ApiToAgentMessageSchema } from '@altai/contracts';
 import { logger } from '@altai/shared';
 import WebSocket from 'ws';
+import type { Spool } from './spool.js';
 
 export interface UplinkOptions {
   url: string;
   serverSlug: string;
   secret: string;
+  /** Bağlantı yokken eventlerin biriktiği disk kuyruğu. */
+  spool: Spool;
   onCommand: (message: Extract<ApiToAgentMessage, { type: 'command' }>) => void;
 }
 
 export interface Uplink {
   send(event: AgentEvent): void;
-  close(): void;
+  /** Düzgün kapanış: api'ye shutdown bildirir, açık session'lar kapatılsın. */
+  shutdown(): Promise<void>;
 }
 
 const RECONNECT_BASE_MS = 1_000;
@@ -23,6 +27,43 @@ export function createUplink(opts: UplinkOptions): Uplink {
   let closed = false;
   let reconnectDelay = RECONNECT_BASE_MS;
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  // hello_ack gelene kadar hiçbir event gönderilmez: api slug -> UUID
+  // çözümlemesini bitirmeden gelen eventleri bellekte kuyruklamak zorunda kalır.
+  let acked = false;
+  // Spool boşalana kadar canlı gönderim yapılmaz, yoksa yeni eventler
+  // spool'daki eskileri geçer ve sıra bozulur.
+  let draining = false;
+
+  const canSend = () => ws?.readyState === WebSocket.OPEN && acked;
+
+  const sendNow = (event: AgentEvent): boolean => {
+    if (!canSend()) return false;
+    try {
+      ws?.send(JSON.stringify({ type: 'event', event }));
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  async function drainSpool() {
+    if (draining) return;
+    draining = true;
+    try {
+      await opts.spool.drain(sendNow);
+    } catch (err) {
+      logger.error({ err }, 'spool boşaltılamadı');
+    } finally {
+      draining = false;
+    }
+
+    // Boşaltma sürerken üretilen bir event, yazımı tamamlanmadan tur bittiyse
+    // diskte kalmış olabilir. Tetiklenmeyi bir sonraki yeniden bağlanmaya
+    // bırakırsak o event saatlerce bekler — burada hemen tekrar deniyoruz.
+    if (canSend() && opts.spool.hasPending()) {
+      setTimeout(() => void drainSpool(), 100);
+    }
+  }
 
   function connect() {
     if (closed) return;
@@ -46,7 +87,12 @@ export function createUplink(opts: UplinkOptions): Uplink {
 
       const msg = result.data;
       if (msg.type === 'hello_ack') {
+        acked = true;
         logger.info({ serverId: msg.serverId }, 'api uplink kimlik doğrulandı');
+        if (opts.spool.hasPending()) {
+          logger.info({ bayt: opts.spool.size() }, 'biriken eventler gönderiliyor');
+          void drainSpool();
+        }
       } else if (msg.type === 'hello_reject') {
         logger.error(
           { reason: msg.reason },
@@ -58,6 +104,7 @@ export function createUplink(opts: UplinkOptions): Uplink {
     });
 
     ws.on('close', () => {
+      acked = false;
       if (closed) return;
       logger.warn({ delayMs: reconnectDelay }, 'api uplink koptu, yeniden bağlanılacak');
       reconnectTimer = setTimeout(connect, reconnectDelay);
@@ -73,16 +120,33 @@ export function createUplink(opts: UplinkOptions): Uplink {
 
   return {
     send(event) {
-      if (ws?.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'event', event }));
+      // Spool boşalmadan canlı gönderim yapılmaz — sıra korunmalı.
+      if (canSend() && !draining && !opts.spool.hasPending()) {
+        if (sendNow(event)) return;
       }
-      // Bağlantı kopuksa event burada kaybolur — kalıcı veri zaten
-      // PersistenceWriter ile doğrudan Postgres'e yazıldığı için (Bölüm 3),
-      // uplink sadece gerçek zamanlı yayın içindir, veri kaybı değildir.
+      void opts.spool.append(event).catch((err) => {
+        // Buraya düşmek gerçek veri kaybı demek: ne gönderilebildi ne yazılabildi.
+        logger.error({ err, type: event.type }, 'event ne gönderilebildi ne spool edildi');
+      });
     },
-    close() {
+
+    async shutdown() {
       closed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
+
+      // Bağlantı varsa: kalanları gönder, sonra kapanışı bildir. Bağlantı
+      // yoksa zaten her şey spool'da; api'ye bildirim gitmez ve açık
+      // session'ları bir sonraki bağlantıda reconciler toparlar.
+      if (canSend()) {
+        await drainSpool();
+        try {
+          ws?.send(JSON.stringify({ type: 'shutdown', timestamp: new Date().toISOString() }));
+          // Mesajın hattan çıkması için kısa bir an tanı.
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        } catch (err) {
+          logger.warn({ err }, 'shutdown bildirimi gönderilemedi');
+        }
+      }
       ws?.close();
     },
   };

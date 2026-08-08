@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { resolveRoles } from '../lib/roles.js';
 import { createSession, destroySession, verifySession } from '../lib/session.js';
+import { isDiscordOAuthConfigured } from '../plugins/discord-oauth.js';
 
 interface DiscordUser {
   id: string;
@@ -43,6 +44,16 @@ export async function authRoutes(app: FastifyInstance, opts: { db: Db; config: A
   // GET /auth/discord başlangıç yönlendirmesini @fastify/oauth2 zaten kurdu
   // (startRedirectPath). Burada sadece callback'i işliyoruz.
   app.get('/auth/discord/callback', async (req, reply) => {
+    // Discord yapılandırılmamışsa plugin hiç kaydedilmemiştir (bkz.
+    // plugins/discord-oauth.ts). Anlaşılır hata dön, undefined üzerinde
+    // patlama — panel bu durumda break-glass ile çalışmaya devam ediyor.
+    if (!isDiscordOAuthConfigured(config)) {
+      return reply.code(503).send({
+        error: 'discord_not_configured',
+        message: 'Discord ile giriş yapılandırılmamış. Break-glass hesabını kullanın.',
+      });
+    }
+
     const { token } = await app.discordOAuth2.getAccessTokenFromAuthorizationCodeFlow(req);
 
     // 1. Discord kullanıcı kimliği

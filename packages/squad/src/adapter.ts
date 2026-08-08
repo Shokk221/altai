@@ -15,7 +15,9 @@ const CHAT_CHANNEL_MAP: Record<SquadJSChatMessageRaw['chat'], 'All' | 'Team' | '
   };
 
 export interface SquadJSAdapterOptions {
-  serverId: string; // packages/db#servers.id (UUID, Discord ID değil)
+  // Sunucunun kısa adı (agent .env'indeki SERVER_SLUG). DB UUID'si DEĞİL —
+  // agent veritabanına dokunmaz, slug -> UUID çözümlemesini api yapar.
+  serverSlug: string;
   engine: SquadJSEngine;
   onEvent: (event: AgentEvent) => void;
   // player henüz RCON'un ListPlayers'ında görünmediği için eşleştirilemeyen
@@ -34,7 +36,7 @@ export interface SquadJSAdapterHandle {
 }
 
 export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapterHandle {
-  const { serverId, engine, onEvent } = opts;
+  const { serverSlug, engine, onEvent } = opts;
   const snapshotIntervalMs = opts.snapshotIntervalMs ?? 60_000;
   let snapshotTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -45,7 +47,7 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
     }
     onEvent({
       type: 'PLAYER_CONNECTED',
-      serverId,
+      serverSlug,
       steamId: raw.player.steamID,
       eosId: raw.player.eosID,
       name: raw.player.name,
@@ -60,7 +62,7 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
     }
     onEvent({
       type: 'PLAYER_DISCONNECTED',
-      serverId,
+      serverSlug,
       steamId: raw.player.steamID,
       timestamp: raw.time.toISOString(),
     });
@@ -69,7 +71,7 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
   const handleChat = (raw: SquadJSChatMessageRaw) => {
     onEvent({
       type: 'CHAT_MESSAGE',
-      serverId,
+      serverSlug,
       steamId: raw.steamID,
       channel: CHAT_CHANNEL_MAP[raw.chat],
       message: raw.message,
@@ -82,7 +84,7 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
       const status = await engine.getStatus();
       onEvent({
         type: 'SERVER_SNAPSHOT',
-        serverId,
+        serverSlug,
         playerCount: status.playerCount,
         queueCount: status.publicQueue,
         layer: status.currentLayer,

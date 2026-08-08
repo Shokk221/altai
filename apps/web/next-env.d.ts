@@ -8,4 +8,3 @@ declare global {
     interface IntrinsicElements extends React.JSX.IntrinsicElements {}
   }
 }
-

@@ -12,9 +12,24 @@ export const AgentHello = z.object({
 });
 export type AgentHello = z.infer<typeof AgentHello>;
 
+// Agent düzgün kapanırken (SIGTERM) gönderir. api bunu alınca o sunucunun
+// açık session'larını gerçek zaman damgasıyla kapatır.
+//
+// WS'in kopması TEK BAŞINA session kapatma sebebi değildir — geçici bir ağ
+// kesintisi de aynı görünür ve oyuncular hâlâ oyunda olabilir. Bu yüzden
+// kapanış açıkça bildirilir; bildirim hiç gelmezse (crash, konteyner kill)
+// açık session'ları bir sonraki hello'daki reconciler 4 saat üst sınırıyla
+// toparlar.
+export const AgentShutdown = z.object({
+  type: z.literal('shutdown'),
+  timestamp: z.string().datetime(),
+});
+export type AgentShutdown = z.infer<typeof AgentShutdown>;
+
 // agent -> api yönünde giden zarf
 export const AgentToApiMessage = z.union([
   AgentHello,
+  AgentShutdown,
   z.object({ type: z.literal('event'), event: AgentEvent }),
   z.object({ type: z.literal('command_result'), result: AgentCommandResult }),
 ]);

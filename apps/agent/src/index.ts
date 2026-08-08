@@ -1,4 +1,3 @@
-import { createDb } from '@altai/db';
 import { logger } from '@altai/shared';
 import {
   type RealSquadServerLike,
@@ -8,25 +7,25 @@ import {
   createSquadServerEngineAdapter,
 } from '@altai/squad';
 import { loadAgentConfig } from './config.js';
-import {
-  closeAllOpenSessions,
-  createPersistenceWriter,
-  reconcileStaleSessions,
-} from './persistence-writer.js';
-import { resolveServerId } from './server-registry.js';
+import { createSpool } from './spool.js';
 import { createUplink } from './uplink.js';
 
+// Agent'ın Postgres'e erişimi YOK ve olmamalı. Kalıcı veri, agent'ın zaten
+// açtığı WS üzerinden api'ye gider; api tek noktadan veritabanına yazar.
+// Bunun iki sebebi var:
+//   1. Postgres'in ağa açılması gerekmiyor — api ile aynı konteynerde,
+//      yalnızca localhost'tan erişilebilir.
+//   2. Oyun sunucusundaki bir sürecin veritabanı kimlik bilgisi taşıması
+//      gereksiz bir risk.
+// Bağlantı koptuğunda eventler diske spool edilir, gelince sırayla gönderilir.
 const config = loadAgentConfig();
-const db = createDb(config.DATABASE_URL);
 
-const serverId = await resolveServerId(db, config.SERVER_SLUG, config.SERVER_NAME);
-await reconcileStaleSessions(db, serverId);
-
-const writer = createPersistenceWriter(db);
+const spool = createSpool({ dir: config.AGENT_SPOOL_DIR });
 const uplink = createUplink({
   url: config.AGENT_API_WS_URL,
   serverSlug: config.SERVER_SLUG,
   secret: config.AGENT_SHARED_SECRET,
+  spool,
   onCommand: (msg) => {
     // Faz 2/3'te: kick/ban/warn/broadcast/setLayer/restart -> engine.rconExecute
     // yönlendirmesi burada olacak. Şimdilik sadece loglanır.
@@ -58,12 +57,9 @@ async function resolveEngine(): Promise<SquadJSEngine> {
 
 const engine = await resolveEngine();
 const adapter = createSquadJSAdapter({
-  serverId,
+  serverSlug: config.SERVER_SLUG,
   engine,
-  onEvent: (event) => {
-    writer.write(event);
-    uplink.send(event);
-  },
+  onEvent: (event) => uplink.send(event),
   onUnmatchedPlayer: (eosId, eventType) => {
     logger.debug({ eosId, eventType }, 'oyuncu RCON listesinde henüz yok, event atlandı');
   },
@@ -71,16 +67,19 @@ const adapter = createSquadJSAdapter({
 
 adapter.start();
 logger.info(
-  { serverSlug: config.SERVER_SLUG, serverId, engine: config.AGENT_ENGINE },
+  { serverSlug: config.SERVER_SLUG, engine: config.AGENT_ENGINE, spool: config.AGENT_SPOOL_DIR },
   'agent başladı',
 );
 
+let shuttingDown = false;
 async function shutdown(signal: string) {
-  logger.info({ signal }, "agent kapanıyor, açık session'lar kapatılıyor");
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info({ signal }, 'agent kapanıyor');
   adapter.stop();
-  uplink.close();
-  await writer.stop();
-  await closeAllOpenSessions(db, serverId);
+  // uplink.shutdown: bekleyen eventleri gönderir, sonra api'ye kapanışı
+  // bildirir ki açık session'lar gerçek zaman damgasıyla kapatılsın.
+  await uplink.shutdown();
   process.exit(0);
 }
 

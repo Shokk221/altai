@@ -7,8 +7,18 @@ import { and, eq, isNull } from 'drizzle-orm';
 const RAW_EVENTS_FLUSH_INTERVAL_MS = 2_000;
 const RAW_EVENTS_FLUSH_MAX_BATCH = 200;
 
+/**
+ * Kalıcı yazım katmanı — api'de çalışır.
+ *
+ * Başlangıçta agent'ın içindeydi (agent doğrudan Postgres'e yazıyordu). Tek
+ * konteyner kararıyla birlikte buraya taşındı: Postgres artık yalnızca api'nin
+ * localhost'undan erişilebilir, dışarı hiç açılmıyor. Agent kalıcı veriyi de
+ * zaten açtığı WS üzerinden gönderiyor; kopukluk hâlinde diske spool ediyor
+ * (bkz. apps/agent/src/spool.ts), yani veri kaybı riski taşınmadı.
+ */
 export interface PersistenceWriter {
-  write(event: AgentEvent): void;
+  /** serverId, hello anında slug'dan çözülür ve bağlantı boyunca sabittir. */
+  write(serverId: string, event: AgentEvent): void;
   stop(): Promise<void>;
 }
 
@@ -111,20 +121,24 @@ export function createPersistenceWriter(db: Db): PersistenceWriter {
     }
   }
 
-  async function handlePlayerConnected(event: Extract<AgentEvent, { type: 'PLAYER_CONNECTED' }>) {
+  async function handlePlayerConnected(
+    serverId: string,
+    event: Extract<AgentEvent, { type: 'PLAYER_CONNECTED' }>,
+  ) {
     const player = await upsertPlayer(db, event.steamId, event.eosId, event.name);
     if (!player) return;
 
     // Açık kalan eski bir session varsa (crash sonrası) reconciler onu kapatır;
     // burada sadece yeni session açılır.
     await db.insert(presenceSchema.gameSessions).values({
-      serverId: event.serverId,
+      serverId,
       playerId: player.id,
       joinedAt: new Date(event.timestamp),
     });
   }
 
   async function handlePlayerDisconnected(
+    serverId: string,
     event: Extract<AgentEvent, { type: 'PLAYER_DISCONNECTED' }>,
   ) {
     const [player] = await db
@@ -139,7 +153,7 @@ export function createPersistenceWriter(db: Db): PersistenceWriter {
       .from(presenceSchema.gameSessions)
       .where(
         and(
-          eq(presenceSchema.gameSessions.serverId, event.serverId),
+          eq(presenceSchema.gameSessions.serverId, serverId),
           eq(presenceSchema.gameSessions.playerId, player.id),
           isNull(presenceSchema.gameSessions.leftAt),
         ),
@@ -153,9 +167,12 @@ export function createPersistenceWriter(db: Db): PersistenceWriter {
       .where(eq(presenceSchema.gameSessions.id, openSession.id));
   }
 
-  async function handleServerSnapshot(event: Extract<AgentEvent, { type: 'SERVER_SNAPSHOT' }>) {
+  async function handleServerSnapshot(
+    serverId: string,
+    event: Extract<AgentEvent, { type: 'SERVER_SNAPSHOT' }>,
+  ) {
     await db.insert(presenceSchema.serverSnapshots).values({
-      serverId: event.serverId,
+      serverId,
       playerCount: event.playerCount,
       queueCount: event.queueCount,
       layer: event.layer ?? null,
@@ -164,27 +181,27 @@ export function createPersistenceWriter(db: Db): PersistenceWriter {
   }
 
   return {
-    write(event) {
+    write(serverId, event) {
       if (stopped) return;
 
-      rawEventQueue.push({ serverId: event.serverId, eventType: event.type, payload: event });
+      rawEventQueue.push({ serverId, eventType: event.type, payload: event });
       if (rawEventQueue.length >= RAW_EVENTS_FLUSH_MAX_BATCH) void flushRawEvents();
 
       // Yapısal tablolara yazım event bazında olur (session/player mantığı
       // batch'lenemeyecek kadar durumsal); yalnızca ham arşiv batch'lenir.
       switch (event.type) {
         case 'PLAYER_CONNECTED':
-          void handlePlayerConnected(event).catch((err) =>
+          void handlePlayerConnected(serverId, event).catch((err) =>
             logger.error({ err, event }, 'PLAYER_CONNECTED işlenemedi'),
           );
           break;
         case 'PLAYER_DISCONNECTED':
-          void handlePlayerDisconnected(event).catch((err) =>
+          void handlePlayerDisconnected(serverId, event).catch((err) =>
             logger.error({ err, event }, 'PLAYER_DISCONNECTED işlenemedi'),
           );
           break;
         case 'SERVER_SNAPSHOT':
-          void handleServerSnapshot(event).catch((err) =>
+          void handleServerSnapshot(serverId, event).catch((err) =>
             logger.error({ err, event }, 'SERVER_SNAPSHOT işlenemedi'),
           );
           break;

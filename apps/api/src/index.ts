@@ -35,3 +35,22 @@ const port = Number(process.env.PORT ?? 3001);
 app.listen({ port, host: '0.0.0.0' }).then(() => {
   logger.info(`api ${config.NODE_ENV} modunda :${port} portunda`);
 });
+
+// Düzgün kapanış zorunlu: kalıcı yazım artık api'de ve raw_events 2 saniyelik
+// batch'ler hâlinde gidiyor. app.close() çağrılmazsa onClose kancası (dolayısıyla
+// writer.stop()) hiç çalışmaz ve her restart'ta son batch sessizce kaybolur.
+let shuttingDown = false;
+async function shutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info({ signal }, 'api kapanıyor, bekleyen yazımlar boşaltılıyor');
+  try {
+    await app.close();
+  } catch (err) {
+    logger.error({ err }, 'kapanışta hata');
+  }
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
+process.on('SIGINT', () => void shutdown('SIGINT'));
