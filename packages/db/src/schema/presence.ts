@@ -18,6 +18,10 @@ export const servers = pgTable('servers', {
   // agent bu id'yi kullanır (config'de tanımlı, DB'de de aynı id ile durur)
   slug: text('slug').notNull().unique(),
   name: text('name').notNull(),
+  // BM'deki sayısal sunucu id'si. Arşiv importu session/ban kayıtlarını doğru
+  // sunucuya bağlamak için buna bakar; agent'ın oluşturduğu satırla import'un
+  // yazdığı satır böylece aynı olur (ikisi de slug üzerinden buluşur).
+  battlemetricsId: text('battlemetrics_id').unique(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 

@@ -17,7 +17,8 @@
     "bm:export": "pnpm --filter @altai/bm-export start --",
     "bm:probe": "pnpm --filter @altai/bm-export start -- --probe",
     "bm:report": "pnpm --filter @altai/bm-export start -- --report",
-    "bm:analyze": "pnpm --filter @altai/bm-import start --"
+    "bm:analyze": "pnpm --filter @altai/bm-import start --",
+    "bm:import": "pnpm --filter @altai/bm-import start --"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.0",
