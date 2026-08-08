@@ -11,10 +11,10 @@ apps/
   web/        Next.js (App Router) — login/logout + break-glass form +
               canlı sunucu durumu widget'ı (WS)
   api/        Fastify 5 — Discord OAuth, session, break-glass, /health,
-              /agent-ws (agent bağlantısı), /ws (tarayıcı yayını), /servers
-  agent/      SquadJSAdapter'ı motor olarak kullanır (şimdilik dev-fixture),
-              PersistenceWriter (doğrudan Postgres'e batch yazım),
-              uplink (api'ye kalıcı WS)
+              /agent-ws (agent bağlantısı + KALICI YAZIM), /ws (tarayıcı
+              yayını), /servers. Veritabanına yazan TEK yer.
+  agent/      SquadJSAdapter'ı motor olarak kullanır, uplink (api'ye kalıcı WS)
+              + spool (bağlantı kopukken diske kuyruk). Postgres'e ERİŞMEZ.
   bot/        discord.js iskeleti, token yoksa bağlanmadan durur
 packages/
   db/         Drizzle şeması: identity (players, users, role_mappings,
@@ -29,12 +29,41 @@ packages/
                         gerçek RCON/log-parser, çalışır durumda
   shared/     logger (pino), config loader (Zod), hata tipleri, password hashing
 tools/
-  bm-export/     BattleMetrics ham arşiv çekimi — cursor pagination +
-                 429 rate-limit backoff + resume desteği (players, bans)
+  bm-export/     BattleMetrics ham arşiv çekimi (bkz. aşağıdaki bölüm) —
+                 sunucular, oyuncular, session'lar, banlar, ban listeleri,
+                 flag tanımları + atamaları, notlar, reserved slot'lar,
+                 sunucu geçmişi. Devam edilebilir, --probe ile önden doğrulanır
   hash-password/ break-glass şifresi için hash üretme CLI'ı
+deploy/       panel konteyneri: supervisord tanımları (api/web/bot),
+              deploy.sh, env örneği, rehber
 infra/
-  compose/    docker-compose.yml + Caddyfile
+  compose/    docker-compose.yml + Caddyfile (yerel geliştirme)
+  setup/      oyun sunucusuna agent kurulumu: konteyner ortamı için
+              install-agent-container.sh + agent-supervisor.sh,
+              düz Linux VM için install-agent.sh + systemd unit,
+              her ikisi için preflight.sh (kurulum öncesi doğrulama)
 ```
+
+## Dağıtım mimarisi (üretim)
+
+```
+┌─ OYUN KONTEYNERİ ────────────┐        ┌─ PANEL KONTEYNERİ ───────────┐
+│ agent (× sunucu sayısı)      │        │ postgres (SADECE loopback)   │
+│  ├─ SquadGame.log lokal tail │        │ api      ─ DB'ye yazan tek yer│
+│  ├─ RCON 178.63.113.47:21114 │  WSS   │ web                          │
+│  └─ spool (/data, kesintide) ├───────>│ bot                          │
+└──────────────────────────────┘        │ 4'ünü supervisord yönetir    │
+                                        └──────────────────────────────┘
+```
+
+**Agent Postgres'e erişmez.** Kalıcı veri de tek bir WS üzerinden api'ye gider.
+İki sebebi var: Postgres ağa hiç açılmaz (api ile aynı konteynerde, yalnızca
+`127.0.0.1`), ve oyun sunucusundaki bir süreç veritabanı kimlik bilgisi
+taşımaz. Bağlantı koptuğunda eventler diske spool edilir ve bağlantı gelince
+sırayla gönderilir — panel saatlerce kapalı kalsa da veri kaybolmaz.
+
+Kurulum: [deploy/README.md](deploy/README.md) (panel konteyneri) ve
+[infra/setup/README.md](infra/setup/README.md).
 
 ## İlk çalıştırma
 
@@ -119,9 +148,15 @@ birkaç saniye içinde sahte oyuncular görünmeye başlar.
       çevirir + 60 sn'de bir `SERVER_SNAPSHOT` üretir
 - [x] PersistenceWriter — raw_events batch insert (2 sn/200 kayıt), player
       upsert (EOS çakışması tarihçeye yazılır), game_sessions aç/kapa,
-      server_snapshots
+      server_snapshots. **api'de çalışır** (başta agent'taydı; tek konteyner
+      kararıyla taşındı, bkz. "Dağıtım mimarisi")
+- [x] Agent spool — bağlantı kopukken eventler diske yazılır, gelince sırayla
+      gönderilir. Sıra korunur, yarıda kesilme kaldığı yerden sürer, üst sınır
+      dolunca kesintinin BAŞI korunur. 8 test
 - [x] Reconciler (crash sonrası açık kalan session'ları 4 saat üst sınırıyla
-      kapatır) + graceful shutdown (SIGTERM/SIGINT'te açık session'ları kapatır)
+      kapatır) hello anında api'de çalışır + agent düzgün kapanışta `shutdown`
+      mesajı gönderir, api açık session'ları gerçek zamanla kapatır.
+      WS'in kopması tek başına session kapatmaz (geçici kesinti de aynı görünür)
 - [x] agent → api kalıcı WS (`uplink.ts`, auto-reconnect + üstel geri çekilme)
       + hello handshake (`AGENT_SHARED_SECRET` ile doğrulama)
 - [x] api'de in-memory sunucu durumu + `/ws` ile tarayıcıya canlı yayın +
@@ -129,8 +164,7 @@ birkaç saniye içinde sahte oyuncular görünmeye başlar.
 - [x] Web'de canlı sunucu durumu widget'ı (oyuncu sayısı + liste, WS ile,
       F5 gerekmez)
 - [x] `dev-fixture-engine` — gerçek SquadJS olmadan tüm zinciri test etme
-- [x] `tools/bm-export` — players + bans için cursor pagination + 429
-      rate-limit backoff + resume (yarıda kesilirse kaldığı yerden devam eder)
+- [x] `tools/bm-export` — tam BM arşivi (aşağıdaki bölüm)
 - [x] **Gerçek SquadJS entegrasyonu — porting tamamlandı.** Vendored fork'unuz
       (`squad-server/core` + `squad-server/squad-server`) `packages/squad/vendor/`
       altına taşındı ve gerçekten çalışır durumda:
@@ -161,14 +195,151 @@ birkaç saniye içinde sahte oyuncular görünmeye başlar.
 - [ ] RCON komutları (kick/ban/warn/broadcast/setLayer/restart) — protokol
       tanımlı (`AgentCommand`), agent tarafında sadece loglanıyor, gerçek
       `rconExecute` çağrısı yok (Faz 2/3'te UI ile birlikte gelecek)
-- [ ] `notes/flags/reserved-slot/server-history` BM export uçları eklenmedi —
-      players/bans deseni doğrulandı, aynı `exportBmResource()` fonksiyonuyla
-      genişletilmesi kolay ama BM'nin org-scoped API dokümantasyonundan
-      doğrulanması gerekiyor
+- [x] `tools/bm-export` tamamlandı — notes/flags/reserved-slots/sessions/
+      server-history uçları dahil (bkz. "BattleMetrics arşivi" bölümü)
 - [ ] Gerçek bir Postgres + agent + BM token ile uçtan uca test edilmedi (bu
       ortamda yok); `AGENT_ENGINE=fixture` ile agent→api→web zinciri
       test edilebilir durumda, ama gerçek DB'ye yazım sizin ortamınızda
       doğrulanmalı
+
+## BattleMetrics arşivi (`tools/bm-export`) — plan Bölüm 5.5-A
+
+> **BM aboneliği, kritik kaynaklar arşivlenmeden İPTAL EDİLMEZ.** Bu projedeki
+> tek geri dönüşü olmayan iş budur: kod her zaman yeniden yazılabilir, iptal
+> edilmiş bir BM aboneliğinin ardındaki notlar ve flag'ler geri gelmez.
+
+### Sıra
+
+```bash
+# 1) Uçları yokla — hiçbir şey indirmez, ~20 saniye sürer.
+pnpm bm:probe
+
+# 2) Oyuncuları çek (per-player uçları bu listeye dayanır).
+pnpm bm:export -- --only players
+
+# 3) Tekrar yokla: artık notlar/flag atamaları da örnek bir oyuncuyla test edilir.
+pnpm bm:probe
+
+# 4) Tam arşiv. Saatler sürebilir; Ctrl+C serbest, tekrar çalıştırınca devam eder.
+pnpm bm:export
+
+# 5) Durum raporu (token gerektirmez).
+pnpm bm:report
+```
+
+`--probe` çıktısındaki **kritik** işaretli her kaynak `✓ OK` olmalı. Değilse
+token'ın org sahibi bir hesaba ait olduğunu ve BM planınızın o özelliği
+kapsadığını doğrulayın (flag'ler ve notlar Premium/RCON aboneliği ister).
+
+### Neler arşivleniyor
+
+| Kaynak | BM ucu | Kritik |
+|---|---|---|
+| `servers` | `/servers/{id}` | evet |
+| `players` | `/players?filter[servers]=…&include=identifier,server` | evet |
+| `sessions` | `/sessions?filter[servers]=…` | evet |
+| `bans` | `/bans?filter[organization]=…&filter[expired]=true` | evet |
+| `ban-lists` | `/ban-lists` | evet |
+| `bans-native` | `/bans-native` | hayır |
+| `player-flags` | `/player-flags` (tanımlar) | evet |
+| `player-flag-assignments` | `/players?filter[playerFlags]=…&include=flagPlayer` | evet |
+| `player-notes` | `/players/{id}/relationships/notes` | evet |
+| `reserved-slots` | `/reserved-slots?filter[organization]=…` | evet |
+| `player-queries` | `/player-queries` | hayır |
+| `player-count-history` vb. | `/servers/{id}/…-history` (ay ay) | hayır |
+| `outages`, `leaderboard-time` | `/servers/{id}/relationships/…` | hayır |
+
+Bilinçli olarak atlanan: **coplay** — `/players/{id}/relationships/coplay`
+oyuncu başına ayrı istek gerektiriyor ve aynı bilgi kesişen session
+aralıklarından SQL ile türetilebiliyor (plan Bölüm 5).
+
+### Çıktı formatı
+
+```
+bm-archive/
+  manifest.json              her kaynağın durumu, kayıt sayısı, cursor'ı
+  players.ndjson             satır başına bir JSON:API kaynağı (ham, dönüştürülmemiş)
+  players.included.ndjson    include= ile gelen yan kayıtlar (type+id ile tekilleştirilmiş)
+  player-notes.done          işlenmiş oyuncu ID'leri — per-player fazının resume dosyası
+  ...
+```
+
+Ham JSON bilerek olduğu gibi saklanıyor: dönüştürme/temizleme Faz 2 ETL'inin
+işi. Arşivde bir alan eksik kalırsa geri dönüp BM'den çekemeyiz, ama ham
+arşivden istediğimiz kadar yeniden ETL koşabiliriz.
+
+### Tasarım notları
+
+- **`filter[servers]` zorunlu**: filtresiz `/players` BM'nin *global* oyuncu
+  veritabanını sayfalamaya kalkar. Sunucu ID'leri bu yüzden ilk adımda çözülür.
+- **`BM_SERVER_IDS` tercih edilir**: verilmezse
+  `/servers?filter[organizations]=` denenir, ama bu filtre BM
+  dokümantasyonunda yok — keşfedilen liste log'a basılır, gözle doğrulayın.
+- **Her sayfadan sonra cursor kaydedilir** (yol+sorgu olarak, host'a bağlı
+  değil), yani süreç her an öldürülebilir.
+- **403/404 arşivi durdurmaz**: o kaynak `unsupported` işaretlenir, diğerleri
+  devam eder. Kritik bir kaynak böyle işaretlenirse rapor uyarır.
+- **429 global yavaşlatır**: paralel işçilerin hepsi birden geri çekilir.
+- **Flag atamaları ters yönden çekilir**: "her oyuncuda hangi flag var" yerine
+  "her flag kimlerde var" (`filter[playerFlags]`). 111.327 istek yerine 14
+  tarama — 2 dakika, veri kaybı sıfır (`addedAt`/`removedAt`/ekleyen admin
+  dahil). Bkz. `flag-assignments.ts`.
+- **Notlar tek pahalı kaynak**: not filtresi yok (`filter[playerNotes]`,
+  `[hasNotes]`, `[notes]` hepsi 400), tam kapsam için her oyuncu tek tek
+  sorulmalı — 111.327 istek ≈ 6,2 saat. Varsayılan `--notes-scope candidates`
+  sadece flag'i veya banı olan oyunculara sorar (~8 bin, ~30 dk) ve pratikte
+  notların neredeyse tamamını yakalar; tam kapsam için `--notes-scope all`.
+- **`--skip` bir karardır, eksiklik değil**: atlanan kaynak manifest'te
+  `skipped` olarak işaretlenir ve raporda ayrı bir başlıkta gösterilir.
+  Yoksa rapor sonsuza kadar "eksik kritik kaynak" diye uyarır ve tam da
+  güvenilmesi gereken anda (abonelik iptali) görmezden gelinen bir gürültüye
+  dönüşür.
+
+### Gerçek çekim sonucu (2026-08-08, org 93788)
+
+Arşiv gerçek API'ye karşı bir kez baştan sona çalıştırıldı. Sonuç:
+
+| Kaynak | Kayıt |
+|---|---|
+| players | 111.327 |
+| sessions | 422.799 |
+| bans | 25.759 |
+| player-flag-assignments | 11.433 |
+| leaderboard-time (2 sunucu) | 117.953 |
+| player-count-history | 1.442 |
+| ban-lists / player-flags / servers | 5 / 14 / 2 |
+| outages | 27 |
+
+Toplam 1,26 GB, ~5.600 istek. Org'un **iki** sunucusu da dahil
+(27133078, 28022344).
+
+### Gerçek API'de ortaya çıkan sınırlar
+
+Bunlar kod hatası değil, BM'nin kendi kısıtları — ETL yazarken bilinmesi gerekir:
+
+- **Sunucu geçmişi 90 günle sınırlı**: `"Start may not be more than 90 days ago"`.
+  2024–2026 arası popülasyon grafiği API'den ALINAMIYOR. Araç başlangıcı
+  otomatik olarak sınıra kırpar (`BM_HISTORY_MAX_DAYS`, varsayılan 90).
+- **`unique-player-history`, `first-time-history`, `time-played-history`**:
+  90 gün içinde bile boş dönüyor — bu org'un planında yok.
+- **`player-queries`**: 403, planda yok.
+- **`bans-native` / `reserved-slots`**: 0 kayıt — bu özellikler kullanılmıyor.
+- **`/bans-native` `filter[organization]` kabul etmiyor**, geçmiş uçları
+  `page[size]` kabul etmiyor (ikisi de "must NOT have additional properties").
+- **Rate limit**: `x-rate-limit-limit: 300` (dakika başına). Client kota
+  %25'in altına inince yavaşlar, %10'un altında 10 sn bekler.
+- **Oyuncu bazlı oynama süresi kaybolmuyor**: `include=server` ile her
+  oyuncunun her sunucudaki `timePlayed`/`firstSeen`/`lastSeen` değeri
+  `players.included.ndjson`'da duruyor — 90 gün sınırından etkilenmiyor.
+
+### Test durumu
+
+`pnpm --filter @altai/bm-export test` — 11 test, sahte bir BM sunucusuna
+(`test/bm-mock-server.ts`) karşı uçtan uca: links.next sayfalaması, included
+tekilleştirme, ağ kesintisi sonrası resume, 429 + Retry-After, 403'te
+`unsupported` işaretleme, oyuncu başına fan-out + `.done` ile atlama, flag
+atamalarının oyuncu başına DEĞİL flag başına taranması, not aday kümesinin
+doğru birleşmesi, yanlış org'a yazmayı reddetme.
 
 ## Eski sistemle hizalanan bağımlılık sürümleri
 

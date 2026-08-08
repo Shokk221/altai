@@ -1,0 +1,61 @@
+# Altai v2 agent — OYUN SUNUCUSUNDA çalışır (plan Bölüm 3).
+#
+# Template unit: her Squad sunucusu için bir instance.
+#   systemctl start altai-agent@squad-01
+#   systemctl start altai-agent@squad-02
+# %i = instance adı = SERVER_SLUG. Her instance kendi env dosyasını okur:
+#   /etc/altai/agent-squad-01.env
+#
+# Kurulum: infra/setup/install-agent.sh
+# Ön kontrol: infra/setup/preflight.sh /etc/altai/agent-squad-01.env
+
+[Unit]
+Description=Altai v2 agent (%i) — Squad log tail + RCON -> Postgres/API
+Documentation=https://github.com/altai/altai/blob/master/infra/setup/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__RUN_USER__
+Group=__RUN_GROUP__
+WorkingDirectory=__ALTAI_DIR__/apps/agent
+EnvironmentFile=/etc/altai/agent-%i.env
+ExecStart=__ALTAI_DIR__/apps/agent/node_modules/.bin/tsx src/index.ts
+
+# Agent SIGTERM'de açık session'ları kapatır (plan Bölüm 6: "graceful shutdown
+# zorunlu"). Bu işin yarıda kesilmesi, her restart'ta session verisi kaybı demek.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+Restart=always
+RestartSec=10
+# Sürekli çöküyorsa sonsuz döngüye girmesin — 5 dakikada 5 denemeden fazlası durdurur.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# --- Oyun sunucusunu etkilememesi için (plan Bölüm 9: "gölge dönemde çifte yük") ---
+# Agent I/O-hafif olmalı: log tail + RCON + batch DB yazımı. Squad süreci
+# her zaman öncelikli.
+Nice=10
+IOSchedulingClass=idle
+CPUQuota=50%
+MemoryMax=512M
+
+# --- Sertleştirme ---
+# Agent'ın tek ihtiyacı: log dosyasını OKUMAK, RCON'a bağlanmak, dışarı WS açmak.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+# Squad logları genelde /home/<lgsm-user>/... altında — okuma yeterli.
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=altai-agent-%i
+
+[Install]
+WantedBy=multi-user.target
