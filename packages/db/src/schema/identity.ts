@@ -1,11 +1,45 @@
-import { boolean, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { boolean, index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
-export const players = pgTable('players', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  steamId: text('steam_id').notNull().unique(),
-  eosId: text('eos_id'),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+export const players = pgTable(
+  'players',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    steamId: text('steam_id').notNull().unique(),
+    eosId: text('eos_id'),
+    // BM'deki sayısal oyuncu id'si. Arşiv importu bunu doldurur ve ETL
+    // tekrar çalıştırıldığında aynı oyuncuyu yeniden eklemek yerine bulur.
+    // Geçiş sonrası yeni oyuncularda boş kalır.
+    battlemetricsId: text('battlemetrics_id').unique(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('players_eos_idx').on(table.eosId)],
+);
+
+/**
+ * İsim geçmişi (Bölüm 4.1). BM arşivinde 111.327 oyuncunun tüm geçmiş
+ * isimleri var — bir oyuncunun "6 ay önce hangi isimle oynadığı" sorusunun
+ * tek kaynağı bu. Fuzzy arama için pg_trgm indeksi migration'da eklenir
+ * (drizzle şemasında trigram indeksi ifade edilemiyor).
+ */
+export const playerNames = pgTable(
+  'player_names',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    playerId: uuid('player_id')
+      .notNull()
+      .references(() => players.id),
+    name: text('name').notNull(),
+    firstSeen: timestamp('first_seen', { withTimezone: true }),
+    lastSeen: timestamp('last_seen', { withTimezone: true }),
+    source: text('source').notNull().default('altai'),
+    // BM identifier id'si — ETL'in tekrar çalıştırılabilir olması için.
+    externalId: text('external_id').unique(),
+  },
+  (table) => [
+    index('player_names_player_idx').on(table.playerId),
+    index('player_names_name_idx').on(table.name),
+  ],
+);
 
 // Eski sistemin sessizce sildiği SteamID<->EOS çakışmaları burada tarihçe olarak tutulur.
 export const playerIdHistory = pgTable('player_id_history', {

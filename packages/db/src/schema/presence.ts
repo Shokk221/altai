@@ -6,9 +6,10 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { players } from './identity.js';
+import { players } from './identity';
 
 // Bölüm 4.2 "presence" alanı. Not: pg tablo adı bilinçli olarak "game_sessions" —
 // identity.ts'teki auth "sessions" (pg: auth_sessions) tablosuyla karışmasın diye.
@@ -37,10 +38,17 @@ export const gameSessions = pgTable(
     // Reconciler'ın kapattığı (crash sonrası kalıntı) session'ları işaretler —
     // 4 saat üst sınırıyla kapatılır (eski backfill kuralı, Bölüm 5.5-B)
     closedByReconciler: boolean('closed_by_reconciler').notNull().default(false),
+    // 'battlemetrics' = arşivden import edilen tarihsel session,
+    // 'altai' = agent'ın canlı topladığı. Gölge dönemde ikisi çakışabilir;
+    // doğrulama ve tekilleştirme bu kolona bakar.
+    source: text('source').notNull().default('altai'),
+    // BM session id'si — ETL tekrar çalıştırılabilir olsun diye.
+    externalId: text('external_id'),
   },
   (table) => [
     index('game_sessions_player_idx').on(table.playerId),
     index('game_sessions_server_open_idx').on(table.serverId, table.leftAt),
+    uniqueIndex('game_sessions_source_external_idx').on(table.source, table.externalId),
   ],
 );
 
