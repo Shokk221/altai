@@ -13,7 +13,11 @@
     "db:generate": "pnpm --filter @altai/db generate",
     "db:migrate": "pnpm --filter @altai/db migrate",
     "db:seed:bootstrap-admin": "pnpm --filter @altai/db seed:bootstrap-admin",
-    "hash-password": "pnpm --filter @altai/hash-password start --"
+    "hash-password": "pnpm --filter @altai/hash-password start --",
+    "bm:export": "pnpm --filter @altai/bm-export start --",
+    "bm:probe": "pnpm --filter @altai/bm-export start -- --probe",
+    "bm:report": "pnpm --filter @altai/bm-export start -- --report",
+    "bm:analyze": "pnpm --filter @altai/bm-import start --"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.0",

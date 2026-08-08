@@ -1,0 +1,14 @@
+# Satır sonları her yerde LF. Windows'ta çalışırken git dosyaları CRLF'e
+# çeviriyordu, Biome ise LF bekliyor — sonuçta `pnpm lint` dokunulmamış
+# dosyalarda bile onlarca hata veriyordu. Bu dosya o gidip gelmeyi bitirir.
+* text=auto eol=lf
+
+# Shell script'leri CRLF olursa Linux'ta "bad interpreter" ile patlar.
+*.sh text eol=lf
+
+# İkili dosyalar — dönüştürme yok.
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
