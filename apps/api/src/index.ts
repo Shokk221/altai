@@ -7,6 +7,7 @@ import { registerDiscordOAuth } from './plugins/discord-oauth.js';
 import { registerWebsocket } from './plugins/websocket.js';
 import { agentWsRoutes } from './routes/agent-ws.js';
 import { authRoutes } from './routes/auth.js';
+import { banListRoutes } from './routes/ban-list.js';
 import { browserWsRoutes } from './routes/browser-ws.js';
 import { healthRoutes } from './routes/health.js';
 import { serverStatusRoutes } from './routes/server-status.js';
@@ -28,6 +29,7 @@ await registerDiscordOAuth(app, config);
 await app.register(healthRoutes);
 await app.register(authRoutes, { db, config });
 await app.register(agentWsRoutes, { db, config });
+await app.register(banListRoutes, { db, config });
 await app.register(browserWsRoutes);
 await app.register(serverStatusRoutes);
 

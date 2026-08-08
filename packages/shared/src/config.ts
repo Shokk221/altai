@@ -19,6 +19,10 @@ const envSchema = z.object({
   BREAK_GLASS_PASSWORD_HASH: z.string().optional(),
   // agent -> api WS bağlantısını doğrulamak için (agent'ın kendi .env'inde de aynı değer olmalı)
   AGENT_SHARED_SECRET: z.string().optional(),
+  // Squad sunucularının remote ban list'i çekerken kullandığı token.
+  // URL'de taşınır (Squad düz GET atıyor, header ekleyemiyoruz), o yüzden
+  // tahmin edilemez olmalı: openssl rand -hex 24
+  BAN_LIST_TOKEN: z.string().min(16).optional(),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;

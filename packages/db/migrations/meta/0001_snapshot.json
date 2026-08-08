@@ -41,12 +41,8 @@
           "name": "player_id_history_player_id_players_id_fk",
           "tableFrom": "player_id_history",
           "tableTo": "players",
-          "columnsFrom": [
-            "player_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["player_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -143,12 +139,8 @@
           "name": "player_names_player_id_players_id_fk",
           "tableFrom": "player_names",
           "tableTo": "players",
-          "columnsFrom": [
-            "player_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["player_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -158,9 +150,7 @@
         "player_names_external_id_unique": {
           "name": "player_names_external_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "external_id"
-          ]
+          "columns": ["external_id"]
         }
       },
       "policies": {},
@@ -227,16 +217,12 @@
         "players_steam_id_unique": {
           "name": "players_steam_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "steam_id"
-          ]
+          "columns": ["steam_id"]
         },
         "players_battlemetrics_id_unique": {
           "name": "players_battlemetrics_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "battlemetrics_id"
-          ]
+          "columns": ["battlemetrics_id"]
         }
       },
       "policies": {},
@@ -281,9 +267,7 @@
         "role_mappings_discord_role_id_unique": {
           "name": "role_mappings_discord_role_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "discord_role_id"
-          ]
+          "columns": ["discord_role_id"]
         }
       },
       "policies": {},
@@ -346,12 +330,8 @@
           "name": "auth_sessions_user_id_users_id_fk",
           "tableFrom": "auth_sessions",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -405,12 +385,8 @@
           "name": "users_player_id_players_id_fk",
           "tableFrom": "users",
           "tableTo": "players",
-          "columnsFrom": [
-            "player_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["player_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -420,9 +396,7 @@
         "users_discord_id_unique": {
           "name": "users_discord_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "discord_id"
-          ]
+          "columns": ["discord_id"]
         }
       },
       "policies": {},
@@ -493,12 +467,8 @@
           "name": "admin_cam_logs_server_id_servers_id_fk",
           "tableFrom": "admin_cam_logs",
           "tableTo": "servers",
-          "columnsFrom": [
-            "server_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["server_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -506,12 +476,8 @@
           "name": "admin_cam_logs_player_id_players_id_fk",
           "tableFrom": "admin_cam_logs",
           "tableTo": "players",
-          "columnsFrom": [
-            "player_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["player_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -684,12 +650,8 @@
           "name": "bans_player_id_players_id_fk",
           "tableFrom": "bans",
           "tableTo": "players",
-          "columnsFrom": [
-            "player_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["player_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -697,12 +659,8 @@
           "name": "bans_server_id_servers_id_fk",
           "tableFrom": "bans",
           "tableTo": "servers",
-          "columnsFrom": [
-            "server_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["server_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -710,12 +668,8 @@
           "name": "bans_revoked_by_user_id_users_id_fk",
           "tableFrom": "bans",
           "tableTo": "users",
-          "columnsFrom": [
-            "revoked_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["revoked_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -723,12 +677,8 @@
           "name": "bans_issued_by_user_id_users_id_fk",
           "tableFrom": "bans",
           "tableTo": "users",
-          "columnsFrom": [
-            "issued_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["issued_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -859,12 +809,8 @@
           "name": "flag_assignments_flag_id_flags_id_fk",
           "tableFrom": "flag_assignments",
           "tableTo": "flags",
-          "columnsFrom": [
-            "flag_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["flag_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -872,12 +818,8 @@
           "name": "flag_assignments_player_id_players_id_fk",
           "tableFrom": "flag_assignments",
           "tableTo": "players",
-          "columnsFrom": [
-            "player_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["player_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -885,12 +827,8 @@
           "name": "flag_assignments_added_by_user_id_users_id_fk",
           "tableFrom": "flag_assignments",
           "tableTo": "users",
-          "columnsFrom": [
-            "added_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["added_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1085,12 +1023,8 @@
           "name": "moderation_audit_actor_user_id_users_id_fk",
           "tableFrom": "moderation_audit",
           "tableTo": "users",
-          "columnsFrom": [
-            "actor_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["actor_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1206,12 +1140,8 @@
           "name": "notes_player_id_players_id_fk",
           "tableFrom": "notes",
           "tableTo": "players",
-          "columnsFrom": [
-            "player_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["player_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1219,12 +1149,8 @@
           "name": "notes_author_user_id_users_id_fk",
           "tableFrom": "notes",
           "tableTo": "users",
-          "columnsFrom": [
-            "author_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["author_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1306,12 +1232,8 @@
           "name": "warnings_player_id_players_id_fk",
           "tableFrom": "warnings",
           "tableTo": "players",
-          "columnsFrom": [
-            "player_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["player_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1319,12 +1241,8 @@
           "name": "warnings_server_id_servers_id_fk",
           "tableFrom": "warnings",
           "tableTo": "servers",
-          "columnsFrom": [
-            "server_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["server_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1332,12 +1250,8 @@
           "name": "warnings_issued_by_user_id_users_id_fk",
           "tableFrom": "warnings",
           "tableTo": "users",
-          "columnsFrom": [
-            "issued_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["issued_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1413,12 +1327,8 @@
           "name": "watchlist_player_id_players_id_fk",
           "tableFrom": "watchlist",
           "tableTo": "players",
-          "columnsFrom": [
-            "player_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["player_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1426,12 +1336,8 @@
           "name": "watchlist_added_by_user_id_users_id_fk",
           "tableFrom": "watchlist",
           "tableTo": "users",
-          "columnsFrom": [
-            "added_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["added_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1568,12 +1474,8 @@
           "name": "game_sessions_server_id_servers_id_fk",
           "tableFrom": "game_sessions",
           "tableTo": "servers",
-          "columnsFrom": [
-            "server_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["server_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1581,12 +1483,8 @@
           "name": "game_sessions_player_id_players_id_fk",
           "tableFrom": "game_sessions",
           "tableTo": "players",
-          "columnsFrom": [
-            "player_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["player_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1662,12 +1560,8 @@
           "name": "raw_events_server_id_servers_id_fk",
           "tableFrom": "raw_events",
           "tableTo": "servers",
-          "columnsFrom": [
-            "server_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["server_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1750,12 +1644,8 @@
           "name": "server_snapshots_server_id_servers_id_fk",
           "tableFrom": "server_snapshots",
           "tableTo": "servers",
-          "columnsFrom": [
-            "server_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["server_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1810,16 +1700,12 @@
         "servers_slug_unique": {
           "name": "servers_slug_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
+          "columns": ["slug"]
         },
         "servers_battlemetrics_id_unique": {
           "name": "servers_battlemetrics_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "battlemetrics_id"
-          ]
+          "columns": ["battlemetrics_id"]
         }
       },
       "policies": {},
