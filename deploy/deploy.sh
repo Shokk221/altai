@@ -25,6 +25,8 @@ NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
 (( NODE_MAJOR >= 20 )) || die "node v$NODE_MAJOR — en az v20 gerekli"
 if ! command -v pnpm >/dev/null 2>&1; then
   say "    pnpm yok, corepack ile etkinleştiriliyor"
+  # Prompt'suz: corepack indirme onayı sorarsa deploy askıda kalır.
+  export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
   corepack enable
 fi
 # DATABASE_URL'i konteyner sağlıyor; .env'de OLMAMALI (bkz. deploy/README.md).
@@ -35,7 +37,15 @@ fi
 echo "    node $(node -v), pnpm $(pnpm -v)"
 
 say "1/5 bağımlılıklar"
-pnpm install --frozen-lockfile
+# --prod=false ŞART. Konteynerde NODE_ENV=production tanımlı ve pnpm bu
+# durumda devDependencies'i atlıyor — ama bizde "devDependency" ayrımı
+# üretimde geçerli değil:
+#   * api ve bot TypeScript'i doğrudan tsx ile çalıştırıyor (derleme yok),
+#     yani tsx bir RUNTIME bağımlılığı,
+#   * next build typescript/tailwind/postcss istiyor,
+#   * db:migrate yine tsx ile koşuyor.
+# Bu bayrak olmadan install 160 pakette bitiyor ve "tsx: not found" alıyoruz.
+pnpm install --frozen-lockfile --prod=false
 
 say "2/5 veritabanı şeması"
 pnpm db:migrate
