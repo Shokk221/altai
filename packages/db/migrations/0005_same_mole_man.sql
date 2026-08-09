@@ -1,0 +1,1 @@
+ALTER TABLE "squad_admin_groups" ADD COLUMN "grant_mode" text DEFAULT 'discord' NOT NULL;

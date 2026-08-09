@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyId, docId, toDate } from '../src/parse.js';
+import { classifyId, defaultGrantMode, docId, toDate } from '../src/parse.js';
 
 /**
  * mongoexport "extended JSON" üretiyor: tarihler {"$date": "..."} ve _id
@@ -66,5 +66,48 @@ describe('classifyId', () => {
     expect(classifyId(null)).toEqual({});
     // 17 hane ama Steam öneki değil
     expect(classifyId('12345678901234567')).toEqual({});
+  });
+});
+
+describe('defaultGrantMode', () => {
+  it('sadece reserve veren grup ELLE verilir', () => {
+    // KlanWL, VeteranWL, BagisWL... rezerve slot dışında bir şey vermiyor.
+    expect(defaultGrantMode('reserve')).toBe('manual');
+    expect(defaultGrantMode('')).toBe('manual');
+    expect(defaultGrantMode('  reserve  ')).toBe('manual');
+  });
+
+  it('kick/ban veren grup DISCORD zincirine bağlıdır', () => {
+    expect(defaultGrantMode('cameraman,canseeadminchat,reserve')).toBe('discord');
+    expect(defaultGrantMode('reserve,kick')).toBe('discord');
+    expect(defaultGrantMode('chat,kick,ban,cheat,manageserver')).toBe('discord');
+  });
+
+  it('büyük/küçük harf farkı sonucu değiştirmez', () => {
+    expect(defaultGrantMode('RESERVE')).toBe('manual');
+    expect(defaultGrantMode('Reserve,BAN')).toBe('discord');
+  });
+
+  it('gerçek gruplar doğru sınıflanıyor', () => {
+    // Canlı sunucudan alınan tanımlar.
+    const real: Array<[string, string, 'discord' | 'manual']> = [
+      [
+        'SuperAdmin',
+        'featuretest,chat,startvote,reserve,demos,changemap,cheat,kick,ban,manageserver',
+        'discord',
+      ],
+      [
+        'Admin',
+        'cameraman,canseeadminchat,reserve,teamchange,chat,forceteamchange,balance',
+        'discord',
+      ],
+      ['KlanWL', 'reserve', 'manual'],
+      ['VeteranWL', 'reserve', 'manual'],
+      ['BagisWL', 'reserve', 'manual'],
+      ['SquadLeadPerm', '', 'manual'],
+    ];
+    for (const [name, perms, expected] of real) {
+      expect(defaultGrantMode(perms), name).toBe(expected);
+    }
   });
 });

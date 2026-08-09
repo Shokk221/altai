@@ -4,7 +4,7 @@ import { createInterface } from 'node:readline';
 import { accessSchema, createDb, identitySchema, moderationSchema } from '@altai/db';
 import type { Db } from '@altai/db';
 import { logger } from '@altai/shared';
-import { classifyId, docId, toDate } from './parse.js';
+import { classifyId, defaultGrantMode, docId, toDate } from './parse.js';
 
 /**
  * Eski sistemin MongoDB'sinden Faz 2 dilimini Postgres'e aktarır —
@@ -105,6 +105,37 @@ const stats: Counters = {};
 const bump = (k: string, n = 1) => {
   stats[k] = (stats[k] ?? 0) + n;
 };
+
+// ------------------------------------------- admingroups -> squad_admin_groups
+// Grup tanımları Admins.cfg'deki `Group=<ad>:<yetkiler>` satırını üretir.
+// grant_mode İSİMDEN DEĞİL YETKİDEN türetiliyor: yalnızca `reserve` veren
+// grup whitelist'tir (elle verilir), kick/ban veren grup yetkilidir ve
+// Discord zincirine bağlıdır. İsim listesi olsaydı yarın eklenen bir grup
+// sessizce yanlış tarafa düşerdi.
+logger.info('admingroups okunuyor');
+const groupRows: (typeof accessSchema.squadAdminGroups.$inferInsert)[] = [];
+const seenGroup = new Set<string>();
+for await (const doc of readCollection('admingroups')) {
+  bump('admingroups.okunan');
+  const name = typeof doc.name === 'string' ? doc.name : null;
+  if (!name) continue;
+  // Aynı grup birden çok sunucu için tanımlı olabilir; tanım aynı olduğu
+  // için tek satıra indiriyoruz (serverId null = tüm sunucular).
+  if (seenGroup.has(name)) {
+    bump('admingroups.tekrar');
+    continue;
+  }
+  seenGroup.add(name);
+  const permissions = typeof doc.permissions === 'string' ? doc.permissions : '';
+  groupRows.push({
+    name,
+    permissions,
+    grantMode: defaultGrantMode(permissions),
+    source: SOURCE,
+    externalId: docId(doc),
+  });
+  bump(`admingroups.mode_${defaultGrantMode(permissions)}`);
+}
 
 // ------------------------------------------------------- adminentries -> grants
 logger.info('adminentries okunuyor');
@@ -257,6 +288,7 @@ const summary = [
   '',
   write ? 'MONGO AKTARIMI (yazıldı)' : 'MONGO KURU KOŞU — hiçbir şey yazılmadı',
   '',
+  `  squad_admin_groups         ${groupRows.length}`,
   `  grants (adminentries)      ${grantRows.length}`,
   `  discord_links              ${linkRows.length}`,
   `  admin_cam_logs             ${camRows.length}`,
@@ -280,6 +312,10 @@ const insertAll = async <T>(rows: T[], fn: (part: T[]) => Promise<unknown>) => {
   for (let i = 0; i < rows.length; i += CHUNK) await fn(rows.slice(i, i + CHUNK));
 };
 
+if (groupRows.length)
+  await insertAll(groupRows, (p) =>
+    db.insert(accessSchema.squadAdminGroups).values(p).onConflictDoNothing(),
+  );
 if (grantRows.length)
   await insertAll(grantRows, (p) => db.insert(accessSchema.grants).values(p).onConflictDoNothing());
 if (linkRows.length)

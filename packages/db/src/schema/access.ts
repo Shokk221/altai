@@ -92,6 +92,21 @@ export const discordLinks = pgTable(
  * bizim izin enum'umuz değil — oyun bunları okuyor. Eski sistemin
  * AdminGroup koleksiyonundan aktarılıyor.
  */
+/**
+ * Bir grubun üyeleri nereden gelir.
+ *
+ *  'discord' : yalnızca Discord rolünden. Rol alınınca oyun içi yetki düşer.
+ *              Yetkili gruplar (kick/ban/cheat...) ZORUNLU olarak böyledir.
+ *  'manual'  : yalnızca elle verilen grant'lardan. Rezerve slot niteliğindeki
+ *              whitelist'ler böyledir — klan üyesi ya da bağışçı olan birinin
+ *              Discord'da bulunması gerekmiyor.
+ *
+ * İkisi karışmaz: elle verilen bir grant asla yetkili bir gruba yazamaz,
+ * yoksa "admin yetkisi tek kaynaktan gelir" garantisi delinirdi.
+ */
+export const GRANT_MODES = ['discord', 'manual'] as const;
+export type GrantMode = (typeof GRANT_MODES)[number];
+
 export const squadAdminGroups = pgTable(
   'squad_admin_groups',
   {
@@ -99,6 +114,9 @@ export const squadAdminGroups = pgTable(
     name: text('name').notNull(),
     /** Virgülle ayrılmış Squad erişim seviyeleri. Boş olabilir (SquadLeadPerm). */
     permissions: text('permissions').notNull().default(''),
+    // Varsayılan kısıtlayıcı taraf: yeni bir grup eklendiğinde kazara elle
+    // yetki dağıtılabilir hâle gelmesin.
+    grantMode: text('grant_mode').$type<GrantMode>().notNull().default('discord'),
     // null = tüm sunucular
     serverId: uuid('server_id').references(() => servers.id),
     source: text('source').notNull().default('altai'),

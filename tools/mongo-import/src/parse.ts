@@ -41,3 +41,22 @@ export function docId(doc: Record<string, unknown>): string {
   if (id && typeof id === 'object' && '$oid' in id) return String((id as { $oid: string }).$oid);
   return JSON.stringify(id);
 }
+
+/**
+ * Bir Squad grubunun üyeleri nereden gelmeli.
+ *
+ * İsim listesiyle karar vermek kırılgan olurdu: yarın "KlanWL2" eklenir ve
+ * kimse kuralı güncellemeyi hatırlamaz. `reserve` tek başına yalnızca
+ * rezerve slot verir — oyunu yönetme yetkisi değildir. Onun dışındaki her
+ * erişim seviyesi (kick, ban, cheat, manageserver...) yetkilidir ve Discord
+ * zincirine bağlı olmalıdır.
+ */
+const HARMLESS_PERMISSIONS = new Set(['reserve']);
+
+export function defaultGrantMode(permissions: string): 'discord' | 'manual' {
+  const list = permissions
+    .split(',')
+    .map((p) => p.trim().toLowerCase())
+    .filter(Boolean);
+  return list.some((p) => !HARMLESS_PERMISSIONS.has(p)) ? 'discord' : 'manual';
+}
