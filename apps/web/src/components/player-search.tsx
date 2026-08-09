@@ -76,7 +76,7 @@ export function PlayerSearch({ apiUrl }: { apiUrl: string }) {
   }, [query]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <Input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -91,7 +91,7 @@ export function PlayerSearch({ apiUrl }: { apiUrl: string }) {
       {state.kind === 'loading' ? (
         <div className="space-y-2" aria-busy="true">
           {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-16 w-full" />
+            <Skeleton key={i} className="h-[86px] w-full" />
           ))}
         </div>
       ) : null}
@@ -106,7 +106,7 @@ export function PlayerSearch({ apiUrl }: { apiUrl: string }) {
       ) : null}
 
       {state.kind === 'done' && state.results.length > 0 ? (
-        <ul className="space-y-2">
+        <ul className="space-y-3">
           {state.results.map((r) => (
             <PlayerRow key={r.id} result={r} />
           ))}
@@ -124,23 +124,23 @@ export function PlayerSearch({ apiUrl }: { apiUrl: string }) {
 function PlayerRow({ result }: { result: Result }) {
   return (
     <li>
-      <Card className="transition-colors hover:bg-surface-2/50">
-        <div className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
+      <Card className="transition-shadow hover:shadow-lg">
+        <div className="flex flex-col gap-2 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="truncate font-medium">{result.name}</span>
+            <div className="flex items-center gap-2.5">
+              <span className="truncate text-[15px] font-medium">{result.name}</span>
               {result.hasActiveBan ? <Badge tone="danger">BANLI</Badge> : null}
             </div>
 
             {/* Aranan isim güncel isimden farklıysa bunu göstermek şart:
                 admin neden bu sonucun çıktığını anlamalı. */}
             {result.matchedName && result.matchedName !== result.name ? (
-              <p className="mt-0.5 truncate text-sm text-fg-muted">
+              <p className="mt-1 truncate text-sm text-fg-muted">
                 eşleşen eski isim: <span className="text-fg">{result.matchedName}</span>
               </p>
             ) : null}
 
-            <p className="mt-1 truncate font-mono text-xs text-fg-muted">
+            <p className="mt-1.5 truncate font-mono text-[11px] text-fg-muted/80">
               {result.steamId ?? '— Steam yok'} · {result.eosId ?? '— EOS yok'}
             </p>
           </div>

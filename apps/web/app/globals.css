@@ -3,58 +3,50 @@
 @tailwind utilities;
 
 /**
- * Tasarım sistemi renk katmanı — plan Bölüm 8.
+ * Tasarım sistemi — plan Bölüm 8.
  *
- * Renkler HSL kanalları olarak tanımlanıyor (virgülsüz, `H S% L%`), çünkü
- * Tailwind bunları `hsl(var(--x) / <alpha>)` ile saydamlıkla birlikte
- * kullanabiliyor. Hex olsaydı her opaklık varyantı için ayrı değişken
- * gerekirdi.
+ * Yön: sıcak, açık-orta zemin. Beyaz değil (parlak ve steril), koyu değil
+ * (referansın istediği hafiflik kaybolur). Nötrler saf gri değil, hafif
+ * sarıya kaymış — vurgu rengiyle aynı sıcaklıkta durunca kompozisyon
+ * bütün görünüyor.
  *
- * Koyu tema VARSAYILAN: adminler sunucu başında, çoğu zaman gece ve
- * telefondan çalışıyor.
+ * Kontrast tek bir yerden geliyor: `ink`. Sayfada bir ya da iki eleman
+ * (aktif sekme, birincil aksiyon) koyu olur, gerisi sakin kalır. Her yere
+ * dağıtılırsa bu dilin bütün havası gider.
+ *
+ * Renkler HSL kanalı olarak tutuluyor; saydamlık varyantları
+ * `hsl(var(--x) / 0.15)` ile tek tanımdan türüyor.
  */
 @layer base {
   :root {
-    /* Yüzeyler — arkadan öne doğru üç kademe */
-    --bg: 222 20% 8%;
-    --surface: 222 18% 11%;
-    --surface-2: 222 16% 15%;
-    --border: 222 14% 22%;
+    /* Zemin ve yüzeyler — sıcak nötr, üç kademe */
+    --bg: 40 22% 89%;
+    --surface: 42 40% 96%;
+    --surface-2: 40 24% 92%;
+    --border: 38 16% 84%;
 
     /* Metin */
-    --fg: 210 20% 94%;
-    --fg-muted: 215 14% 62%;
+    --fg: 40 10% 15%;
+    --fg-muted: 38 9% 46%;
 
-    /* Marka: Squad'ın askeri tonuna yakın soğuk yeşil */
-    --primary: 152 45% 42%;
-    --primary-fg: 150 30% 96%;
+    /* Kontrast elemanı — az ve bilinçli kullanılır */
+    --ink: 40 8% 11%;
+    --ink-fg: 42 30% 96%;
 
-    /* Durum renkleri — moderasyonda sürekli kullanılacak */
-    --danger: 0 62% 52%;
-    --danger-fg: 0 0% 100%;
-    --warning: 38 85% 55%;
-    --warning-fg: 40 60% 10%;
-    --success: 145 55% 42%;
-    --info: 205 70% 55%;
+    /* Vurgu: tereyağı sarısı. Üstündeki metin koyu olmak zorunda,
+       sarı üzerine beyaz okunmuyor. */
+    --accent: 45 88% 66%;
+    --accent-fg: 40 25% 12%;
 
-    --ring: 152 45% 52%;
-    --radius: 0.5rem;
-  }
+    /* Durum renkleri — moderasyon için şart, ama paletin sıcaklığına
+       çekildiler; saf kırmızı/yeşil bu zeminde yabancı duruyor. */
+    --danger: 8 62% 48%;
+    --danger-fg: 20 30% 97%;
+    --success: 150 32% 38%;
+    --info: 205 40% 45%;
 
-  /* Açık tema, ileride bir tercih olarak açılabilsin diye hazır. */
-  :root.light {
-    --bg: 210 20% 98%;
-    --surface: 0 0% 100%;
-    --surface-2: 210 20% 96%;
-    --border: 214 18% 86%;
-    --fg: 222 25% 12%;
-    --fg-muted: 215 14% 40%;
-    --primary-fg: 0 0% 100%;
-    --warning-fg: 40 60% 10%;
-  }
-
-  * {
-    @apply border-border;
+    --ring: 45 70% 45%;
+    --radius: 1.25rem;
   }
 
   body {
@@ -66,5 +58,11 @@
   /* Klavye ile gezinenler için görünür odak — erişilebilirlik. */
   :focus-visible {
     @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-bg;
+  }
+
+  /* Büyük sayılar ince ağırlıkta ve sıkı aralıkta: bu dilin imzası. */
+  .display {
+    @apply font-light tracking-tight;
+    font-variant-numeric: tabular-nums;
   }
 }

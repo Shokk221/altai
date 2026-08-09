@@ -14,7 +14,7 @@ export function EmptyState({
   tone?: 'neutral' | 'danger';
 }) {
   return (
-    <div className="px-4 py-10 text-center">
+    <div className="px-4 py-14 text-center">
       <p className={tone === 'danger' ? 'text-danger' : 'text-fg-muted'}>{title}</p>
       {hint ? <p className="mt-1 text-sm text-fg-muted/70">{hint}</p> : null}
     </div>
@@ -22,5 +22,5 @@ export function EmptyState({
 }
 
 export function Skeleton({ className = 'h-4 w-full' }: { className?: string }) {
-  return <div className={`animate-pulse rounded bg-surface-2 ${className}`} />;
+  return <div className={`animate-pulse rounded bg-surface-2/70 ${className}`} />;
 }

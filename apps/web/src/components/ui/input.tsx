@@ -6,8 +6,8 @@ export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElem
     <input
       {...props}
       className={cn(
-        'min-h-11 w-full rounded border border-border bg-surface-2 px-3 text-sm',
-        'placeholder:text-fg-muted/70',
+        'min-h-12 w-full rounded-full bg-surface px-5 shadow-card',
+        'border-0 placeholder:text-fg-muted/70',
         // Mobil Safari 16px altındaki yazı tipinde otomatik yakınlaştırma
         // yapıyor; text-base ile bunu engelliyoruz.
         'text-base sm:text-sm',

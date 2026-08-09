@@ -12,6 +12,8 @@ const color = (name: string) => `hsl(var(--${name}) / <alpha-value>)`;
 
 export default {
   content: ['./app/**/*.{ts,tsx}', './src/**/*.{ts,tsx}'],
+  // Koyu tema yok: yön sıcak açık-orta zemin. Tek koyu eleman (ink) zaten
+  // paletin içinde.
   darkMode: 'class',
   theme: {
     extend: {
@@ -22,16 +24,24 @@ export default {
         border: color('border'),
         fg: color('fg'),
         'fg-muted': color('fg-muted'),
-        primary: { DEFAULT: color('primary'), fg: color('primary-fg') },
+        ink: { DEFAULT: color('ink'), fg: color('ink-fg') },
+        accent: { DEFAULT: color('accent'), fg: color('accent-fg') },
         danger: { DEFAULT: color('danger'), fg: color('danger-fg') },
-        warning: { DEFAULT: color('warning'), fg: color('warning-fg') },
         success: color('success'),
         info: color('info'),
         ring: color('ring'),
       },
       borderRadius: {
+        // Cömert yuvarlaklık bu dilin belirleyici özelliği; kartlar yumuşak,
+        // küçük öğeler tam hap.
         DEFAULT: 'var(--radius)',
-        lg: 'calc(var(--radius) + 2px)',
+        lg: 'calc(var(--radius) + 0.25rem)',
+        sm: 'calc(var(--radius) - 0.5rem)',
+      },
+      boxShadow: {
+        // Ayrım çizgiyle değil, çok yumuşak bir gölgeyle yapılıyor.
+        // Sert kenarlıklar bu kompozisyonu ağırlaştırıyor.
+        card: '0 1px 2px hsl(40 10% 20% / 0.04), 0 8px 24px -12px hsl(40 10% 20% / 0.10)',
       },
       fontFamily: {
         // Sistem yazı tipi yığını: dış bağımlılık yok, ilk boyama hızlı.
