@@ -45,6 +45,10 @@ export async function komutCalistir(
 
   try {
     switch (command.action) {
+      // Kanal sağlık kontrolü — RCON'a hiç gitmez, oyunda hiçbir etkisi yok.
+      case 'ping':
+        return { ok: true };
+
       case 'kick':
       case 'ban': {
         const id = oyuncuKimligi(p);

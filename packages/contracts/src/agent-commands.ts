@@ -4,7 +4,11 @@ import { z } from 'zod';
 export const AgentCommand = z.object({
   correlationId: z.string().uuid(),
   serverId: z.string(),
-  action: z.enum(['kick', 'ban', 'warn', 'broadcast', 'setLayer', 'restart']),
+  // 'ping' oyuna DOKUNMAZ: agent RCON'a hiç gitmeden cevaplar. Kanalın
+  // (api -> WS -> agent -> cevap) çalıştığını, canlı sunucuda bir eylem
+  // yapmadan doğrulamak için var. Bu olmadan kanalı sınamanın tek yolu
+  // gerçek bir oyuncuyu atmaktı.
+  action: z.enum(['ping', 'kick', 'ban', 'warn', 'broadcast', 'setLayer', 'restart']),
   payload: z.record(z.unknown()),
   issuedBy: z.string(), // system role user id
 });

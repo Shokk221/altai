@@ -9,6 +9,7 @@ import { registerRateLimit } from './plugins/rate-limit.js';
 import { registerWebsocket } from './plugins/websocket.js';
 import { adminListRoutes } from './routes/admin-list.js';
 import { agentWsRoutes } from './routes/agent-ws.js';
+import { agentRoutes } from './routes/agents.js';
 import { authRoutes } from './routes/auth.js';
 import { banListRoutes } from './routes/ban-list.js';
 import { browserWsRoutes } from './routes/browser-ws.js';
@@ -82,6 +83,7 @@ await app.register(
     await api.register(serverStatusRoutes, { db });
     await api.register(playerRoutes, { db });
     await api.register(moderationRoutes, { db });
+    await api.register(agentRoutes, { db });
   },
   { prefix: '/api' },
 );
