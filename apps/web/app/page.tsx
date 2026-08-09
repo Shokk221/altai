@@ -1,6 +1,7 @@
 import { BreakGlassLogin } from '@/components/break-glass-login';
 import { LogoutButton } from '@/components/logout-button';
 import { cookies } from 'next/headers';
+import Link from 'next/link';
 
 interface Me {
   id: string;
@@ -54,25 +55,39 @@ export default async function HomePage() {
   const me = await getMe(internalApiUrl);
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center gap-4">
+    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center gap-6 px-5 py-12">
+      <div className="text-center">
+        <h1 className="display text-4xl">Altai</h1>
+        <p className="mt-2 text-sm text-fg-muted">Sunucu yönetim paneli</p>
+      </div>
+
       {me ? (
-        <>
-          <p>
-            Giriş yapıldı: {me.discordUsername} (
-            {me.isBreakGlass ? `${me.systemRole} - break-glass` : me.systemRole})
-          </p>
+        <div className="flex w-full flex-col items-center gap-4 rounded bg-surface px-6 py-7">
+          <div className="text-center">
+            <p className="font-semibold">{me.discordUsername}</p>
+            <p className="mt-1 text-sm text-fg-muted">
+              {me.systemRole}
+              {me.isBreakGlass ? ' · acil giriş' : ''}
+            </p>
+          </div>
+          <Link
+            href="/oyuncular"
+            className="inline-flex min-h-11 items-center justify-center rounded-full bg-ink px-5 text-sm font-semibold text-ink-fg transition-colors hover:bg-ink/90"
+          >
+            Oyuncuları ara
+          </Link>
           <LogoutButton apiUrl={publicApiUrl} />
-        </>
+        </div>
       ) : (
-        <>
+        <div className="flex w-full flex-col items-center gap-4 rounded bg-surface px-6 py-7">
           <a
             href={`${publicApiUrl}/auth/discord`}
-            className="rounded bg-indigo-600 px-4 py-2 text-white"
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-ink px-5 text-sm font-semibold text-ink-fg transition-colors hover:bg-ink/90"
           >
             Discord ile giriş yap
           </a>
           <BreakGlassLogin apiUrl={publicApiUrl} />
-        </>
+        </div>
       )}
     </main>
   );

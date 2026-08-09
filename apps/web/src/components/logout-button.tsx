@@ -1,5 +1,7 @@
 'use client';
 
+import { Button } from '@/components/ui/button';
+
 export function LogoutButton({ apiUrl }: { apiUrl: string }) {
   async function handleLogout() {
     await fetch(`${apiUrl}/auth/logout`, { method: 'POST', credentials: 'include' });
@@ -7,8 +9,8 @@ export function LogoutButton({ apiUrl }: { apiUrl: string }) {
   }
 
   return (
-    <button type="button" onClick={handleLogout} className="underline">
+    <Button variant="soft" size="sm" onClick={handleLogout}>
       Çıkış yap
-    </button>
+    </Button>
   );
 }
