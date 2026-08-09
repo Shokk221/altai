@@ -35,6 +35,8 @@ export async function registerDiscordOAuth(app: FastifyInstance, config: AppConf
       },
       auth: fastifyOauth2.DISCORD_CONFIGURATION,
     },
+    // Önek dışarıdan geliyor: bu plugin `/api` altına kaydedildiği için
+    // gerçek adres /api/auth/discord oluyor.
     startRedirectPath: '/auth/discord',
     callbackUri: config.DISCORD_CALLBACK_URL ?? 'http://localhost:3001/auth/discord/callback',
   });

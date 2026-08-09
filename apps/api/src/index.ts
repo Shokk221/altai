@@ -53,15 +53,40 @@ await app.register(cors, {
   credentials: true,
 });
 await registerWebsocket(app);
-await registerDiscordOAuth(app, config);
-await app.register(healthRoutes);
-await app.register(authRoutes, { db, config });
+
+/**
+ * Rota önekleri, panelin önündeki ters vekilin yönlendirmesine göre.
+ *
+ *   /            -> web (3000)
+ *   /api/*       -> api (3001)   ÖNEK SOYULMADAN geliyor
+ *   /ws          -> api (3001)
+ *   /agent-ws    -> api (3001)
+ *
+ * Vekil `/api` önekini kesmiyor; api'ye `/api/health` olarak ulaşıyor.
+ * Bu yüzden HTTP rotaları burada `/api` altına kaydediliyor. WebSocket
+ * rotaları vekilde ayrı ve öneksiz tanımlı, o yüzden kökte kalıyorlar —
+ * onlara önek eklemek bağlantıyı koparırdı.
+ *
+ * Ban ve admin listesi de `/api` altında: vekil tablosunda ayrı bir giriş
+ * yok, kökte bırakılsalardı istek web uygulamasına düşerdi ve Squad
+ * sunucusu listeleri hiç alamazdı.
+ */
+await app.register(
+  async (api) => {
+    await registerDiscordOAuth(api, config);
+    await api.register(healthRoutes);
+    await api.register(authRoutes, { db, config });
+    await api.register(banListRoutes, { db, config });
+    await api.register(adminListRoutes, { db, config });
+    await api.register(serverStatusRoutes, { db });
+    await api.register(playerRoutes, { db });
+  },
+  { prefix: '/api' },
+);
+
+// WebSocket'ler kökte — vekil bunları doğrudan yönlendiriyor.
 await app.register(agentWsRoutes, { db, config });
-await app.register(banListRoutes, { db, config });
-await app.register(adminListRoutes, { db, config });
 await app.register(browserWsRoutes, { db });
-await app.register(serverStatusRoutes, { db });
-await app.register(playerRoutes, { db });
 
 const port = Number(process.env.PORT ?? 3001);
 app.listen({ port, host: '0.0.0.0' }).then(() => {
