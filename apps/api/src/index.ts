@@ -7,6 +7,7 @@ import { redactedRequestSerializer } from './lib/log-redact.js';
 import { registerDiscordOAuth } from './plugins/discord-oauth.js';
 import { registerRateLimit } from './plugins/rate-limit.js';
 import { registerWebsocket } from './plugins/websocket.js';
+import { adminListRoutes } from './routes/admin-list.js';
 import { agentWsRoutes } from './routes/agent-ws.js';
 import { authRoutes } from './routes/auth.js';
 import { banListRoutes } from './routes/ban-list.js';
@@ -56,6 +57,7 @@ await app.register(healthRoutes);
 await app.register(authRoutes, { db, config });
 await app.register(agentWsRoutes, { db, config });
 await app.register(banListRoutes, { db, config });
+await app.register(adminListRoutes, { db, config });
 await app.register(browserWsRoutes, { db });
 await app.register(serverStatusRoutes, { db });
 

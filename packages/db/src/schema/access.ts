@@ -84,3 +84,52 @@ export const discordLinks = pgTable(
     uniqueIndex('discord_links_source_external_idx').on(table.source, table.externalId),
   ],
 );
+
+/**
+ * Squad Admins.cfg grup tanımları: `Group=<ad>:<yetkiler>` satırını üretir.
+ *
+ * Yetkiler Squad'ın kendi erişim seviyeleri (kick, ban, cameraman, reserve...),
+ * bizim izin enum'umuz değil — oyun bunları okuyor. Eski sistemin
+ * AdminGroup koleksiyonundan aktarılıyor.
+ */
+export const squadAdminGroups = pgTable(
+  'squad_admin_groups',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    /** Virgülle ayrılmış Squad erişim seviyeleri. Boş olabilir (SquadLeadPerm). */
+    permissions: text('permissions').notNull().default(''),
+    // null = tüm sunucular
+    serverId: uuid('server_id').references(() => servers.id),
+    source: text('source').notNull().default('altai'),
+    externalId: text('external_id'),
+  },
+  (table) => [
+    uniqueIndex('squad_admin_groups_name_server_idx').on(table.name, table.serverId),
+    uniqueIndex('squad_admin_groups_source_external_idx').on(table.source, table.externalId),
+  ],
+);
+
+/**
+ * Bir Discord hesabının o anki rolleri. Bot senkronize eder
+ * (girişte + periyodik + guildMemberUpdate — plan Bölüm 8).
+ *
+ * Admins.cfg'nin TEK kaynağı burası: Discord'da rol verilen oyunda yetkili
+ * olur, rol alınınca yetkisi düşer. Ara bir "manuel admin" yolu bilinçli
+ * olarak YOK — iki paralel yetki mekanizması eski sistemin hatasıydı.
+ *
+ * syncedAt eskiyse liste bayat demektir; uç bunu kontrol eder.
+ */
+export const discordMemberRoles = pgTable(
+  'discord_member_roles',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    discordId: text('discord_id').notNull(),
+    discordRoleId: text('discord_role_id').notNull(),
+    syncedAt: timestamp('synced_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('discord_member_roles_unique').on(table.discordId, table.discordRoleId),
+    index('discord_member_roles_role_idx').on(table.discordRoleId),
+  ],
+);

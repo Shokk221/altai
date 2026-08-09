@@ -29,6 +29,13 @@
       "when": 1786271635294,
       "tag": "0003_condemned_onslaught",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786273177714,
+      "tag": "0004_mature_zaladane",
+      "breakpoints": true
     }
   ]
 }

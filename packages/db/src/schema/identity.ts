@@ -78,6 +78,10 @@ export const roleMappings = pgTable('role_mappings', {
   discordRoleId: text('discord_role_id').notNull().unique(),
   systemRole: text('system_role').notNull(),
   permissions: jsonb('permissions').$type<string[]>().notNull().default([]),
+  // Oyun içi karşılığı: Admins.cfg'deki grup adı (SuperAdmin, Admin, KlanWL...).
+  // null = bu rol oyun içi yetki vermez, sadece panel erişimi sağlar.
+  // Tek yetki zincirinin oyun ayağı burası (plan Bölüm 8).
+  squadGroup: text('squad_group'),
 });
 
 export const sessions = pgTable('auth_sessions', {

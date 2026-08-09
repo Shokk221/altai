@@ -23,6 +23,9 @@ const envSchema = z.object({
   // URL'de taşınır (Squad düz GET atıyor, header ekleyemiyoruz), o yüzden
   // tahmin edilemez olmalı: openssl rand -hex 24
   BAN_LIST_TOKEN: z.string().min(16).optional(),
+  // Squad sunucularının remote ADMIN list'i çekerken kullandığı token.
+  // Ban listesinden AYRI olmalı: biri sızarsa diğeri etkilenmesin.
+  ADMIN_LIST_TOKEN: z.string().min(16).optional(),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;
