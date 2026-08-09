@@ -156,9 +156,9 @@ export const adminCamLogs = pgTable(
   'admin_cam_logs',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    serverId: uuid('server_id')
-      .notNull()
-      .references(() => servers.id),
+    // Nullable: eski sistemin admin cam kayıtları hangi sunucu olduğunu
+    // tutmuyor. Yeni kayıtlarda agent doldurur.
+    serverId: uuid('server_id').references(() => servers.id),
     playerId: uuid('player_id')
       .notNull()
       .references(() => players.id),
