@@ -80,7 +80,9 @@ if grep -qF "$BOOT_LINE" /data/bootstrap.sh 2>/dev/null; then
 else
   # Mevcut bootstrap.sh'in üstüne yazmıyoruz, sonuna ekliyoruz.
   printf '\n# --- Altai v2 agent (otomatik eklendi) ---\n%s\n' "$BOOT_LINE" >> /data/bootstrap.sh
-  chmod +x /data/bootstrap.sh
+  # Dosya barındırıcıya ait; chmod "Operation not permitted" veriyor. Zaten
+  # çalıştırılabilir olduğu için bu ölümcül değil — kurulumu düşürmesin.
+  chmod +x /data/bootstrap.sh 2>/dev/null || true
   echo "    /data/bootstrap.sh sonuna eklendi"
 fi
 
