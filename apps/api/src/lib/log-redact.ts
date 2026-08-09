@@ -9,12 +9,27 @@
  * görebiliyordu. Gerçek kurulumda doğrulandı, sonra bu dosya yazıldı.
  */
 
+/**
+ * Token'ı yol parçasında taşıyan uçlar.
+ *
+ * İkisi de aynı sebeple böyle: Squad bu adreslere düz GET atıyor, header
+ * ekleyemiyoruz. Tek tek regex yazmak yerine liste tutuluyor — ban listesi
+ * maskelenirken admin listesi atlanmıştı ve Admins.cfg token'ı her istekte
+ * loga düşmeye devam ediyordu. Yol parçasında sır taşıyan yeni bir uç
+ * eklenirse adı buraya yazılmalı.
+ */
+const TOKEN_TASIYAN_YOLLAR = ['ban-list', 'admin-list'];
+
 /** URL'deki sırları maskele. Yol parçası ve sorgu değerleri dahil. */
 export function redactUrl(url: string): string {
   let out = url;
 
-  // /ban-list/<token> ve /ban-list/<token>.cfg
-  out = out.replace(/(\/ban-list\/)[^/?#]+/i, '$1***');
+  // /ban-list/<token>, /ban-list/<token>.cfg ve /api önekli hâlleri.
+  // Kalıp sabitlenmiyor (unanchored): rotalar /api altına kayıtlı, gerçek
+  // adres /api/ban-list/<token> oluyor.
+  for (const yol of TOKEN_TASIYAN_YOLLAR) {
+    out = out.replace(new RegExp(`(/${yol}/)[^/?#]+`, 'i'), '$1***');
+  }
 
   // ?token=... &secret=... &key=... gibi yaygın adlar
   out = out.replace(/([?&](?:token|secret|key|password|pass|auth)=)[^&#]*/gi, '$1***');

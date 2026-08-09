@@ -26,6 +26,18 @@ const envSchema = z.object({
   // Squad sunucularının remote ADMIN list'i çekerken kullandığı token.
   // Ban listesinden AYRI olmalı: biri sızarsa diğeri etkilenmesin.
   ADMIN_LIST_TOKEN: z.string().min(16).optional(),
+  // Fastify'ın req.ip'yi X-Forwarded-For'dan okuyup okumayacağı.
+  //
+  // Üretimde api 127.0.0.1'e bağlı ve önünde Caddy var; bu ayar olmadan
+  // req.ip HER istekte vekilin adresi oluyor ve hız sınırının tamamı tek
+  // ortak kovaya düşüyor — break-glass'ın 5/dk sınırı saldırgana değil
+  // herkese ortak olur, tek saldırgan bütün adminleri kilitler.
+  //
+  // Varsayılan olarak KAPALI: başlığa körü körüne güvenmek, vekil arkasında
+  // olmayan bir kurulumda istemcinin kendi IP'sini uydurmasına izin verir.
+  // Vekil arkasında çalıştırırken 'loopback' (Caddy aynı makinede) ya da
+  // vekilin IP'si verilmeli.
+  TRUST_PROXY: z.string().optional(),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;

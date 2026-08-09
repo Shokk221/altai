@@ -26,13 +26,30 @@ const db = createDb(config.DATABASE_URL);
 // Seçenekler açıkça tipleniyor: satır içi verildiğinde TypeScript sunucu
 // tipini Http2SecureServer olarak çıkarsıyor ve tüm register() çağrıları
 // uyumsuz hale geliyor.
+/**
+ * TRUST_PROXY'yi Fastify'ın beklediği biçime çevir.
+ *
+ * Vekil arkasında değilsek KAPALI kalmalı: açıkken Fastify req.ip'yi
+ * X-Forwarded-For'dan okur ve doğrudan erişilebilen bir sunucuda istemci
+ * kendi IP'sini uydurup hız sınırını tamamen atlayabilir.
+ */
+function resolveTrustProxy(value: string | undefined): boolean | string {
+  if (!value) return false;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return value; // 'loopback', bir IP ya da CIDR listesi
+}
+
 const serverOptions: FastifyServerOptions = {
   logger: {
-    // Varsayılan serileştirici req.url'i olduğu gibi yazıyor; ban listesi
-    // token'ı URL'de taşındığı için her istekte loga düşüyordu (gerçek
-    // kurulumda doğrulandı). Maskeleniyor.
+    // Varsayılan serileştirici req.url'i olduğu gibi yazıyor; ban ve admin
+    // listesi token'ları URL'de taşındığı için her istekte loga düşüyordu
+    // (gerçek kurulumda doğrulandı). Maskeleniyor.
     serializers: { req: redactedRequestSerializer },
   },
+  // Hız sınırı istemciyi req.ip ile ayırt ediyor; vekil arkasında bu ayar
+  // olmadan herkes tek kovaya düşer (bkz. plugins/rate-limit.ts).
+  trustProxy: resolveTrustProxy(config.TRUST_PROXY),
 };
 const app = Fastify(serverOptions);
 
