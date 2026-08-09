@@ -10,11 +10,13 @@ import { timingSafeCompare } from '../src/lib/timing-safe.js';
 
 describe('redactUrl', () => {
   it("ban listesi token'ını maskeler", () => {
-    // Gerçek log satırı buydu: token her istekte düz metin yazılıyordu.
-    const real = '/ban-list/fee262e48177cdf1d8837520af1ee33aaed91824299fe628.cfg';
+    // Hatanın kaynağı: token her istekte düz metin loglanıyordu. Buradaki
+    // değer UYDURMA olmalı — bir zamanlar gerçek token yazılıydı ve depo
+    // herkese açık olduğu için sızdı. Teste asla canlı sır konmaz.
+    const real = `/ban-list/${'0'.repeat(48)}.cfg`;
     const out = redactUrl(real);
     expect(out).toBe('/ban-list/***');
-    expect(out).not.toContain('fee262e4');
+    expect(out).not.toContain('0000');
   });
 
   it('sorgu parametresi olsa da maskeler', () => {

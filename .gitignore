@@ -10,3 +10,6 @@ coverage
 # BM ham arşivi: gigabaytlarca JSON + oyuncu kişisel verisi — repoya asla girmez.
 bm-archive
 *.ndjson
+
+# TypeScript artan derleme onbellegi — urun degil
+*.tsbuildinfo
