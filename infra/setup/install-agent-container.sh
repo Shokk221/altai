@@ -68,6 +68,24 @@ for slug in squad-01 squad-02; do
     sed -e "s|^SERVER_SLUG=.*|SERVER_SLUG=$slug|" \
         -e "s|^SQUADJS_VENDOR_ENTRY=.*|SQUADJS_VENDOR_ENTRY=$ALTAI_DIR/packages/squad/vendor/agent-entry/index.js|" \
         "$ALTAI_DIR/infra/setup/agent.env.example" > "$ENV_FILE"
+    # RCON parolasını elle girmeye gerek yok: Squad'ın kendi Rcon.cfg'si
+    # tek doğru kaynak. Elle yazınca yanlış parola giriliyor ve teşhisi zor
+    # bir hataya dönüşüyor — sunucu TCP'yi kabul edip auth sonrası soketi
+    # sessizce kapatıyor, SquadJS ise "Authentication succeeded" yazıyor.
+    RCON_CFG=/data/serverfiles/SquadGame/ServerConfig/Rcon.cfg
+    if [[ -r "$RCON_CFG" ]]; then
+      RCON_PW="$(sed -n 's/\r$//; s/^Password=//p' "$RCON_CFG" | head -1)"
+      RCON_PORT_CFG="$(sed -n 's/\r$//; s/^Port=//p' "$RCON_CFG" | head -1)"
+      if [[ -n "$RCON_PW" ]]; then
+        # sed ayracını bozabilecek karakterleri kaçır.
+        ESC="$(printf '%s' "$RCON_PW" | sed -e 's/[\/&|]/\\&/g')"
+        sed -i "s|^RCON_PASSWORD=.*|RCON_PASSWORD=$ESC|" "$ENV_FILE"
+        echo "    RCON parolası Rcon.cfg'den alındı (${#RCON_PW} karakter)"
+      fi
+      if [[ -n "$RCON_PORT_CFG" ]]; then
+        sed -i "s|^RCON_PORT=.*|RCON_PORT=$RCON_PORT_CFG|" "$ENV_FILE"
+      fi
+    fi
     chmod 600 "$ENV_FILE"
     echo "    oluşturuldu: $ENV_FILE"
   fi
