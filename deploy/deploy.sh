@@ -51,13 +51,14 @@ say "2/5 veritabanı şeması"
 pnpm db:migrate
 
 say "3/5 web build"
-# NEXT_PUBLIC_* değişkenleri build anında gömülür, o yüzden .env burada yüklenir.
-if [[ -f "$APP_DIR/.env" ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source "$APP_DIR/.env"
-  set +a
-fi
+# NEXT_PUBLIC_* değişkenleri build anında gömülür, o yüzden .env build'e
+# ulaşmalı. Ama .env'i `source` ETMİYORUZ: değerlerin içinde $ olabiliyor
+# (break-glass hash'i scrypt$...$... biçiminde) ve bash onu değişken sanıp
+# `set -u` altında deploy'u ortada kesiyor. Gerçekten yaşandı.
+#
+# Bunun yerine Next.js'in kendi .env okuyucusuna bırakıyoruz: apps/web
+# altındaki .env.local'i kendisi ayrıştırıyor, kabuk genişletmesi yok.
+ln -sfn "$APP_DIR/.env" "$APP_DIR/apps/web/.env.local"
 pnpm --filter @altai/web build
 
 say "4/5 supervisord tanımları"

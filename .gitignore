@@ -11,3 +11,4 @@ coverage
 # BM ham arşivi: gigabaytlarca JSON + oyuncu kişisel verisi — repoya asla girmez.
 bm-archive
 *.ndjson
+.env.local
