@@ -1,7 +1,9 @@
+import { createReadStream, existsSync } from 'node:fs';
+import path from 'node:path';
+import { createInterface } from 'node:readline';
 import { accessSchema, createDb, identitySchema, moderationSchema } from '@altai/db';
 import type { Db } from '@altai/db';
 import { logger } from '@altai/shared';
-import { MongoClient } from 'mongodb';
 
 /**
  * Eski sistemin MongoDB'sinden Faz 2 dilimini Postgres'e aktarır —
@@ -20,23 +22,56 @@ import { MongoClient } from 'mongodb';
  * Kullanım:
  *   pnpm mongo:import              kuru koşu (varsayılan), yazmaz
  *   pnpm mongo:import -- --write   gerçek aktarım
+ *
+ * Girdi canlı Mongo değil, mongoexport DÖKÜMÜ (NDJSON). İki sebeple:
+ *  1. Panel konteyneri Mongo'ya ağdan erişemiyor (ayrı Docker ağları).
+ *  2. Plan Bölüm 5.5-B: "Eski Mongo salt-okunur dondurulur, tam dump alınıp
+ *     arşivlenir". Dosyadan okumak aktarımı tekrarlanabilir ve denetlenebilir
+ *     kılıyor — canlı veritabanının o anki hâline bağlı kalmıyoruz.
  */
 
 const args = process.argv.slice(2).filter((a) => a !== '--');
 const write = args.includes('--write');
 
-const mongoUrl = process.env.MONGO_URL;
+const dumpDir = process.env.MONGO_DUMP_DIR ?? './mongo-dump';
 const databaseUrl = process.env.DATABASE_URL;
 
-if (!mongoUrl) {
-  logger.error(
-    'MONGO_URL tanımlı değil. Örnek: mongodb://kullanici:sifre@host:27017/AltaiDB?authSource=admin',
-  );
+if (!existsSync(dumpDir)) {
+  logger.error({ dumpDir }, 'Mongo dökümü bulunamadı (MONGO_DUMP_DIR)');
   process.exit(1);
 }
 if (!databaseUrl) {
   logger.error('DATABASE_URL tanımlı değil');
   process.exit(1);
+}
+
+/** mongoexport çıktısı: satır başına bir JSON belge. */
+async function* readCollection(name: string): AsyncGenerator<Record<string, unknown>> {
+  const file = path.join(dumpDir, `${name}.json`);
+  if (!existsSync(file)) {
+    logger.warn({ file }, 'koleksiyon dosyası yok, atlanıyor');
+    return;
+  }
+  const lines = createInterface({
+    input: createReadStream(file, { encoding: 'utf8' }),
+    crlfDelay: Number.POSITIVE_INFINITY,
+  });
+  for await (const line of lines) {
+    if (!line.trim()) continue;
+    try {
+      yield JSON.parse(line) as Record<string, unknown>;
+    } catch {
+      // Bozuk satır — atla, sayısı raporlanır.
+    }
+  }
+}
+
+/** mongoexport _id'yi {"$oid": "..."} olarak yazar. */
+function docId(doc: Record<string, unknown>): string {
+  const id = doc._id;
+  if (typeof id === 'string') return id;
+  if (id && typeof id === 'object' && '$oid' in id) return String((id as { $oid: string }).$oid);
+  return JSON.stringify(id);
 }
 
 const SOURCE = 'mongo';
@@ -81,9 +116,6 @@ async function buildPlayerIndex(db: Db) {
   return { bySteam, byEos };
 }
 
-const client = new MongoClient(mongoUrl);
-await client.connect();
-const mongo = client.db(new URL(mongoUrl).pathname.replace('/', '') || 'AltaiDB');
 const db = createDb(databaseUrl);
 const { bySteam, byEos } = await buildPlayerIndex(db);
 
@@ -102,7 +134,7 @@ const bump = (k: string, n = 1) => {
 // ------------------------------------------------------- adminentries -> grants
 logger.info('adminentries okunuyor');
 const grantRows: (typeof accessSchema.grants.$inferInsert)[] = [];
-for (const doc of await mongo.collection('adminentries').find({}).toArray()) {
+for await (const doc of readCollection('adminentries')) {
   bump('adminentries.okunan');
   const playerId = resolve(doc.id);
   if (!playerId) {
@@ -123,7 +155,7 @@ for (const doc of await mongo.collection('adminentries').find({}).toArray()) {
     // biz tarihçe olarak tutuyoruz ama aktif göstermiyoruz.
     revokedAt: expiresAt && expiresAt < new Date() ? expiresAt : null,
     source: SOURCE,
-    externalId: String(doc._id),
+    externalId: docId(doc),
   });
 }
 
@@ -131,7 +163,7 @@ for (const doc of await mongo.collection('adminentries').find({}).toArray()) {
 logger.info('discordsteamlinks okunuyor');
 const linkRows: (typeof accessSchema.discordLinks.$inferInsert)[] = [];
 const seenDiscord = new Set<string>();
-for (const doc of await mongo.collection('discordsteamlinks').find({}).toArray()) {
+for await (const doc of readCollection('discordsteamlinks')) {
   bump('discordsteamlinks.okunan');
   const discordId = typeof doc.discordID === 'string' ? doc.discordID : null;
   if (!discordId) {
@@ -154,7 +186,7 @@ for (const doc of await mongo.collection('discordsteamlinks').find({}).toArray()
     playerId,
     linkedAt: toDate(doc.linkedAt) ?? new Date(),
     source: SOURCE,
-    externalId: String(doc._id),
+    externalId: docId(doc),
   });
 }
 
@@ -162,7 +194,10 @@ for (const doc of await mongo.collection('discordsteamlinks').find({}).toArray()
 // Mongo'da POSSESSED / UNPOSSESSED ayrı satırlar. Oyuncu bazında sıraya dizip
 // eşleştiriyoruz: her POSSESSED, sonraki UNPOSSESSED ile kapanır.
 logger.info('admincamlogs okunuyor');
-const camDocs = await mongo.collection('admincamlogs').find({}).sort({ timestamp: 1 }).toArray();
+// Zaman sırası şart: POSSESSED/UNPOSSESSED eşleştirmesi sıraya dayanıyor.
+const camDocs: Record<string, unknown>[] = [];
+for await (const doc of readCollection('admincamlogs')) camDocs.push(doc);
+camDocs.sort((a, b) => String(a.timestamp ?? '').localeCompare(String(b.timestamp ?? '')));
 
 const camRows: (typeof moderationSchema.adminCamLogs.$inferInsert)[] = [];
 const openCam = new Map<string, { enteredAt: Date; externalId: string }>();
@@ -187,7 +222,7 @@ for (const doc of camDocs) {
   }
 
   if (doc.type === 'POSSESSED') {
-    openCam.set(playerId, { enteredAt: ts, externalId: String(doc._id) });
+    openCam.set(playerId, { enteredAt: ts, externalId: docId(doc) });
   } else if (doc.type === 'UNPOSSESSED') {
     const open = openCam.get(playerId);
     if (open) {
@@ -214,10 +249,8 @@ const knownBanIds = new Set(existing.map((r) => r.externalId).filter(Boolean) as
 
 const lostBanRows: (typeof moderationSchema.bans.$inferInsert)[] = [];
 const now = new Date();
-for (const doc of await mongo
-  .collection('dashbans')
-  .find({ banId: { $nin: ['', null] } })
-  .toArray()) {
+for await (const doc of readCollection('dashbans')) {
+  if (!doc.banId || doc.banId === '') continue;
   bump('dashbans.okunan');
   const banId = String(doc.banId);
   if (knownBanIds.has(banId)) {
@@ -263,7 +296,6 @@ const summary = [
 if (!write) {
   summary.push('', 'Yazmak için: pnpm mongo:import -- --write');
   process.stdout.write(`${summary.join('\n')}\n`);
-  await client.close();
   process.exit(0);
 }
 
@@ -290,5 +322,4 @@ if (lostBanRows.length)
 
 summary.push('', 'Aktarım tamamlandı. Tekrar çalıştırılabilir — kayıtlar ikilenmez.');
 process.stdout.write(`${summary.join('\n')}\n`);
-await client.close();
 process.exit(0);

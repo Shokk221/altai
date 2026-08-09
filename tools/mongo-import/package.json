@@ -10,8 +10,7 @@
   },
   "dependencies": {
     "@altai/shared": "workspace:*",
-    "@altai/db": "workspace:*",
-    "mongodb": "^6.10.0"
+    "@altai/db": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.6.0",
