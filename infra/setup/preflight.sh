@@ -117,7 +117,9 @@ fi
 echo "== 5. api WebSocket =="
 if [[ -n "${AGENT_API_WS_URL:-}" ]]; then
   HTTP_URL="${AGENT_API_WS_URL/#wss:/https:}"; HTTP_URL="${HTTP_URL/#ws:/http:}"
-  HEALTH="${HTTP_URL%/agent-ws}/health"
+  # WebSocket kökte (/agent-ws), HTTP rotaları /api önekinde — ters vekil
+  # öneki SOYMUYOR. Sağlık ucu bu yüzden /api/health.
+  HEALTH="${HTTP_URL%/agent-ws}/api/health"
   if command -v curl >/dev/null 2>&1; then
     if curl -fsS --max-time 10 "$HEALTH" >/dev/null 2>&1; then
       ok "api ayakta ($HEALTH)"
