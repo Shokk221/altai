@@ -3,6 +3,7 @@ import type { Db } from '@altai/db';
 import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { requireSession } from '../lib/auth-guard.js';
+import { aktifBanKosulu, banAktifMi } from '../lib/ban-active.js';
 
 /**
  * Oyuncu arama ve profil — plan Bölüm 5 ("Oyuncu arama: pg_trgm ile kısmi
@@ -87,6 +88,127 @@ export async function playerRoutes(app: FastifyInstance, opts: { db: Db }) {
       return { query: q, mode: 'name', results: await decorate(db, rows) };
     },
   );
+
+  /**
+   * Oyuncu profili — moderasyonun karar ekranı.
+   *
+   * Tek istekte veriliyor çünkü admin bu sayfaya "şu an ne yapmalıyım"
+   * sorusuyla giriyor: ban geçmişi, etiketler, notlar ve oynama süresi
+   * ayrı ayrı yüklenirse karar parça parça oluşuyor.
+   *
+   * Ağır olan tek şey oturum geçmişi (bir oyuncuda binlerce satır olabilir);
+   * onu toplam olarak veriyoruz, listesini değil.
+   */
+  app.get<{ Params: { id: string } }>('/players/:id', { preHandler: guard }, async (req, reply) => {
+    const id = req.params.id;
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      return reply.code(400).send({ error: 'gecersiz_oyuncu_id' });
+    }
+
+    const [player] = await db
+      .select()
+      .from(identitySchema.players)
+      .where(eq(identitySchema.players.id, id))
+      .limit(1);
+    if (!player) return reply.code(404).send({ error: 'oyuncu_bulunamadi' });
+
+    const [names, banRows, flagRows, records, sure, sonOturum] = await Promise.all([
+      db
+        .select({
+          name: identitySchema.playerNames.name,
+          firstSeen: identitySchema.playerNames.firstSeen,
+          lastSeen: identitySchema.playerNames.lastSeen,
+        })
+        .from(identitySchema.playerNames)
+        .where(eq(identitySchema.playerNames.playerId, id))
+        .orderBy(desc(identitySchema.playerNames.lastSeen))
+        .limit(50),
+
+      db
+        .select()
+        .from(moderationSchema.bans)
+        .where(eq(moderationSchema.bans.playerId, id))
+        .orderBy(desc(moderationSchema.bans.createdAt))
+        .limit(100),
+
+      db
+        .select({
+          id: moderationSchema.flagAssignments.id,
+          flagId: moderationSchema.flags.id,
+          name: moderationSchema.flags.name,
+          color: moderationSchema.flags.color,
+          addedAt: moderationSchema.flagAssignments.addedAt,
+          removedAt: moderationSchema.flagAssignments.removedAt,
+        })
+        .from(moderationSchema.flagAssignments)
+        .innerJoin(
+          moderationSchema.flags,
+          eq(moderationSchema.flags.id, moderationSchema.flagAssignments.flagId),
+        )
+        .where(eq(moderationSchema.flagAssignments.playerId, id))
+        .orderBy(desc(moderationSchema.flagAssignments.addedAt))
+        .limit(100),
+
+      db
+        .select()
+        .from(moderationSchema.playerRecords)
+        .where(eq(moderationSchema.playerRecords.playerId, id))
+        .orderBy(desc(moderationSchema.playerRecords.createdAt))
+        .limit(100),
+
+      // Süre ve oturum sayısı: satırları taşımadan tek toplamda.
+      db.execute<{ oturum: number; saniye: number; ilk: string | null; son: string | null }>(sql`
+          select count(*)::int as oturum,
+                 coalesce(sum(extract(epoch from (coalesce(left_at, now()) - joined_at))), 0)::bigint as saniye,
+                 min(joined_at) as ilk,
+                 max(joined_at) as son
+            from game_sessions
+           where player_id = ${id}
+        `),
+
+      db.execute<{ mac: number; kill: number; olum: number; revive: number }>(sql`
+          select count(*)::int as mac,
+                 coalesce(sum(kills), 0)::int as kill,
+                 coalesce(sum(deaths), 0)::int as olum,
+                 coalesce(sum(revives), 0)::int as revive
+            from round_players
+           where player_id = ${id}
+        `),
+    ]);
+
+    const s = (sure as unknown as Record<string, unknown>[])[0] ?? {};
+    const m = (sonOturum as unknown as Record<string, unknown>[])[0] ?? {};
+    const now = new Date();
+
+    return {
+      player: {
+        id: player.id,
+        steamId: player.steamId,
+        eosId: player.eosId,
+        battlemetricsId: player.battlemetricsId,
+        name: names[0]?.name ?? '(isim yok)',
+      },
+      names,
+      bans: banRows.map((b) => ({
+        ...b,
+        // Kural tek yerde: lib/ban-active.ts. Ban listesi ucu da aynı
+        // tanımı kullanıyor, böylece panel ile sunucu ayrışamaz.
+        active: banAktifMi(b, now),
+      })),
+      flags: flagRows,
+      records,
+      oyun: {
+        oturum: Number(s.oturum ?? 0),
+        toplamSaniye: Number(s.saniye ?? 0),
+        ilkGorulme: s.ilk ?? null,
+        sonGorulme: s.son ?? null,
+        mac: Number(m.mac ?? 0),
+        kill: Number(m.kill ?? 0),
+        olum: Number(m.olum ?? 0),
+        revive: Number(m.revive ?? 0),
+      },
+    };
+  });
 }
 
 interface BaseRow {
@@ -134,8 +256,7 @@ async function decorate(db: Db, rows: BaseRow[]) {
         // bağlıyor ve Postgres onu dizi olarak görmüyor ("op ANY/ALL
         // requires array on right side"). Gerçek kurulumda patladı.
         inArray(moderationSchema.bans.playerId, ids),
-        isNull(moderationSchema.bans.revokedAt),
-        or(isNull(moderationSchema.bans.expiresAt), gt(moderationSchema.bans.expiresAt, now)),
+        aktifBanKosulu(now),
       ),
     );
   const banned = new Set(bans.map((b) => b.playerId));

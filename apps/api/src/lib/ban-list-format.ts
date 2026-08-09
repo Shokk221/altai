@@ -10,6 +10,8 @@
  * ban yine tutar. Fazladan satırın maliyeti yok (20 bin ban ~2 MB).
  */
 
+import { banAktifMi } from './ban-active.js';
+
 export interface BanListEntry {
   steamId: string | null;
   eosId: string | null;
@@ -64,7 +66,8 @@ export function formatBanList(opts: FormatOptions): string {
   for (const entry of entries) {
     // Süresi geçmiş ban listeye girmez. Sorgu bunu zaten filtreliyor ama
     // liste dakikalarca önbelleklenebiliyor; burada da kontrol ediyoruz.
-    if (entry.expiresAt && entry.expiresAt.getTime() <= now.getTime()) continue;
+    // Kural tek yerde: lib/ban-active.ts.
+    if (!banAktifMi({ revokedAt: null, expiresAt: entry.expiresAt }, now)) continue;
 
     const timestamp = entry.expiresAt ? Math.floor(entry.expiresAt.getTime() / 1000) : 0;
     const reason = renderReason(entry.reason, entry.expiresAt, now);

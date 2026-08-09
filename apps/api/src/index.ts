@@ -13,6 +13,7 @@ import { authRoutes } from './routes/auth.js';
 import { banListRoutes } from './routes/ban-list.js';
 import { browserWsRoutes } from './routes/browser-ws.js';
 import { healthRoutes } from './routes/health.js';
+import { moderationRoutes } from './routes/moderation.js';
 import { playerRoutes } from './routes/players.js';
 import { serverStatusRoutes } from './routes/server-status.js';
 
@@ -80,6 +81,7 @@ await app.register(
     await api.register(adminListRoutes, { db, config });
     await api.register(serverStatusRoutes, { db });
     await api.register(playerRoutes, { db });
+    await api.register(moderationRoutes, { db });
   },
   { prefix: '/api' },
 );

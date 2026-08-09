@@ -21,7 +21,8 @@
     "@fastify/websocket": "^11.0.0",
     "drizzle-orm": "^0.36.0",
     "ws": "^8.18.3",
-    "@fastify/rate-limit": "^10.2.0"
+    "@fastify/rate-limit": "^10.2.0",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

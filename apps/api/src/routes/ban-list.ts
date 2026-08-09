@@ -3,6 +3,7 @@ import { identitySchema, moderationSchema, presenceSchema } from '@altai/db';
 import type { AppConfig } from '@altai/shared';
 import { and, eq, gt, isNull, or } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
+import { aktifBanKosulu } from '../lib/ban-active.js';
 import { formatBanList } from '../lib/ban-list-format.js';
 import { timingSafeCompare } from '../lib/timing-safe.js';
 
@@ -34,11 +35,9 @@ export async function banListRoutes(app: FastifyInstance, opts: { db: Db; config
 
       const now = new Date();
 
-      // Aktif ban = kaldırılmamış VE (kalıcı VEYA süresi dolmamış).
-      const active = and(
-        isNull(moderationSchema.bans.revokedAt),
-        or(isNull(moderationSchema.bans.expiresAt), gt(moderationSchema.bans.expiresAt, now)),
-      );
+      // Kural tek yerde: lib/ban-active.ts. Buradaki filtre ile profildeki
+      // hesaplamanın ayrışmaması için ikisi de oradan geliyor.
+      const active = aktifBanKosulu(now);
 
       // Sunucu filtresi: serverId NULL olan banlar tüm sunucularda geçerli
       // (BM'deki orgWide karşılığı), diğerleri yalnızca kendi sunucusunda.
