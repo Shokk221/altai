@@ -1,6 +1,6 @@
 import { identitySchema, moderationSchema } from '@altai/db';
 import type { Db } from '@altai/db';
-import { and, desc, eq, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { requireSession } from '../lib/auth-guard.js';
 
@@ -113,7 +113,7 @@ async function decorate(db: Db, rows: BaseRow[]) {
       name: identitySchema.playerNames.name,
     })
     .from(identitySchema.playerNames)
-    .where(sql`${identitySchema.playerNames.playerId} = any(${ids})`)
+    .where(inArray(identitySchema.playerNames.playerId, ids))
     .orderBy(desc(identitySchema.playerNames.lastSeen))
     .limit(ids.length * 6);
 
@@ -130,12 +130,12 @@ async function decorate(db: Db, rows: BaseRow[]) {
     .from(moderationSchema.bans)
     .where(
       and(
-        sql`${moderationSchema.bans.playerId} = any(${ids})`,
+        // inArray: sql`= any(${ids})` JS dizisini tek parametre olarak
+        // bağlıyor ve Postgres onu dizi olarak görmüyor ("op ANY/ALL
+        // requires array on right side"). Gerçek kurulumda patladı.
+        inArray(moderationSchema.bans.playerId, ids),
         isNull(moderationSchema.bans.revokedAt),
-        or(
-          isNull(moderationSchema.bans.expiresAt),
-          sql`${moderationSchema.bans.expiresAt} > ${now}`,
-        ),
+        or(isNull(moderationSchema.bans.expiresAt), gt(moderationSchema.bans.expiresAt, now)),
       ),
     );
   const banned = new Set(bans.map((b) => b.playerId));
