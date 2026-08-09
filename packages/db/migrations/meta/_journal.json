@@ -57,6 +57,13 @@
       "when": 1786302645974,
       "tag": "0007_sparkling_sauron",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786304384393,
+      "tag": "0008_low_sally_floyd",
+      "breakpoints": true
     }
   ]
 }

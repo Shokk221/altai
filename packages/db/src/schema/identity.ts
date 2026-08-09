@@ -1,4 +1,13 @@
-import { boolean, index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  index,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 /**
  * Oyuncu kimliği. steam_id VEYA eos_id dolu olmalı — ikisi de zorunlu değil.
@@ -45,12 +54,18 @@ export const playerNames = pgTable(
     firstSeen: timestamp('first_seen', { withTimezone: true }),
     lastSeen: timestamp('last_seen', { withTimezone: true }),
     source: text('source').notNull().default('altai'),
-    // BM identifier id'si — ETL'in tekrar çalıştırılabilir olması için.
+    // Kaynağın kayıt kimliği — yalnızca izlenebilirlik için. Tekillik
+    // ANAHTARI DEĞİL: BM aynı ismi farklı kayıt kimlikleriyle defalarca
+    // bildiriyor ve bu alan üzerinden tekilleştirmek 4.064 ismi 9.852 satıra
+    // bölmüştü. Gerçek anahtar (player_id, name).
     externalId: text('external_id').unique(),
   },
   (table) => [
     index('player_names_player_idx').on(table.playerId),
     index('player_names_name_idx').on(table.name),
+    // Bir oyuncunun bir ismi TEK satır. Aynı isim tekrar görülürse yeni satır
+    // değil, mevcut satırın first_seen/last_seen aralığı genişler.
+    uniqueIndex('player_names_player_name_idx').on(table.playerId, table.name),
   ],
 );
 
