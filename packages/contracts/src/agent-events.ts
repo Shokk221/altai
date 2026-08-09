@@ -44,11 +44,44 @@ export const ServerSnapshotEvent = z.object({
   timestamp: z.string().datetime(),
 });
 
+/**
+ * Maç başlangıcı — SquadJS'in NEW_GAME olayı.
+ *
+ * Faz 1'in "PersistenceWriter (… /round/ …)" maddesi. Geçmiş maçlar eski
+ * sistemin Mongo'sundan alındı; buradan sonrası canlı akıyor, ikisi de aynı
+ * `rounds` tablosuna yazılıyor.
+ */
+export const RoundStartedEvent = z.object({
+  type: z.literal('ROUND_STARTED'),
+  serverSlug: z.string(),
+  layer: z.string().optional(),
+  map: z.string().optional(),
+  timestamp: z.string().datetime(),
+});
+
+/**
+ * Maç bitişi. Kazanan ve ticket bilgisi SquadJS'te ROUND_ENDED ile geliyor;
+ * bazı harita/mod birleşimlerinde kazanan hiç bildirilmiyor, o yüzden tüm
+ * alanlar opsiyonel — bilgi yoksa maçı kaydetmemek yerine eksik kaydediyoruz.
+ */
+export const RoundEndedEvent = z.object({
+  type: z.literal('ROUND_ENDED'),
+  serverSlug: z.string(),
+  winnerTeam: z.number().int().min(1).max(2).optional(),
+  winnerFaction: z.string().optional(),
+  winnerTickets: z.number().int().optional(),
+  loserFaction: z.string().optional(),
+  loserTickets: z.number().int().optional(),
+  timestamp: z.string().datetime(),
+});
+
 export const AgentEvent = z.discriminatedUnion('type', [
   PlayerConnectedEvent,
   PlayerDisconnectedEvent,
   ChatMessageEvent,
   ServerSnapshotEvent,
+  RoundStartedEvent,
+  RoundEndedEvent,
 ]);
 
 export type AgentEvent = z.infer<typeof AgentEvent>;

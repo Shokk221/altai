@@ -1,8 +1,8 @@
 import type { AgentEvent } from '@altai/contracts';
 import type { Db } from '@altai/db';
-import { identitySchema, presenceSchema } from '@altai/db';
+import { identitySchema, matchesSchema, presenceSchema } from '@altai/db';
 import { logger } from '@altai/shared';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 
 const RAW_EVENTS_FLUSH_INTERVAL_MS = 2_000;
 const RAW_EVENTS_FLUSH_MAX_BATCH = 200;
@@ -180,6 +180,70 @@ export function createPersistenceWriter(db: Db): PersistenceWriter {
     });
   }
 
+  /**
+   * Maç başlangıcı.
+   *
+   * Sunucu bir maçı bitirmeden yeniden başlarsa o maç `ended_at` null olarak
+   * kalır. Bunu yeni maçın başlangıç zamanıyla kapatmıyoruz: aradaki harita
+   * yükleme ve çöküş süresi maç süresine yazılır, yanlış istatistik üretirdi.
+   * Yarım kalan maç yarım kalmış olarak duruyor; eşleştirme kuralı "en son
+   * başlayan açık maç" olduğu için bu, sonraki maçların doğruluğunu bozmaz.
+   */
+  async function handleRoundStarted(
+    serverId: string,
+    event: Extract<AgentEvent, { type: 'ROUND_STARTED' }>,
+  ) {
+    await db.insert(matchesSchema.rounds).values({
+      serverId,
+      layer: event.layer ?? null,
+      map: event.map ?? null,
+      startedAt: new Date(event.timestamp),
+      source: 'altai',
+    });
+  }
+
+  /**
+   * Maç bitişi — o sunucunun en son başlamış maçını kapatır.
+   *
+   * ROUND_ENDED ayrı bir maç kimliği taşımıyor (SquadJS öyle üretmiyor),
+   * bu yüzden eşleştirme "aynı sunucuda en son başlayan, henüz bitmemiş maç"
+   * kuralıyla yapılıyor. Agent yeniden başladığında ROUND_STARTED'ı kaçırmış
+   * olabilir; o durumda kapatılacak maç bulunamaz ve olay sessizce yalnızca
+   * raw_events'te kalır — uydurma bir maç kaydı üretmiyoruz.
+   */
+  async function handleRoundEnded(
+    serverId: string,
+    event: Extract<AgentEvent, { type: 'ROUND_ENDED' }>,
+  ) {
+    const [open] = await db
+      .select({ id: matchesSchema.rounds.id, startedAt: matchesSchema.rounds.startedAt })
+      .from(matchesSchema.rounds)
+      .where(and(eq(matchesSchema.rounds.serverId, serverId), isNull(matchesSchema.rounds.endedAt)))
+      .orderBy(desc(matchesSchema.rounds.startedAt))
+      .limit(1);
+    if (!open) {
+      logger.warn({ event }, 'ROUND_ENDED geldi ama açık maç yok — atlandı');
+      return;
+    }
+
+    const endedAt = new Date(event.timestamp);
+    const winner = event.winnerTeam;
+    await db
+      .update(matchesSchema.rounds)
+      .set({
+        endedAt,
+        durationSeconds: Math.max(0, Math.round((+endedAt - +open.startedAt) / 1000)),
+        winnerTeam: winner ?? null,
+        // Ticket'lar kazanan/kaybeden olarak geliyor, takım numarasına
+        // çevirmek için kazananın hangi takım olduğunu bilmek gerekiyor.
+        team1Tickets: winner === 1 ? (event.winnerTickets ?? null) : (event.loserTickets ?? null),
+        team2Tickets: winner === 2 ? (event.winnerTickets ?? null) : (event.loserTickets ?? null),
+        team1Faction: winner === 1 ? (event.winnerFaction ?? null) : (event.loserFaction ?? null),
+        team2Faction: winner === 2 ? (event.winnerFaction ?? null) : (event.loserFaction ?? null),
+      })
+      .where(eq(matchesSchema.rounds.id, open.id));
+  }
+
   return {
     write(serverId, event) {
       if (stopped) return;
@@ -203,6 +267,16 @@ export function createPersistenceWriter(db: Db): PersistenceWriter {
         case 'SERVER_SNAPSHOT':
           void handleServerSnapshot(serverId, event).catch((err) =>
             logger.error({ err, event }, 'SERVER_SNAPSHOT işlenemedi'),
+          );
+          break;
+        case 'ROUND_STARTED':
+          void handleRoundStarted(serverId, event).catch((err) =>
+            logger.error({ err, event }, 'ROUND_STARTED işlenemedi'),
+          );
+          break;
+        case 'ROUND_ENDED':
+          void handleRoundEnded(serverId, event).catch((err) =>
+            logger.error({ err, event }, 'ROUND_ENDED işlenemedi'),
           );
           break;
         case 'CHAT_MESSAGE':

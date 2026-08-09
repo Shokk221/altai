@@ -48,11 +48,36 @@ export interface SquadJSServerStatusRaw {
   currentLayer?: string | undefined;
 }
 
+/**
+ * Yeni maç. `layer` SquadJS'in Layer nesnesi: okunabilir ad `name`
+ * ("Yehorivka RAAS v1"), harita adı `map.name`. Layer katalogdan
+ * çözülemezse nesne gelmeyebilir; o yüzden `layerClassname` de taşınıyor.
+ */
+export interface SquadJSNewGameRaw {
+  layer?: { name?: string; map?: { name?: string } } | null | undefined;
+  layerClassname?: string | undefined;
+  mapClassname?: string | undefined;
+  time: Date;
+}
+
+/**
+ * Maç bitişi. Beraberlikte ya da kazananın log'a düşmediği durumlarda
+ * winner/loser null gelir — SquadJS'in kendi belgelediği davranış.
+ * `team` ve `tickets` log'dan string olarak çıkıyor.
+ */
+export interface SquadJSRoundEndedRaw {
+  winner?: { team?: string; faction?: string; subfaction?: string; tickets?: string } | null;
+  loser?: { team?: string; faction?: string; subfaction?: string; tickets?: string } | null;
+  time: Date;
+}
+
 // SquadJS'in ürettiği ham event isimleri — upstream'de bunlar sabit.
 export interface SquadJSEngineEvents {
   PLAYER_CONNECTED: (raw: SquadJSPlayerConnectedRaw) => void;
   PLAYER_DISCONNECTED: (raw: SquadJSPlayerDisconnectedRaw) => void;
   CHAT_MESSAGE: (raw: SquadJSChatMessageRaw) => void;
+  NEW_GAME: (raw: SquadJSNewGameRaw) => void;
+  ROUND_ENDED: (raw: SquadJSRoundEndedRaw) => void;
 }
 
 export interface SquadJSEngine {

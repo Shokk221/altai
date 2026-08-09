@@ -2,8 +2,10 @@ import type {
   SquadJSChatMessageRaw,
   SquadJSEngine,
   SquadJSEngineEvents,
+  SquadJSNewGameRaw,
   SquadJSPlayerConnectedRaw,
   SquadJSPlayerDisconnectedRaw,
+  SquadJSRoundEndedRaw,
   SquadJSServerStatusRaw,
 } from './engine.js';
 
@@ -44,6 +46,22 @@ interface RealChatMessageData {
   eosID?: string;
   chat: 'ChatAll' | 'ChatTeam' | 'ChatSquad' | 'ChatAdmin';
   message: string;
+  time: Date | string;
+}
+
+// new-game.js: layer katalogdan çözülür, layerClassname ham log'dan gelir.
+interface RealNewGameData {
+  layer?: { name?: string; map?: { name?: string } } | null;
+  layerClassname?: string;
+  mapClassname?: string;
+  time: Date | string;
+}
+
+// round-ended.js: beraberlikte winner ve loser null. Ticket ve takım
+// numarası log'dan string olarak çıkıyor (round-tickets.js).
+interface RealRoundEndedData {
+  winner?: { team?: string; faction?: string; subfaction?: string; tickets?: string } | null;
+  loser?: { team?: string; faction?: string; subfaction?: string; tickets?: string } | null;
   time: Date | string;
 }
 
@@ -119,6 +137,25 @@ export function createSquadServerEngineAdapter(
             time: toDate(data.time),
           };
           (listener as SquadJSEngineEvents['CHAT_MESSAGE'])(raw);
+        }) as RealListener);
+      } else if (event === 'NEW_GAME') {
+        register(event, listener, ((data: RealNewGameData) => {
+          const raw: SquadJSNewGameRaw = {
+            layer: data.layer ?? null,
+            layerClassname: data.layerClassname,
+            mapClassname: data.mapClassname,
+            time: toDate(data.time),
+          };
+          (listener as SquadJSEngineEvents['NEW_GAME'])(raw);
+        }) as RealListener);
+      } else if (event === 'ROUND_ENDED') {
+        register(event, listener, ((data: RealRoundEndedData) => {
+          const raw: SquadJSRoundEndedRaw = {
+            winner: data.winner ?? null,
+            loser: data.loser ?? null,
+            time: toDate(data.time),
+          };
+          (listener as SquadJSEngineEvents['ROUND_ENDED'])(raw);
         }) as RealListener);
       }
     },

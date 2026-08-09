@@ -2,8 +2,10 @@ import type { AgentEvent } from '@altai/contracts';
 import type {
   SquadJSChatMessageRaw,
   SquadJSEngine,
+  SquadJSNewGameRaw,
   SquadJSPlayerConnectedRaw,
   SquadJSPlayerDisconnectedRaw,
+  SquadJSRoundEndedRaw,
 } from './engine.js';
 
 const CHAT_CHANNEL_MAP: Record<SquadJSChatMessageRaw['chat'], 'All' | 'Team' | 'Squad' | 'Admin'> =
@@ -79,6 +81,38 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
     });
   };
 
+  const handleNewGame = (raw: SquadJSNewGameRaw) => {
+    // Okunabilir ad yoksa classname'e düşüyoruz: "Yehorivka_RAAS_v1" çirkin
+    // ama boş bırakmaktan iyi — maçın hangi haritada oynandığı kaybolmasın.
+    const layer = raw.layer?.name ?? raw.layerClassname;
+    const map = raw.layer?.map?.name ?? raw.mapClassname;
+    onEvent({
+      type: 'ROUND_STARTED',
+      serverSlug,
+      ...(layer ? { layer } : {}),
+      ...(map ? { map } : {}),
+      timestamp: raw.time.toISOString(),
+    });
+  };
+
+  const handleRoundEnded = (raw: SquadJSRoundEndedRaw) => {
+    // Takım ve ticket log'dan string geliyor; sayıya çevrilemiyorsa alanı
+    // hiç göndermiyoruz — sözleşme opsiyonel, uydurma değer yazmıyoruz.
+    const team = Number(raw.winner?.team);
+    const winnerTickets = Number(raw.winner?.tickets);
+    const loserTickets = Number(raw.loser?.tickets);
+    onEvent({
+      type: 'ROUND_ENDED',
+      serverSlug,
+      ...(team === 1 || team === 2 ? { winnerTeam: team } : {}),
+      ...(raw.winner?.faction ? { winnerFaction: raw.winner.faction } : {}),
+      ...(Number.isFinite(winnerTickets) ? { winnerTickets } : {}),
+      ...(raw.loser?.faction ? { loserFaction: raw.loser.faction } : {}),
+      ...(Number.isFinite(loserTickets) ? { loserTickets } : {}),
+      timestamp: raw.time.toISOString(),
+    });
+  };
+
   async function takeSnapshot() {
     try {
       const status = await engine.getStatus();
@@ -102,6 +136,8 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
       engine.on('PLAYER_CONNECTED', handleConnected);
       engine.on('PLAYER_DISCONNECTED', handleDisconnected);
       engine.on('CHAT_MESSAGE', handleChat);
+      engine.on('NEW_GAME', handleNewGame);
+      engine.on('ROUND_ENDED', handleRoundEnded);
       snapshotTimer = setInterval(takeSnapshot, snapshotIntervalMs);
       void takeSnapshot();
     },
@@ -109,6 +145,8 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
       engine.off('PLAYER_CONNECTED', handleConnected);
       engine.off('PLAYER_DISCONNECTED', handleDisconnected);
       engine.off('CHAT_MESSAGE', handleChat);
+      engine.off('NEW_GAME', handleNewGame);
+      engine.off('ROUND_ENDED', handleRoundEnded);
       if (snapshotTimer) clearInterval(snapshotTimer);
     },
   };
