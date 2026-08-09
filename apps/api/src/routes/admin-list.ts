@@ -36,7 +36,7 @@ export async function adminListRoutes(app: FastifyInstance, opts: { db: Db; conf
     const groups = await db
       .select({
         name: accessSchema.squadAdminGroups.name,
-        permissions: accessSchema.squadAdminGroups.permissions,
+        permissions: accessSchema.squadAdminGroups.squadPermissions,
         grantMode: accessSchema.squadAdminGroups.grantMode,
       })
       .from(accessSchema.squadAdminGroups);
@@ -48,15 +48,12 @@ export async function adminListRoutes(app: FastifyInstance, opts: { db: Db; conf
       .select({
         steamId: identitySchema.players.steamId,
         eosId: identitySchema.players.eosId,
-        groupName: identitySchema.roleMappings.squadGroup,
+        groupName: accessSchema.roleMappings.squadGroup,
       })
       .from(accessSchema.discordMemberRoles)
       .innerJoin(
-        identitySchema.roleMappings,
-        eq(
-          identitySchema.roleMappings.discordRoleId,
-          accessSchema.discordMemberRoles.discordRoleId,
-        ),
+        accessSchema.roleMappings,
+        eq(accessSchema.roleMappings.discordRoleId, accessSchema.discordMemberRoles.discordRoleId),
       )
       .innerJoin(
         accessSchema.discordLinks,
@@ -68,7 +65,7 @@ export async function adminListRoutes(app: FastifyInstance, opts: { db: Db; conf
       )
       .where(
         and(
-          isNotNull(identitySchema.roleMappings.squadGroup),
+          isNotNull(accessSchema.roleMappings.squadGroup),
           isNull(accessSchema.discordLinks.unlinkedAt),
         ),
       );
@@ -136,9 +133,9 @@ export async function adminListRoutes(app: FastifyInstance, opts: { db: Db; conf
     // henüz kurulmamış demektir; eşleme varsa ama admin çıkmıyorsa senkron
     // bozuk demektir. İkisi çok farklı durumlar.
     const mappings = await db
-      .select({ id: identitySchema.roleMappings.id })
-      .from(identitySchema.roleMappings)
-      .where(isNotNull(identitySchema.roleMappings.squadGroup));
+      .select({ id: accessSchema.roleMappings.id })
+      .from(accessSchema.roleMappings)
+      .where(isNotNull(accessSchema.roleMappings.squadGroup));
 
     const result = formatAdminList({
       groups,

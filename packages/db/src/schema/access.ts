@@ -1,6 +1,28 @@
-import { index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { players, users } from './identity';
 import { servers } from './presence';
+
+/**
+ * Discord rolü -> panel rolü ve oyun içi grup eşlemesi. Yetki zincirinin
+ * BAŞLANGICIDIR: her şey burada tanımlanan eşlemeden türer.
+ *
+ * identity.ts'ten buraya taşındı — kimlik değil erişim konusu. Zincirin
+ * beş parçası (bu tablo, discord_member_roles, discord_links,
+ * squad_admin_groups, grants) artık aynı dosyada okunuyor.
+ */
+export const roleMappings = pgTable('role_mappings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  discordRoleId: text('discord_role_id').notNull().unique(),
+  systemRole: text('system_role').notNull(),
+  /**
+   * PANEL izinleri (players:read, bans:write ...). Oyun içi yetkiyle
+   * karıştırılmasın: oyun tarafı squad_admin_groups.squad_permissions.
+   */
+  panelPermissions: jsonb('panel_permissions').$type<string[]>().notNull().default([]),
+  // Oyun içi karşılığı: Admins.cfg'deki grup adı (SuperAdmin, Admin, KlanWL...).
+  // null = bu rol oyun içi yetki vermez, sadece panel erişimi sağlar.
+  squadGroup: text('squad_group'),
+});
 
 /**
  * Yetki/grant modeli — plan Bölüm 6.6 "Tek 'yetki/grant' modeli + revoked_at
@@ -112,8 +134,15 @@ export const squadAdminGroups = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     name: text('name').notNull(),
-    /** Virgülle ayrılmış Squad erişim seviyeleri. Boş olabilir (SquadLeadPerm). */
-    permissions: text('permissions').notNull().default(''),
+    /**
+     * Virgülle ayrılmış SQUAD erişim seviyeleri — doğrudan Admins.cfg'ye
+     * yazılır (`Group=<ad>:<bu değer>`). Boş olabilir (SquadLeadPerm).
+     *
+     * Adı bilerek `permissions` değil: role_mappings'te de `permissions` var
+     * ve o PANEL izinlerini tutuyor. İki farklı şeyin aynı adı taşıması
+     * yetki zincirini okurken en çok karıştıran yerdi.
+     */
+    squadPermissions: text('squad_permissions').notNull().default(''),
     // Varsayılan kısıtlayıcı taraf: yeni bir grup eklendiğinde kazara elle
     // yetki dağıtılabilir hâle gelmesin.
     grantMode: text('grant_mode').$type<GrantMode>().notNull().default('discord'),

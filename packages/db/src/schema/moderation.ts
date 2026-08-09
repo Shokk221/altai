@@ -97,15 +97,42 @@ export const flagAssignments = pgTable(
   ],
 );
 
-export const notes = pgTable(
-  'notes',
+/**
+ * Oyuncu kayıtları — moderatörün bir oyuncuya iliştirdiği serbest metin.
+ *
+ * Önce üç ayrı tablo vardı: `notes`, `warnings`, `watchlist`. Üçü de aynı
+ * şeyi modelliyordu (kim, kime, ne yazdı, ne zaman) ve yalnızca yaşam
+ * döngüsünde ayrışıyordu. Üçü de boştu, hiçbiri koda bağlı değildi ve oyuncu
+ * profilinde "bu oyuncuya dair ne var" sorusu üç ayrı sorgu + birleştirme
+ * gerektiriyordu. Tek tabloda `kind` ile ayrışıyorlar.
+ *
+ * Ban ve flag BİLEREK dışarıda: onlar serbest metin değil, uygulanan
+ * yaptırım ve sınıflandırma. Ban listesi ve Admins.cfg üretimi onlara bakar.
+ */
+export const PLAYER_RECORD_KINDS = ['note', 'warning', 'watchlist'] as const;
+export type PlayerRecordKind = (typeof PLAYER_RECORD_KINDS)[number];
+
+export const playerRecords = pgTable(
+  'player_records',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     playerId: uuid('player_id')
       .notNull()
       .references(() => players.id),
+    kind: text('kind').$type<PlayerRecordKind>().notNull(),
     body: text('body').notNull(),
+
+    // Yalnızca 'warning': hangi sunucuda verildi ve oyuncuya oyun içinde
+    // gösterildi mi (RCON warn gitti mi).
+    serverId: uuid('server_id').references(() => servers.id),
+    deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+
+    // 'watchlist' için takipten çıkarılma, 'note' için arşivlenme.
+    // Silmiyoruz: moderasyon geçmişi kaybolmamalı.
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+
     authorUserId: uuid('author_user_id').references(() => users.id),
+    // Kaydı yazan panelde kullanıcı olmayabilir (BM/Mongo'dan gelen tarihçe).
     authorName: text('author_name'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
@@ -113,41 +140,11 @@ export const notes = pgTable(
     externalId: text('external_id'),
   },
   (table) => [
-    index('notes_player_idx').on(table.playerId),
-    uniqueIndex('notes_source_external_idx').on(table.source, table.externalId),
+    // Profil sayfasının ana sorgusu: bir oyuncunun tüm kayıtları, yeniden eskiye.
+    index('player_records_player_idx').on(table.playerId, table.createdAt),
+    index('player_records_kind_idx').on(table.kind),
+    uniqueIndex('player_records_source_external_idx').on(table.source, table.externalId),
   ],
-);
-
-export const warnings = pgTable(
-  'warnings',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    playerId: uuid('player_id')
-      .notNull()
-      .references(() => players.id),
-    serverId: uuid('server_id').references(() => servers.id),
-    reason: text('reason').notNull(),
-    issuedByUserId: uuid('issued_by_user_id').references(() => users.id),
-    // Oyun içinde oyuncuya gösterildi mi (RCON warn gitti mi)
-    deliveredAt: timestamp('delivered_at', { withTimezone: true }),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [index('warnings_player_idx').on(table.playerId)],
-);
-
-export const watchlist = pgTable(
-  'watchlist',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    playerId: uuid('player_id')
-      .notNull()
-      .references(() => players.id),
-    reason: text('reason').notNull(),
-    addedByUserId: uuid('added_by_user_id').references(() => users.id),
-    addedAt: timestamp('added_at', { withTimezone: true }).defaultNow().notNull(),
-    removedAt: timestamp('removed_at', { withTimezone: true }),
-  },
-  (table) => [index('watchlist_player_idx').on(table.playerId)],
 );
 
 // Faz 6'da admin cam takibi bunu doldurur; şema şimdiden duruyor ki vendored

@@ -1,6 +1,6 @@
 import { type Permission, SYSTEM_ROLES, type SystemRole } from '@altai/contracts';
 import type { Db } from '@altai/db';
-import { identitySchema } from '@altai/db';
+import { accessSchema, identitySchema } from '@altai/db';
 import { inArray } from 'drizzle-orm';
 
 export interface ResolvedRoles {
@@ -19,8 +19,8 @@ export async function resolveRoles(db: Db, discordRoleIds: string[]): Promise<Re
 
   const mappings = await db
     .select()
-    .from(identitySchema.roleMappings)
-    .where(inArray(identitySchema.roleMappings.discordRoleId, discordRoleIds));
+    .from(accessSchema.roleMappings)
+    .where(inArray(accessSchema.roleMappings.discordRoleId, discordRoleIds));
 
   if (mappings.length === 0) {
     return { systemRole: 'member', permissions: [] };
@@ -30,7 +30,7 @@ export async function resolveRoles(db: Db, discordRoleIds: string[]): Promise<Re
   let bestRoleIndex = SYSTEM_ROLES.length - 1; // en düşük öncelik
 
   for (const mapping of mappings) {
-    for (const perm of mapping.permissions) permissionSet.add(perm as Permission);
+    for (const perm of mapping.panelPermissions) permissionSet.add(perm as Permission);
 
     const idx = SYSTEM_ROLES.indexOf(mapping.systemRole as SystemRole);
     if (idx !== -1 && idx < bestRoleIndex) bestRoleIndex = idx;

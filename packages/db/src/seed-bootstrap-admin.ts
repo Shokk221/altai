@@ -1,7 +1,7 @@
 import { PERMISSIONS } from '@altai/contracts';
 import { eq } from 'drizzle-orm';
 import { createDb } from './client.js';
-import { roleMappings } from './schema/identity.js';
+import { roleMappings } from './schema/access.js';
 
 // İlk kurulumda role_mappings boştur -> hiç kimse hiçbir izne sahip olamaz
 // (Discord üzerinden giriş yapılabilir ama panelde hiçbir şey yapılamaz).
@@ -28,14 +28,14 @@ const [existing] = await db
 if (existing) {
   await db
     .update(roleMappings)
-    .set({ systemRole: 'super_admin', permissions: [...PERMISSIONS] })
+    .set({ systemRole: 'super_admin', panelPermissions: [...PERMISSIONS] })
     .where(eq(roleMappings.discordRoleId, bootstrapRoleId));
   console.log(`Güncellendi: ${bootstrapRoleId} -> super_admin (tüm izinler)`);
 } else {
   await db.insert(roleMappings).values({
     discordRoleId: bootstrapRoleId,
     systemRole: 'super_admin',
-    permissions: [...PERMISSIONS],
+    panelPermissions: [...PERMISSIONS],
   });
   console.log(`Oluşturuldu: ${bootstrapRoleId} -> super_admin (tüm izinler)`);
 }
