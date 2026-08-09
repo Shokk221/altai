@@ -33,6 +33,11 @@ say "1/4 çalışma zamanı"
 command -v node >/dev/null || die "node yok"
 NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
 (( NODE_MAJOR >= 20 )) || die "node v$NODE_MAJOR — en az v20 gerekli"
+# Depo dizinine geçmek ŞART. Corepack pnpm sürümünü ÇALIŞMA DİZİNİNDEKİ
+# package.json'ın "packageManager" alanından okur — `pnpm --dir X` yetmez.
+# Dışarıdan çağrılınca alanı göremiyor, en son pnpm'i (Node 22 isteyen,
+# node:sqlite kullanan 11.x) indiriyor ve konteynerin Node 20'sinde patlıyor.
+cd "$ALTAI_DIR"
 if ! command -v pnpm >/dev/null 2>&1; then
   # Prompt'suz: corepack indirme onayı sorarsa kurulum askıda kalır.
   export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
@@ -48,7 +53,7 @@ say "2/4 bağımlılıklar (/data içine, kalıcı)"
 # devDependencies'i atlıyor — ama agent TypeScript'i doğrudan tsx ile
 # çalıştırdığı için tsx bir RUNTIME bağımlılığı. Panel kurulumunda tam bu
 # yüzden "tsx: not found" alınmıştı.
-pnpm --dir "$ALTAI_DIR" install --frozen-lockfile --prod=false --filter '@altai/agent...'
+pnpm install --frozen-lockfile --prod=false --filter '@altai/agent...'
 TSX_BIN="$ALTAI_DIR/apps/agent/node_modules/.bin/tsx"
 [[ -x "$TSX_BIN" ]] || die "tsx bulunamadı ($TSX_BIN)"
 
