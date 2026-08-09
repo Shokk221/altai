@@ -34,6 +34,8 @@ command -v node >/dev/null || die "node yok"
 NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
 (( NODE_MAJOR >= 20 )) || die "node v$NODE_MAJOR — en az v20 gerekli"
 if ! command -v pnpm >/dev/null 2>&1; then
+  # Prompt'suz: corepack indirme onayı sorarsa kurulum askıda kalır.
+  export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
   corepack enable >/dev/null 2>&1 || die "corepack ile pnpm etkinleştirilemedi"
 fi
 # pnpm store'u /data içinde tut, yoksa `update` sonrası tüm paketler gider.
@@ -42,7 +44,11 @@ pnpm config set store-dir /data/.pnpm-store --global >/dev/null 2>&1 || true
 echo "    node $(node -v), pnpm $(pnpm -v)"
 
 say "2/4 bağımlılıklar (/data içine, kalıcı)"
-pnpm --dir "$ALTAI_DIR" install --frozen-lockfile --filter '@altai/agent...'
+# --prod=false ŞART. Ortamda NODE_ENV=production varsa pnpm
+# devDependencies'i atlıyor — ama agent TypeScript'i doğrudan tsx ile
+# çalıştırdığı için tsx bir RUNTIME bağımlılığı. Panel kurulumunda tam bu
+# yüzden "tsx: not found" alınmıştı.
+pnpm --dir "$ALTAI_DIR" install --frozen-lockfile --prod=false --filter '@altai/agent...'
 TSX_BIN="$ALTAI_DIR/apps/agent/node_modules/.bin/tsx"
 [[ -x "$TSX_BIN" ]] || die "tsx bulunamadı ($TSX_BIN)"
 
