@@ -4,6 +4,7 @@ import { createInterface } from 'node:readline';
 import { accessSchema, createDb, identitySchema, moderationSchema } from '@altai/db';
 import type { Db } from '@altai/db';
 import { logger } from '@altai/shared';
+import { classifyId, docId, toDate } from './parse.js';
 
 /**
  * Eski sistemin MongoDB'sinden Faz 2 dilimini Postgres'e aktarır —
@@ -66,36 +67,10 @@ async function* readCollection(name: string): AsyncGenerator<Record<string, unkn
   }
 }
 
-/** mongoexport _id'yi {"$oid": "..."} olarak yazar. */
-function docId(doc: Record<string, unknown>): string {
-  const id = doc._id;
-  if (typeof id === 'string') return id;
-  if (id && typeof id === 'object' && '$oid' in id) return String((id as { $oid: string }).$oid);
-  return JSON.stringify(id);
-}
-
 const SOURCE = 'mongo';
 
 interface Counters {
   [k: string]: number;
-}
-
-/** Bir kimlik dizesinin EOS mi Steam mi olduğunu biçiminden anlar. */
-function classifyId(raw: unknown): { steamId?: string; eosId?: string } {
-  if (typeof raw !== 'string') return {};
-  const v = raw.trim();
-  if (/^7656119\d{10}$/.test(v)) return { steamId: v };
-  if (/^[0-9a-f]{32}$/i.test(v)) return { eosId: v.toLowerCase() };
-  return {};
-}
-
-function toDate(v: unknown): Date | undefined {
-  if (v instanceof Date) return v;
-  if (typeof v === 'string') {
-    const ms = Date.parse(v);
-    if (!Number.isNaN(ms)) return new Date(ms);
-  }
-  return undefined;
 }
 
 async function buildPlayerIndex(db: Db) {
