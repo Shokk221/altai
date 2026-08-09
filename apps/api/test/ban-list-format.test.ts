@@ -88,12 +88,21 @@ describe('formatBanList', () => {
     expect(new Set(out).size).toBe(out.length);
   });
 
-  it('başlıkta ban ve satır sayısı doğru', () => {
+  it('başlıkta tekil ban, girdi sayısı ve satır sayısı doğru', () => {
     const out = formatBanList({
       entries: [entry(), entry({ steamId: '76561198000000002', eosId: null })],
       now: NOW,
     });
-    expect(out).toContain('2 aktif ban, 3 kimlik satırı');
+    expect(out).toContain('2 tekil ban (2 kayıttan), 3 kimlik satırı');
+  });
+
+  it('aynı oyuncuya aynı bitişle atılmış tekrar banlar tek sayılır', () => {
+    // Gerçek veride bu çok yaygın: BM'de aynı oyuncuya aynı bitiş tarihiyle
+    // 5-6 otomatik TK banı atılmış. 21.783 aktif kayıt -> 11.518 tekil ban.
+    // Başlık bu farkı açıkça göstermeli, yoksa veri kaybı sanılır.
+    const out = formatBanList({ entries: [entry(), entry(), entry()], now: NOW });
+    expect(out).toContain('1 tekil ban (3 kayıttan), 2 kimlik satırı');
+    expect(records(out)).toHaveLength(2);
   });
 
   it('çıktı satır sonu ile biter (sunucu son satırı kırpmasın)', () => {

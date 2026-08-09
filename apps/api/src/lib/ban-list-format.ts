@@ -81,10 +81,16 @@ export function formatBanList(opts: FormatOptions): string {
     if (wrote) banCount++;
   }
 
+  // Girdi ile çıktı arasındaki fark bilinçli ve açıkça yazılıyor: BM verisinde
+  // aynı oyuncuya aynı bitiş tarihiyle defalarca ban atılmış kayıtlar var
+  // (otomatik TK banları). Oyun için etkileri aynı olduğundan tek satıra
+  // indiriyoruz. Bunu yazmazsak, panelde 21 bin ban görüp listede 11 bin
+  // satır sayan biri veri kaybı sanır.
   const header = [
     '//////////////////////////////////////////////////////////////////////',
     '//// Altai v2 — otomatik üretilmiş ban listesi. ELLE DÜZENLEMEYİN. ////',
-    `//// ${banCount} aktif ban, ${lines.length} kimlik satırı`,
+    `//// ${banCount} tekil ban (${entries.length} kayıttan), ${lines.length} kimlik satırı`,
+    '//// Aynı oyuncuya aynı bitiş tarihiyle atılmış banlar tek satıra indi.',
     `//// üretim: ${now.toISOString()}${label ? ` — ${label}` : ''}`,
     '//////////////////////////////////////////////////////////////////////',
   ];
