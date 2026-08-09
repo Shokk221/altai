@@ -43,6 +43,13 @@
       "when": 1786275465514,
       "tag": "0005_same_mole_man",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786302064455,
+      "tag": "0006_volatile_chronomancer",
+      "breakpoints": true
     }
   ]
 }

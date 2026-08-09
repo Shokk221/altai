@@ -1,9 +1,17 @@
 import { createReadStream, existsSync } from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
-import { accessSchema, createDb, identitySchema, moderationSchema } from '@altai/db';
+import {
+  accessSchema,
+  createDb,
+  identitySchema,
+  matchesSchema,
+  moderationSchema,
+  presenceSchema,
+} from '@altai/db';
 import type { Db } from '@altai/db';
 import { logger } from '@altai/shared';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { classifyId, defaultGrantMode, docId, toDate } from './parse.js';
 
 /**
@@ -283,6 +291,207 @@ for await (const doc of readCollection('dashbans')) {
   });
 }
 
+// -------------------------------------------- idmappings -> kimlik tamamlama
+// 31.204 Steam<->EOS eşlemesi. Değeri şurada: BM arşivi oyuncuların bir
+// kısmını yalnızca Steam, bir kısmını yalnızca EOS ile tanıyor. Squad artık
+// EOS ile kimliklendirdiği için eksik tarafı doldurmak, aynı kişinin iki ayrı
+// kayda bölünmesini engelliyor.
+logger.info('idmappings okunuyor');
+const yeniOyuncular: (typeof identitySchema.players.$inferInsert)[] = [];
+const eosGuncelle: { playerId: string; eosId: string }[] = [];
+const steamGuncelle: { playerId: string; steamId: string }[] = [];
+const yeniIsimler: { steamId: string; name: string; lastSeen: Date | null }[] = [];
+// Aynı EOS'u iki farklı oyuncuya yazmayalım; unique kısıt zaten engellerdi
+// ama sessiz çakışma yerine sayılabilir bir rapor istiyoruz.
+const eosSahipli = new Set(byEos.keys());
+const steamSahipli = new Set(bySteam.keys());
+
+for await (const doc of readCollection('idmappings')) {
+  bump('idmappings.okunan');
+  const { steamId } = classifyId(String(doc.steamID ?? ''));
+  const { eosId } = classifyId(String(doc.eosID ?? ''));
+  if (!steamId || !eosId) {
+    bump('idmappings.kimlik_gecersiz');
+    continue;
+  }
+  const steamPid = bySteam.get(steamId);
+  const eosPid = byEos.get(eosId);
+
+  if (steamPid && eosPid) {
+    if (steamPid === eosPid) bump('idmappings.zaten_tam');
+    // İki AYRI kayda düşmüş aynı kişi. Birleştirme yıkıcı bir işlem
+    // (ban/oturum/grant taşımak gerekir), burada yapmıyoruz — raporluyoruz.
+    else bump('idmappings.CAKISMA_iki_ayri_kayit');
+    continue;
+  }
+  if (steamPid && !eosPid) {
+    if (eosSahipli.has(eosId)) {
+      bump('idmappings.eos_baskasinda');
+      continue;
+    }
+    eosSahipli.add(eosId);
+    byEos.set(eosId, steamPid);
+    eosGuncelle.push({ playerId: steamPid, eosId });
+    bump('idmappings.eos_dolduruldu');
+    continue;
+  }
+  if (!steamPid && eosPid) {
+    if (steamSahipli.has(steamId)) {
+      bump('idmappings.steam_baskasinda');
+      continue;
+    }
+    steamSahipli.add(steamId);
+    bySteam.set(steamId, eosPid);
+    steamGuncelle.push({ playerId: eosPid, steamId });
+    bump('idmappings.steam_dolduruldu');
+    continue;
+  }
+  // Hiç tanımadığımız oyuncu: sunucumuzda oynamış ama BM arşivinde yok.
+  eosSahipli.add(eosId);
+  steamSahipli.add(steamId);
+  yeniOyuncular.push({ steamId, eosId });
+  const isim = typeof doc.lastName === 'string' ? doc.lastName.trim() : '';
+  // İsmi yalnızca YENİ oyuncular için yazıyoruz: mevcut oyuncuların isim
+  // geçmişi BM'den zaten geldi (857 bin kayıt) ve player_names'te tekillik
+  // kısıtı yok — tekrar yazmak kopya üretirdi.
+  if (isim) yeniIsimler.push({ steamId, name: isim, lastSeen: toDate(doc.updatedAt) ?? null });
+  bump('idmappings.yeni_oyuncu');
+}
+
+// ----------------------------------------- roundscoreboards -> rounds/round_players
+// Faz 1'in eksiği olan maç kaydını geçmişe dönük kapatıyor: 20 Şubat'tan
+// bugüne 2.304 maç, oyuncu kırılımıyla.
+logger.info('roundscoreboards okunuyor');
+const sunucuAdaGore = new Map<string, string>();
+{
+  const rows = await db
+    .select({ id: presenceSchema.servers.id, name: presenceSchema.servers.name })
+    .from(presenceSchema.servers);
+  for (const r of rows) if (r.name) sunucuAdaGore.set(r.name, r.id);
+}
+/**
+ * Sunucu adı serbest metin ve zaman içinde değişmiş: 1.883 kayıt "… #1 …",
+ * 421 kayıt "#1" olmadan — aynı sunucunun yeniden adlandırılmış hâli.
+ * Turnuva sunucusunun adı tamamen farklı ("ACCF"), o yüzden bu kalıp onu
+ * yanlışlıkla yakalamıyor. Eşleşmezse serverId null bırakılıp ham ad
+ * saklanıyor; uydurma bağ kurmuyoruz.
+ */
+const sunucuCoz = (ad: unknown): string | null => {
+  if (typeof ad !== 'string') return null;
+  const tam = sunucuAdaGore.get(ad);
+  if (tam) return tam;
+  if (ad.includes('TÜRK ALTAI COMMUNITY')) {
+    for (const [name, id] of sunucuAdaGore) if (name.includes('TÜRK ALTAI COMMUNITY')) return id;
+  }
+  return null;
+};
+
+const sayi = (v: unknown): number | null => {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? Math.trunc(n) : null;
+};
+const takim = (v: unknown) => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
+
+interface MacKaydi {
+  round: typeof matchesSchema.rounds.$inferInsert;
+  oyuncular: Omit<typeof matchesSchema.roundPlayers.$inferInsert, 'roundId'>[];
+}
+const maclar: MacKaydi[] = [];
+
+for await (const doc of readCollection('roundscoreboards')) {
+  bump('roundscoreboards.okunan');
+  const startedAt = toDate(doc.startTime);
+  if (!startedAt) {
+    bump('roundscoreboards.baslangic_yok');
+    continue;
+  }
+  const t1 = takim(doc.team1);
+  const t2 = takim(doc.team2);
+  const ham = Array.isArray(doc.players) ? (doc.players as Record<string, unknown>[]) : [];
+
+  // Kazanan: skorbordda ayrı alan yok, oyuncu satırlarındaki isWinner'dan
+  // türetiliyor. Hiç kazanan işaretli yoksa null — beraberlik/yarım maç.
+  let winnerTeam: number | null = null;
+  for (const p of ham) {
+    if (p.isWinner === true) {
+      const t = sayi(p.teamID);
+      if (t === 1 || t === 2) {
+        winnerTeam = t;
+        break;
+      }
+    }
+  }
+
+  const serverId = sunucuCoz(doc.serverName);
+  if (!serverId) bump('roundscoreboards.sunucu_eslesmedi');
+
+  const oyuncular: MacKaydi['oyuncular'] = [];
+  const gorulenSteam = new Set<string>();
+  for (const p of ham) {
+    const { steamId } = classifyId(String(p.steamID ?? ''));
+    const { eosId } = classifyId(String(p.eosID ?? ''));
+    if (!steamId) {
+      // steam_id maç içi tekillik anahtarı; olmayanı alamayız.
+      bump('roundscoreboards.oyuncu_steamsiz');
+      continue;
+    }
+    if (gorulenSteam.has(steamId)) {
+      bump('roundscoreboards.oyuncu_tekrar');
+      continue;
+    }
+    gorulenSteam.add(steamId);
+    oyuncular.push({
+      // Bağlanamayanlar null kalır; yazımdan sonra tek bir UPDATE ile
+      // geriye dönük bağlanıyorlar.
+      playerId: bySteam.get(steamId) ?? (eosId ? byEos.get(eosId) : undefined) ?? null,
+      steamId,
+      eosId: eosId ?? null,
+      name: typeof p.name === 'string' ? p.name.trim() : null,
+      teamId: sayi(p.teamID),
+      squadId: sayi(p.squadID),
+      role: typeof p.role === 'string' ? p.role : null,
+      isLeader: typeof p.isLeader === 'boolean' ? p.isLeader : null,
+      kills: sayi(p.kills) ?? 0,
+      deaths: sayi(p.deaths) ?? 0,
+      revives: sayi(p.revives) ?? 0,
+      teamkills: sayi(p.teamkills) ?? 0,
+      killstreak: sayi(p.killstreak),
+      damageDealt: sayi(p.damageDealt),
+      damageTaken: sayi(p.damageTaken),
+      isWinner: typeof p.isWinner === 'boolean' ? p.isWinner : null,
+      weapons: p.weapons && typeof p.weapons === 'object' ? p.weapons : null,
+    });
+  }
+  bump('roundscoreboards.oyuncu_satiri', oyuncular.length);
+
+  maclar.push({
+    round: {
+      serverId,
+      serverName: typeof doc.serverName === 'string' ? doc.serverName : null,
+      map: typeof doc.map === 'string' ? doc.map : null,
+      layer: typeof doc.layer === 'string' ? doc.layer : null,
+      level: typeof doc.level === 'string' ? doc.level : null,
+      startedAt,
+      endedAt: toDate(doc.endTime) ?? null,
+      durationSeconds: sayi(doc.durationSeconds),
+      playerCount: sayi(doc.playerCount),
+      team1Name: typeof t1.name === 'string' ? t1.name : null,
+      team1Faction: typeof t1.faction === 'string' ? t1.faction : null,
+      team1Tickets: sayi(t1.tickets),
+      team2Name: typeof t2.name === 'string' ? t2.name : null,
+      team2Faction: typeof t2.faction === 'string' ? t2.faction : null,
+      team2Tickets: sayi(t2.tickets),
+      winnerTeam,
+      totalKills: sayi(doc.totalKills),
+      totalRevives: sayi(doc.totalRevives),
+      totalTeamkills: sayi(doc.totalTeamkills),
+      source: SOURCE,
+      externalId: docId(doc),
+    },
+    oyuncular,
+  });
+}
+
 // ----------------------------------------------------------------------- rapor
 const summary = [
   '',
@@ -293,6 +502,11 @@ const summary = [
   `  discord_links              ${linkRows.length}`,
   `  admin_cam_logs             ${camRows.length}`,
   `  bans (BM'de olmayan)       ${lostBanRows.length}  [iptal edilmiş olarak]`,
+  `  yeni oyuncu (idmappings)   ${yeniOyuncular.length}`,
+  `  eos_id dolduruldu          ${eosGuncelle.length}`,
+  `  steam_id dolduruldu        ${steamGuncelle.length}`,
+  `  rounds                     ${maclar.length}`,
+  `  round_players              ${maclar.reduce((a, m) => a + m.oyuncular.length, 0)}`,
   '',
   '  ayrıntı:',
   ...Object.entries(stats)
@@ -330,6 +544,110 @@ if (lostBanRows.length)
   await insertAll(lostBanRows, (p) =>
     db.insert(moderationSchema.bans).values(p).onConflictDoNothing(),
   );
+
+// ------------------------------------------------- idmappings yazımı
+if (yeniOyuncular.length) {
+  await insertAll(yeniOyuncular, (p) =>
+    db.insert(identitySchema.players).values(p).onConflictDoNothing(),
+  );
+  // İsimleri bağlamak için yeni oluşan id'leri geri okuyoruz.
+  const steamler = yeniIsimler.map((n) => n.steamId);
+  const idIle = new Map<string, string>();
+  for (let i = 0; i < steamler.length; i += CHUNK) {
+    const rows = await db
+      .select({ id: identitySchema.players.id, steamId: identitySchema.players.steamId })
+      .from(identitySchema.players)
+      .where(inArray(identitySchema.players.steamId, steamler.slice(i, i + CHUNK)));
+    for (const r of rows) if (r.steamId) idIle.set(r.steamId, r.id);
+  }
+  const isimSatirlari = yeniIsimler
+    .map((n) => {
+      const playerId = idIle.get(n.steamId);
+      if (!playerId) return null;
+      return {
+        playerId,
+        name: n.name,
+        firstSeen: n.lastSeen,
+        lastSeen: n.lastSeen,
+        source: SOURCE,
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+  if (isimSatirlari.length)
+    await insertAll(isimSatirlari, (p) =>
+      db.insert(identitySchema.playerNames).values(p).onConflictDoNothing(),
+    );
+  summary.push(`  player_names (yeni oyuncular)  ${isimSatirlari.length}`);
+}
+
+// Tek tek UPDATE: toplu bir CASE ifadesi daha hızlı olurdu ama bu aktarım
+// bir kez koşuyor ve satır sayısı düşük; okunabilirliği tercih ediyoruz.
+for (const u of eosGuncelle) {
+  await db
+    .update(identitySchema.players)
+    .set({ eosId: u.eosId })
+    .where(eq(identitySchema.players.id, u.playerId));
+}
+for (const u of steamGuncelle) {
+  await db
+    .update(identitySchema.players)
+    .set({ steamId: u.steamId })
+    .where(eq(identitySchema.players.id, u.playerId));
+}
+
+// ------------------------------------------------- rounds yazımı
+if (maclar.length) {
+  await insertAll(
+    maclar.map((m) => m.round),
+    (p) => db.insert(matchesSchema.rounds).values(p).onConflictDoNothing(),
+  );
+
+  // roundId'leri external_id üzerinden geri okuyoruz: onConflictDoNothing
+  // yalnızca YENİ eklenenleri döndürdüğü için, tekrar koşuda mevcut
+  // maçların oyuncuları da yazılabilsin diye hepsini sorguluyoruz.
+  const dis = maclar.map((m) => m.round.externalId).filter((x): x is string => Boolean(x));
+  const roundIdIle = new Map<string, string>();
+  for (let i = 0; i < dis.length; i += CHUNK) {
+    const rows = await db
+      .select({ id: matchesSchema.rounds.id, externalId: matchesSchema.rounds.externalId })
+      .from(matchesSchema.rounds)
+      .where(inArray(matchesSchema.rounds.externalId, dis.slice(i, i + CHUNK)));
+    for (const r of rows) if (r.externalId) roundIdIle.set(r.externalId, r.id);
+  }
+
+  const oyuncuSatirlari: (typeof matchesSchema.roundPlayers.$inferInsert)[] = [];
+  for (const m of maclar) {
+    const roundId = m.round.externalId ? roundIdIle.get(m.round.externalId) : undefined;
+    if (!roundId) continue;
+    for (const o of m.oyuncular) oyuncuSatirlari.push({ ...o, roundId });
+  }
+  if (oyuncuSatirlari.length)
+    await insertAll(oyuncuSatirlari, (p) =>
+      db.insert(matchesSchema.roundPlayers).values(p).onConflictDoNothing(),
+    );
+
+  // Maç sırasında tanımadığımız ama idmappings ile yeni oluşan oyuncuları
+  // geriye dönük bağla. Tek sorgu; her yeni aktarımdan sonra da çalışır.
+  // Sürücü etkilenen satır sayısını vermiyor, o yüzden öncesi/sonrası
+  // sayıyoruz — rapordaki rakam gerçekten ölçülmüş oluyor.
+  const bagsizSay = async () => {
+    const [row] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(matchesSchema.roundPlayers)
+      .where(sql`player_id is null`);
+    return row?.n ?? 0;
+  };
+  const once = await bagsizSay();
+  await db.execute(sql`
+    update round_players rp
+       set player_id = p.id
+      from players p
+     where rp.player_id is null
+       and (rp.steam_id = p.steam_id or rp.eos_id = p.eos_id)
+  `);
+  const sonra = await bagsizSay();
+  summary.push(`  round_players geriye dönük bağlanan  ${once - sonra}  (hâlâ bağsız: ${sonra})`);
+}
 
 summary.push('', 'Aktarım tamamlandı. Tekrar çalıştırılabilir — kayıtlar ikilenmez.');
 process.stdout.write(`${summary.join('\n')}\n`);

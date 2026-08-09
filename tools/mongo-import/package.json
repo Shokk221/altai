@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@altai/shared": "workspace:*",
-    "@altai/db": "workspace:*"
+    "@altai/db": "workspace:*",
+    "drizzle-orm": "^0.36.0"
   },
   "devDependencies": {
     "typescript": "^5.6.0",
