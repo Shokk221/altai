@@ -1,10 +1,6 @@
-/// <reference types="react" />
-/// <reference types="react-dom" />
 /// <reference types="next" />
 /// <reference types="next/image-types/global" />
+/// <reference path="./.next/types/routes.d.ts" />
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements extends React.JSX.IntrinsicElements {}
-  }
-}
+// NOTE: This file should not be edited
+// see https://nextjs.org/docs/app/api-reference/config/typescript for more information.

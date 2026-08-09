@@ -13,6 +13,7 @@ import { authRoutes } from './routes/auth.js';
 import { banListRoutes } from './routes/ban-list.js';
 import { browserWsRoutes } from './routes/browser-ws.js';
 import { healthRoutes } from './routes/health.js';
+import { playerRoutes } from './routes/players.js';
 import { serverStatusRoutes } from './routes/server-status.js';
 
 const config = loadConfig();
@@ -60,6 +61,7 @@ await app.register(banListRoutes, { db, config });
 await app.register(adminListRoutes, { db, config });
 await app.register(browserWsRoutes, { db });
 await app.register(serverStatusRoutes, { db });
+await app.register(playerRoutes, { db });
 
 const port = Number(process.env.PORT ?? 3001);
 app.listen({ port, host: '0.0.0.0' }).then(() => {
