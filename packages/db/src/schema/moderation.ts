@@ -165,7 +165,17 @@ export const adminCamLogs = pgTable(
     enteredAt: timestamp('entered_at', { withTimezone: true }).notNull(),
     leftAt: timestamp('left_at', { withTimezone: true }),
   },
-  (table) => [index('admin_cam_logs_player_idx').on(table.playerId, table.enteredAt)],
+  (table) => [
+    index('admin_cam_logs_player_idx').on(table.playerId, table.enteredAt),
+    // Tekillik ŞART. Bu tabloda (source, external_id) yok — kayıtlar iki
+    // Mongo satırının (POSSESSED/UNPOSSESSED) eşleştirilmesiyle üretiliyor,
+    // yani tek bir kaynak kimliği yok. Kısıt olmayınca aktarımın
+    // `onConflictDoNothing`i hiçbir şeye çarpmıyordu ve ikinci koşu tüm
+    // kayıtları ikiledi: 2.812 gerçek oturum 5.624 satır olmuştu.
+    // Bir oyuncu aynı anda iki kez admin cam'e giremez, dolayısıyla
+    // (player_id, entered_at) doğal anahtar.
+    uniqueIndex('admin_cam_logs_player_entered_idx').on(table.playerId, table.enteredAt),
+  ],
 );
 
 /**

@@ -50,6 +50,13 @@
       "when": 1786302064455,
       "tag": "0006_volatile_chronomancer",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786302645974,
+      "tag": "0007_sparkling_sauron",
+      "breakpoints": true
     }
   ]
 }
