@@ -2,9 +2,9 @@ import { cn } from '@/lib/cn';
 import type { ButtonHTMLAttributes } from 'react';
 
 /**
- * Hap formlu düğmeler. `ink` (koyu) varyantı sayfada bir ya da iki kez
- * kullanılır — kontrast az yerde durunca değerli, her yere dağılınca
- * kompozisyonu ağırlaştırıyor.
+ * Hap formlu düğmeler. `ink` varyantı koyu zeminde AÇIK yüzeydir ve
+ * sayfada bir ya da iki kez kullanılır — kontrast az yerde durunca
+ * değerli, her yere dağılınca anlamını yitiriyor.
  */
 type Variant = 'ink' | 'accent' | 'soft' | 'ghost' | 'danger';
 type Size = 'sm' | 'md';
@@ -12,7 +12,7 @@ type Size = 'sm' | 'md';
 const VARIANTS: Record<Variant, string> = {
   ink: 'bg-ink text-ink-fg hover:bg-ink/90',
   accent: 'bg-accent text-accent-fg hover:bg-accent/85',
-  soft: 'bg-surface text-fg hover:bg-surface-2 shadow-card',
+  soft: 'bg-surface-2 text-fg hover:bg-surface-2/70',
   ghost: 'text-fg-muted hover:text-fg hover:bg-surface-2',
   danger: 'bg-danger text-danger-fg hover:bg-danger/90',
 };
@@ -35,7 +35,7 @@ export function Button({ variant = 'ink', size = 'md', className, ...props }: Bu
       type="button"
       {...props}
       className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-full font-medium transition-colors',
+        'inline-flex items-center justify-center gap-2 rounded-full font-semibold transition-colors',
         'disabled:pointer-events-none disabled:opacity-40',
         VARIANTS[variant],
         SIZES[size],

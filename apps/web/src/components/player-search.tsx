@@ -124,11 +124,11 @@ export function PlayerSearch({ apiUrl }: { apiUrl: string }) {
 function PlayerRow({ result }: { result: Result }) {
   return (
     <li>
-      <Card className="transition-shadow hover:shadow-lg">
+      <Card className="transition-colors hover:bg-surface-2">
         <div className="flex flex-col gap-2 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2.5">
-              <span className="truncate text-[15px] font-medium">{result.name}</span>
+              <span className="truncate text-[15px] font-semibold">{result.name}</span>
               {result.hasActiveBan ? <Badge tone="danger">BANLI</Badge> : null}
             </div>
 
@@ -136,11 +136,12 @@ function PlayerRow({ result }: { result: Result }) {
                 admin neden bu sonucun çıktığını anlamalı. */}
             {result.matchedName && result.matchedName !== result.name ? (
               <p className="mt-1 truncate text-sm text-fg-muted">
-                eşleşen eski isim: <span className="text-fg">{result.matchedName}</span>
+                eşleşen eski isim:{' '}
+                <span className="font-semibold text-fg">{result.matchedName}</span>
               </p>
             ) : null}
 
-            <p className="mt-1.5 truncate font-mono text-[11px] text-fg-muted/80">
+            <p className="mt-1.5 truncate font-mono text-[11px] text-fg-muted">
               {result.steamId ?? '— Steam yok'} · {result.eosId ?? '— EOS yok'}
             </p>
           </div>

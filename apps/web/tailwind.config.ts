@@ -12,8 +12,8 @@ const color = (name: string) => `hsl(var(--${name}) / <alpha-value>)`;
 
 export default {
   content: ['./app/**/*.{ts,tsx}', './src/**/*.{ts,tsx}'],
-  // Koyu tema yok: yön sıcak açık-orta zemin. Tek koyu eleman (ink) zaten
-  // paletin içinde.
+  // Koyu varsayılan. Açık tema ileride bir tercih olarak eklenirse
+  // token'lar .light altında yeniden tanımlanır; bileşenler değişmez.
   darkMode: 'class',
   theme: {
     extend: {
@@ -39,9 +39,11 @@ export default {
         sm: 'calc(var(--radius) - 0.5rem)',
       },
       boxShadow: {
-        // Ayrım çizgiyle değil, çok yumuşak bir gölgeyle yapılıyor.
-        // Sert kenarlıklar bu kompozisyonu ağırlaştırıyor.
-        card: '0 1px 2px hsl(40 10% 20% / 0.04), 0 8px 24px -12px hsl(40 10% 20% / 0.10)',
+        // Koyu zeminde gölge işe yaramıyor (siyah üstüne siyah). Ayrım
+        // yüzey farkıyla yapılıyor; gölge yalnızca yükseltilmiş öğelerde
+        // ve derin.
+        card: '0 2px 8px hsl(0 0% 0% / 0.30)',
+        lift: '0 8px 28px -8px hsl(0 0% 0% / 0.45)',
       },
       fontFamily: {
         // Sistem yazı tipi yığını: dış bağımlılık yok, ilk boyama hızlı.

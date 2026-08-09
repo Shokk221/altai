@@ -5,47 +5,47 @@
 /**
  * Tasarım sistemi — plan Bölüm 8.
  *
- * Yön: sıcak, açık-orta zemin. Beyaz değil (parlak ve steril), koyu değil
- * (referansın istediği hafiflik kaybolur). Nötrler saf gri değil, hafif
- * sarıya kaymış — vurgu rengiyle aynı sıcaklıkta durunca kompozisyon
- * bütün görünüyor.
+ * Yön: KOYU varsayılan, ama soğuk-mavi değil sıcak kömür. Nötrler hafif
+ * sarıya kaymış; vurgu rengiyle aynı sıcaklıkta olunca kompozisyon bütün
+ * duruyor, mavi-gri bir zeminde sarı yapıştırılmış gibi görünüyordu.
  *
- * Kontrast tek bir yerden geliyor: `ink`. Sayfada bir ya da iki eleman
- * (aktif sekme, birincil aksiyon) koyu olur, gerisi sakin kalır. Her yere
- * dağıtılırsa bu dilin bütün havası gider.
+ * Ağırlıklar DOLGUN. İnce yazı tipi ağırlıkları (300) koyu zeminde cılız
+ * okunuyor ve arayüzü zayıflatıyor: başlıklar 600, büyük sayılar 700.
  *
- * Renkler HSL kanalı olarak tutuluyor; saydamlık varyantları
- * `hsl(var(--x) / 0.15)` ile tek tanımdan türüyor.
+ * Sadelik yerleşimden geliyor: cömert köşe, geniş boşluk, kenarlık yerine
+ * yüzey farkı. Çizgi ve kutu çoğaltarak değil.
  */
 @layer base {
   :root {
-    /* Zemin ve yüzeyler — sıcak nötr, üç kademe */
-    --bg: 40 22% 89%;
-    --surface: 42 40% 96%;
-    --surface-2: 40 24% 92%;
-    --border: 38 16% 84%;
+    /* Zemin ve yüzeyler — sıcak kömür, üç kademe */
+    --bg: 36 9% 9%;
+    --surface: 36 8% 13%;
+    --surface-2: 36 7% 18%;
+    --border: 36 6% 24%;
 
-    /* Metin */
-    --fg: 40 10% 15%;
-    --fg-muted: 38 9% 46%;
+    /* Metin — sönük ton bilinçli olarak yüksek tutuldu; koyu zeminde
+       %45 gri okunmuyor. */
+    --fg: 40 12% 94%;
+    --fg-muted: 38 8% 66%;
 
-    /* Kontrast elemanı — az ve bilinçli kullanılır */
-    --ink: 40 8% 11%;
-    --ink-fg: 42 30% 96%;
+    /* Kontrast elemanı: koyu zeminde AÇIK yüzey dikkat çeker.
+       Sayfada bir ya da iki kez kullanılır. */
+    --ink: 40 20% 93%;
+    --ink-fg: 36 10% 11%;
 
-    /* Vurgu: tereyağı sarısı. Üstündeki metin koyu olmak zorunda,
-       sarı üzerine beyaz okunmuyor. */
-    --accent: 45 88% 66%;
-    --accent-fg: 40 25% 12%;
+    /* Vurgu: tereyağı sarısı — koyu zeminde en güçlü çıktığı yer.
+       Üstündeki metin koyu olmak zorunda. */
+    --accent: 45 92% 62%;
+    --accent-fg: 40 30% 10%;
 
-    /* Durum renkleri — moderasyon için şart, ama paletin sıcaklığına
-       çekildiler; saf kırmızı/yeşil bu zeminde yabancı duruyor. */
-    --danger: 8 62% 48%;
-    --danger-fg: 20 30% 97%;
-    --success: 150 32% 38%;
-    --info: 205 40% 45%;
+    /* Durum renkleri — koyu zeminde okunacak kadar parlak, ama paletin
+       sıcaklığında. */
+    --danger: 6 72% 58%;
+    --danger-fg: 10 30% 98%;
+    --success: 150 45% 50%;
+    --info: 205 65% 62%;
 
-    --ring: 45 70% 45%;
+    --ring: 45 92% 62%;
     --radius: 1.25rem;
   }
 
@@ -60,9 +60,10 @@
     @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-bg;
   }
 
-  /* Büyük sayılar ince ağırlıkta ve sıkı aralıkta: bu dilin imzası. */
+  /* Büyük sayılar: dolgun ve sıkı. Rakamlar sabit genişlikte, yoksa
+     sütun hâlinde dizildiklerinde zıplıyorlar. */
   .display {
-    @apply font-light tracking-tight;
+    @apply font-bold tracking-tight;
     font-variant-numeric: tabular-nums;
   }
 }
