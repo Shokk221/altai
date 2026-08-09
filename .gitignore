@@ -2,7 +2,6 @@
 node_modules
 dist
 .next
-.turbo
 *.log
 .env
 .env.local
@@ -11,4 +10,3 @@ coverage
 # BM ham arşivi: gigabaytlarca JSON + oyuncu kişisel verisi — repoya asla girmez.
 bm-archive
 *.ndjson
-.env.local
