@@ -83,8 +83,8 @@ export async function importServers(opts: ImportOptions): Promise<Map<string, st
 // ---------------------------------------------------------------- players
 interface PlayerDraft {
   bmId: string;
-  steamId: string;
-  eosId?: string;
+  steamId?: string | undefined;
+  eosId?: string | undefined;
 }
 
 export async function importPlayers(opts: ImportOptions): Promise<Map<string, string>> {
@@ -124,29 +124,42 @@ export async function importPlayers(opts: ImportOptions): Promise<Map<string, st
   // 2) Oyuncuları hazırla. SteamID'si olmayan İÇERİ ALINMAZ: players tablosu
   //    steam_id üzerine kurulu ve kimliksiz bir oyuncu agent'ın toplayacağı
   //    canlı veriyle hiçbir zaman eşleşemez (çözümleme raporuna bakın).
+  // En az bir kimlik yeterli. Squad oyuncuyu EOS ile tanıdığı için
+  // SteamID'siz ama EOS'lu oyuncular da içeri alınır; ikisi de yoksa oyuncu
+  // hiçbir canlı kayıtla eşleşemez, atlanır.
   const drafts: PlayerDraft[] = [];
-  let skippedNoSteam = 0;
+  let skippedNoIdentity = 0;
+  let eosOnly = 0;
   for await (const rec of readNdjson<BmRecord>(path.join(dir, 'players.ndjson'))) {
     const steamId = steamByBm.get(rec.id);
-    if (!steamId) {
-      skippedNoSteam++;
+    const eosId = eosByBm.get(rec.id);
+    if (!steamId && !eosId) {
+      skippedNoIdentity++;
       continue;
     }
-    const eosId = eosByBm.get(rec.id);
-    drafts.push(eosId ? { bmId: rec.id, steamId, eosId } : { bmId: rec.id, steamId });
+    if (!steamId) eosOnly++;
+    drafts.push({ bmId: rec.id, steamId, eosId });
   }
 
-  logger.info({ alinacak: drafts.length, steamIdYok: skippedNoSteam }, 'oyuncular yazılıyor');
+  logger.info(
+    { alinacak: drafts.length, sadeceEos: eosOnly, kimliksiz: skippedNoIdentity },
+    'oyuncular yazılıyor',
+  );
 
   // 3) Yaz. steam_id çakışırsa BM id'sini ve EOS'u tamamla — agent önce
   //    oluşturmuş olabilir.
+  // İki ayrı upsert: çakışma hedefi steam_id olanlar ve olmayanlar. Tek
+  // sorguda yapılamaz, ON CONFLICT tek bir hedef kolon alır.
   let written = 0;
-  for (const part of chunk(drafts, BATCH)) {
+  const withSteam = drafts.filter((d) => d.steamId);
+  const withoutSteam = drafts.filter((d) => !d.steamId);
+
+  for (const part of chunk(withSteam, BATCH)) {
     await db
       .insert(identitySchema.players)
       .values(
         part.map((d) => ({
-          steamId: d.steamId,
+          steamId: d.steamId ?? null,
           eosId: d.eosId ?? null,
           battlemetricsId: d.bmId,
         })),
@@ -161,6 +174,17 @@ export async function importPlayers(opts: ImportOptions): Promise<Map<string, st
       });
     written += part.length;
     if (written % 20_000 === 0) logger.info({ written }, 'oyuncu ilerleme');
+  }
+
+  for (const part of chunk(withoutSteam, BATCH)) {
+    await db
+      .insert(identitySchema.players)
+      .values(part.map((d) => ({ steamId: null, eosId: d.eosId ?? null, battlemetricsId: d.bmId })))
+      .onConflictDoUpdate({
+        target: identitySchema.players.eosId,
+        set: { battlemetricsId: sql`excluded.battlemetrics_id` },
+      });
+    written += part.length;
   }
 
   // 4) BM id -> uuid haritası (session/ban/flag bağlamak için)
@@ -329,11 +353,11 @@ export async function importBans(
   // kendisi SteamID/EOS taşıyor, o yüzden buradan oluşturulabiliyorlar.
   interface BanDraft {
     rec: BmRecord;
-    steamId: string;
+    steamId?: string | undefined;
     eosId?: string | undefined;
   }
   const drafts: BanDraft[] = [];
-  let noSteam = 0;
+  let noIdentity = 0;
 
   for await (const rec of readNdjson<BmRecord>(path.join(dir, 'bans.ndjson'))) {
     const ids = (rec.attributes?.identifiers ?? []) as Array<{
@@ -341,13 +365,16 @@ export async function importBans(
       identifier?: string;
     }>;
     const steamId = ids.find((i) => i.type === 'steamID')?.identifier;
-    if (!steamId) {
-      // SteamID'siz ban oyun içi ban listesine yazılamaz ve bir oyuncuya
-      // bağlanamaz. Kaydı düşürüyoruz ama sayısını raporluyoruz.
-      noSteam++;
+    const eosId = ids.find((i) => i.type === 'eosID')?.identifier;
+    if (!steamId && !eosId) {
+      // Hiçbir kimliği olmayan ban ne bir oyuncuya bağlanabilir ne de oyun
+      // içi listeye yazılabilir. Sayısı raporlanır.
+      noIdentity++;
       continue;
     }
-    drafts.push({ rec, steamId, eosId: ids.find((i) => i.type === 'eosID')?.identifier });
+    // SteamID'si olmayan ama EOS'u olan banlar İÇERİ ALINIR: ban listemiz
+    // EOS satırı da ürettiği için bunlar oyunda uygulanabiliyor.
+    drafts.push({ rec, steamId, eosId });
   }
 
   // Eksik oyuncuları oluştur.
@@ -362,7 +389,7 @@ export async function importBans(
         .insert(identitySchema.players)
         .values(
           part.map((d) => ({
-            steamId: d.steamId,
+            steamId: d.steamId ?? null,
             eosId: d.eosId ?? null,
             battlemetricsId: relId(d.rec, 'player') ?? null,
           })),
@@ -371,11 +398,20 @@ export async function importBans(
     }
   }
 
-  // steamId -> uuid (yeni oluşturulanlar dahil)
+  // Kimlik -> uuid. Bir ban SteamID veya EOS ile bağlanabilir.
   const rows = await db
-    .select({ id: identitySchema.players.id, steamId: identitySchema.players.steamId })
+    .select({
+      id: identitySchema.players.id,
+      steamId: identitySchema.players.steamId,
+      eosId: identitySchema.players.eosId,
+    })
     .from(identitySchema.players);
-  const bySteam = new Map(rows.map((r) => [r.steamId, r.id]));
+  const bySteam = new Map<string, string>();
+  const byEos = new Map<string, string>();
+  for (const r of rows) {
+    if (r.steamId) bySteam.set(r.steamId, r.id);
+    if (r.eosId) byEos.set(r.eosId, r.id);
+  }
 
   let batch: (typeof moderationSchema.bans.$inferInsert)[] = [];
   let written = 0;
@@ -389,7 +425,9 @@ export async function importBans(
   };
 
   for (const d of drafts) {
-    const playerId = bySteam.get(d.steamId);
+    const playerId =
+      (d.steamId ? bySteam.get(d.steamId) : undefined) ??
+      (d.eosId ? byEos.get(d.eosId) : undefined);
     if (!playerId) {
       skipped++;
       continue;
@@ -414,7 +452,7 @@ export async function importBans(
   }
   await flush();
 
-  logger.info({ ban: written, steamIdYok: noSteam, atlanan: skipped }, 'banlar tamam');
+  logger.info({ ban: written, kimliksiz: noIdentity, atlanan: skipped }, 'banlar tamam');
   return written;
 }
 

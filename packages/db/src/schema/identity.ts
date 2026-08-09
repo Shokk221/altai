@@ -1,18 +1,31 @@
 import { boolean, index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
+/**
+ * Oyuncu kimliği. steam_id VEYA eos_id dolu olmalı — ikisi de zorunlu değil.
+ *
+ * Başta steam_id notNull idi. Gerçek veri bunun yanlış olduğunu gösterdi:
+ * Squad oyuncuyu artık EOS ID ile tanıyor (sunucunun kendi Bans.cfg'si EOS
+ * yazıyor) ve arşivde SteamID'si olmayıp EOS'u olan 1.205 oyuncu ile 43 ban
+ * var. notNull kısıtı bunların hepsini dışarıda bırakıyordu — üstelik ban
+ * listemiz zaten EOS satırı ürettiği için o banlar uygulanabilir durumda.
+ *
+ * En az bir kimlik şartı migration'daki CHECK ile zorlanıyor (Drizzle şemada
+ * ifade edemiyor).
+ */
 export const players = pgTable(
   'players',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    steamId: text('steam_id').notNull().unique(),
-    eosId: text('eos_id'),
+    steamId: text('steam_id').unique(),
+    eosId: text('eos_id').unique(),
     // BM'deki sayısal oyuncu id'si. Arşiv importu bunu doldurur ve ETL
     // tekrar çalıştırıldığında aynı oyuncuyu yeniden eklemek yerine bulur.
     // Geçiş sonrası yeni oyuncularda boş kalır.
     battlemetricsId: text('battlemetrics_id').unique(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [index('players_eos_idx').on(table.eosId)],
+  // eos_id artık unique — ayrı index gereksiz.
+  () => [],
 );
 
 /**
