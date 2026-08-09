@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { resolveRoles } from '../lib/roles.js';
 import { createSession, destroySession, verifySession } from '../lib/session.js';
+import { timingSafeCompare } from '../lib/timing-safe.js';
 import { isDiscordOAuthConfigured } from '../plugins/discord-oauth.js';
 
 interface DiscordUser {
@@ -118,52 +119,66 @@ export async function authRoutes(app: FastifyInstance, opts: { db: Db; config: A
 
   // Discord kesintisinde veya role_mappings henüz boşken kullanılan acil giriş.
   // BREAK_GLASS_USER / BREAK_GLASS_PASSWORD_HASH .env'de tanımlı değilse kapalı.
-  app.post('/auth/break-glass', async (req, reply) => {
-    if (!config.BREAK_GLASS_USER || !config.BREAK_GLASS_PASSWORD_HASH) {
-      return reply.code(404).send({ error: 'not_configured' });
-    }
+  app.post(
+    '/auth/break-glass',
+    {
+      // Süper admin şifresine kaba kuvvet: dakikada 5 deneme, IP başına.
+      // Genel 300/dk sınırı bu hesap için çok cömert kalırdı.
+      config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+    },
+    async (req, reply) => {
+      if (!config.BREAK_GLASS_USER || !config.BREAK_GLASS_PASSWORD_HASH) {
+        return reply.code(404).send({ error: 'not_configured' });
+      }
 
-    const body = req.body as { username?: string; password?: string } | undefined;
-    if (!body?.username || !body?.password) {
-      return reply.code(400).send({ error: 'missing_credentials' });
-    }
+      const body = req.body as { username?: string; password?: string } | undefined;
+      if (!body?.username || !body?.password) {
+        return reply.code(400).send({ error: 'missing_credentials' });
+      }
 
-    if (body.username !== config.BREAK_GLASS_USER) {
-      return reply.code(401).send({ error: 'invalid_credentials' });
-    }
-    const ok = await verifyPassword(body.password, config.BREAK_GLASS_PASSWORD_HASH);
-    if (!ok) return reply.code(401).send({ error: 'invalid_credentials' });
+      // Kullanıcı adı yanlış olsa bile şifre doğrulaması ÇALIŞTIRILIR: aksi
+      // hâlde yanıt süresi "kullanıcı adı doğru mu" bilgisini sızdırır.
+      const userOk = timingSafeCompare(body.username, config.BREAK_GLASS_USER);
+      const passOk = await verifyPassword(body.password, config.BREAK_GLASS_PASSWORD_HASH);
+      if (!userOk || !passOk) {
+        app.log.warn({ ip: req.ip }, 'başarısız break-glass denemesi');
+        return reply.code(401).send({ error: 'invalid_credentials' });
+      }
 
-    const discordId = `${BREAK_GLASS_DISCORD_ID_PREFIX}${config.BREAK_GLASS_USER}`;
-    const [existing] = await db
-      .select()
-      .from(identitySchema.users)
-      .where(eq(identitySchema.users.discordId, discordId))
-      .limit(1);
+      const discordId = `${BREAK_GLASS_DISCORD_ID_PREFIX}${config.BREAK_GLASS_USER}`;
+      const [existing] = await db
+        .select()
+        .from(identitySchema.users)
+        .where(eq(identitySchema.users.discordId, discordId))
+        .limit(1);
 
-    const user =
-      existing ??
-      (
-        await db
-          .insert(identitySchema.users)
-          .values({ discordId, discordUsername: config.BREAK_GLASS_USER })
-          .returning()
-      )[0];
+      const user =
+        existing ??
+        (
+          await db
+            .insert(identitySchema.users)
+            .values({ discordId, discordUsername: config.BREAK_GLASS_USER })
+            .returning()
+        )[0];
 
-    if (!user) return reply.code(500).send({ error: 'user_upsert_failed' });
+      if (!user) return reply.code(500).send({ error: 'user_upsert_failed' });
 
-    const session = await createSession(db, {
-      userId: user.id,
-      systemRole: 'super_admin',
-      permissions: [...PERMISSIONS],
-      isBreakGlass: true,
-    });
-    setSessionCookie(reply, config, session.token, session.expiresAt);
+      const session = await createSession(db, {
+        userId: user.id,
+        systemRole: 'super_admin',
+        permissions: [...PERMISSIONS],
+        isBreakGlass: true,
+      });
+      setSessionCookie(reply, config, session.token, session.expiresAt);
 
-    app.log.warn({ username: config.BREAK_GLASS_USER }, 'break-glass girişi kullanıldı');
+      app.log.warn(
+        { username: config.BREAK_GLASS_USER, ip: req.ip },
+        'break-glass girişi kullanıldı',
+      );
 
-    return { ok: true };
-  });
+      return { ok: true };
+    },
+  );
 
   app.get('/auth/me', async (req, reply) => {
     const token = req.cookies[COOKIE_NAME];

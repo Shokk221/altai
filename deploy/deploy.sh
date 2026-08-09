@@ -69,10 +69,10 @@ say "5/5 servisleri yeniden başlat"
 # api önce: web ve bot ona bağlı.
 supervisorctl restart api
 supervisorctl restart web
-supervisorctl restart bot
+supervisorctl restart bot || true   # tokensizken hemen cikar, hata degil
 
 echo
-supervisorctl status
+supervisorctl status || true   # bot tokensizken EXITED doner, set -e script i kesmesin
 echo
 cat <<'EOF'
 Doğrulama:

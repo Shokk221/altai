@@ -2,8 +2,10 @@ import { createDb } from '@altai/db';
 import { loadConfig, logger } from '@altai/shared';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
-import Fastify from 'fastify';
+import Fastify, { type FastifyError, type FastifyServerOptions } from 'fastify';
+import { redactedRequestSerializer } from './lib/log-redact.js';
 import { registerDiscordOAuth } from './plugins/discord-oauth.js';
+import { registerRateLimit } from './plugins/rate-limit.js';
 import { registerWebsocket } from './plugins/websocket.js';
 import { agentWsRoutes } from './routes/agent-ws.js';
 import { authRoutes } from './routes/auth.js';
@@ -17,9 +19,33 @@ const db = createDb(config.DATABASE_URL);
 
 // Not: Fastify kendi pino tabanlı logger'ını kurar; @altai/shared logger'ı
 // agent/bot/tools gibi Fastify dışı süreçlerde kullanılır.
-const app = Fastify({ logger: true });
+// Seçenekler açıkça tipleniyor: satır içi verildiğinde TypeScript sunucu
+// tipini Http2SecureServer olarak çıkarsıyor ve tüm register() çağrıları
+// uyumsuz hale geliyor.
+const serverOptions: FastifyServerOptions = {
+  logger: {
+    // Varsayılan serileştirici req.url'i olduğu gibi yazıyor; ban listesi
+    // token'ı URL'de taşındığı için her istekte loga düşüyordu (gerçek
+    // kurulumda doğrulandı). Maskeleniyor.
+    serializers: { req: redactedRequestSerializer },
+  },
+};
+const app = Fastify(serverOptions);
+
+// Beklenmeyen hatalar: gerçek sebep loglanır, istemciye genel mesaj döner.
+// Fastify varsayılanı hata mesajını olduğu gibi gönderiyor ve bu iç detay
+// (SQL, dosya yolu) sızdırabilir.
+app.setErrorHandler((error: FastifyError, req, reply) => {
+  const status = error.statusCode ?? 500;
+  if (status >= 500) {
+    req.log.error({ err: error }, 'işlenmemiş hata');
+    return reply.code(status).send({ error: 'internal_error' });
+  }
+  return reply.code(status).send({ error: error.code ?? 'request_error', message: error.message });
+});
 
 await app.register(cookie);
+await registerRateLimit(app);
 await app.register(cors, {
   origin: config.WEB_APP_URL ?? 'http://localhost:3000',
   credentials: true,
@@ -30,8 +56,8 @@ await app.register(healthRoutes);
 await app.register(authRoutes, { db, config });
 await app.register(agentWsRoutes, { db, config });
 await app.register(banListRoutes, { db, config });
-await app.register(browserWsRoutes);
-await app.register(serverStatusRoutes);
+await app.register(browserWsRoutes, { db });
+await app.register(serverStatusRoutes, { db });
 
 const port = Number(process.env.PORT ?? 3001);
 app.listen({ port, host: '0.0.0.0' }).then(() => {

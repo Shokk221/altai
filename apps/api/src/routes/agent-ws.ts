@@ -15,6 +15,7 @@ import {
   applyPlayerDisconnected,
   applyServerSnapshot,
 } from '../lib/server-state.js';
+import { timingSafeCompare } from '../lib/timing-safe.js';
 
 export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig }) {
   const { db, config } = opts;
@@ -77,7 +78,12 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
       const msg: AgentToApiMessage = result.data;
 
       if (msg.type === 'hello') {
-        if (!config.AGENT_SHARED_SECRET || msg.secret !== config.AGENT_SHARED_SECRET) {
+        // Sabit zamanlı: !== ilk farklı karakterde durur ve yanıt süresi
+        // sırrı karakter karakter sızdırabilir.
+        if (
+          !config.AGENT_SHARED_SECRET ||
+          !timingSafeCompare(msg.secret, config.AGENT_SHARED_SECRET)
+        ) {
           socket.send(JSON.stringify({ type: 'hello_reject', reason: 'invalid_secret' }));
           socket.close();
           return;

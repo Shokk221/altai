@@ -1,10 +1,10 @@
-import { timingSafeEqual } from 'node:crypto';
 import type { Db } from '@altai/db';
 import { identitySchema, moderationSchema, presenceSchema } from '@altai/db';
 import type { AppConfig } from '@altai/shared';
 import { and, eq, gt, isNull, or } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { formatBanList } from '../lib/ban-list-format.js';
+import { timingSafeCompare } from '../lib/timing-safe.js';
 
 /**
  * Squad remote ban list — plan Bölüm 5'teki "kritik hile".
@@ -18,14 +18,6 @@ import { formatBanList } from '../lib/ban-list-format.js';
  * header ekleyemiyoruz.
  */
 
-/** Uzunluk sızdırmayan, zamanlama saldırısına kapalı karşılaştırma. */
-function tokenMatches(given: string, expected: string): boolean {
-  const a = Buffer.from(given);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
-}
-
 export async function banListRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig }) {
   const { db, config } = opts;
 
@@ -35,7 +27,7 @@ export async function banListRoutes(app: FastifyInstance, opts: { db: Db; config
       // Squad örneklerinde adres .cfg ile bitiyor; iki biçimi de kabul et.
       const token = req.params.token.replace(/\.cfg$/i, '');
 
-      if (!config.BAN_LIST_TOKEN || !tokenMatches(token, config.BAN_LIST_TOKEN)) {
+      if (!config.BAN_LIST_TOKEN || !timingSafeCompare(token, config.BAN_LIST_TOKEN)) {
         // 403 yerine 404: yanlış token, ucun var olduğunu bile öğrenmesin.
         return reply.code(404).type('text/plain; charset=utf-8').send('');
       }
