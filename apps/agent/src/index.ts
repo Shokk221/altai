@@ -6,6 +6,7 @@ import {
   createSquadJSAdapter,
   createSquadServerEngineAdapter,
 } from '@altai/squad';
+import { komutCalistir } from './commands.js';
 import { loadAgentConfig } from './config.js';
 import { createSpool } from './spool.js';
 import { createUplink } from './uplink.js';
@@ -21,15 +22,33 @@ import { createUplink } from './uplink.js';
 const config = loadAgentConfig();
 
 const spool = createSpool({ dir: config.AGENT_SPOOL_DIR });
+
+// Motor uplink'ten SONRA kuruluyor (vendored SquadJS yüklemesi async), ama
+// komut işleyicisinin ona erişmesi gerekiyor. Henüz hazır değilken komut
+// gelirse sessizce yutmuyoruz — api'ye açık bir hata dönüyoruz.
+let engine: SquadJSEngine | undefined;
 const uplink = createUplink({
   url: config.AGENT_API_WS_URL,
   serverSlug: config.SERVER_SLUG,
   secret: config.AGENT_SHARED_SECRET,
   spool,
   onCommand: (msg) => {
-    // Faz 2/3'te: kick/ban/warn/broadcast/setLayer/restart -> engine.rconExecute
-    // yönlendirmesi burada olacak. Şimdilik sadece loglanır.
-    logger.warn({ command: msg.command }, 'komut alındı ama henüz işlenmiyor (Faz 2)');
+    const { command } = msg;
+    if (!engine) {
+      uplink.sendCommandResult({
+        correlationId: command.correlationId,
+        ok: false,
+        error: 'motor_hazir_degil',
+      });
+      return;
+    }
+    void komutCalistir(engine, command).then((sonuc) => {
+      uplink.sendCommandResult({
+        correlationId: command.correlationId,
+        ok: sonuc.ok,
+        ...(sonuc.error ? { error: sonuc.error } : {}),
+      });
+    });
   },
 });
 
@@ -55,7 +74,7 @@ async function resolveEngine(): Promise<SquadJSEngine> {
   return createSquadServerEngineAdapter(real, config.SERVER_SLUG);
 }
 
-const engine = await resolveEngine();
+engine = await resolveEngine();
 const adapter = createSquadJSAdapter({
   serverSlug: config.SERVER_SLUG,
   engine,

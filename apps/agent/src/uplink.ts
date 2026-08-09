@@ -1,4 +1,4 @@
-import type { AgentEvent, ApiToAgentMessage } from '@altai/contracts';
+import type { AgentCommandResult, AgentEvent, ApiToAgentMessage } from '@altai/contracts';
 import { ApiToAgentMessage as ApiToAgentMessageSchema } from '@altai/contracts';
 import { logger } from '@altai/shared';
 import WebSocket from 'ws';
@@ -15,6 +15,14 @@ export interface UplinkOptions {
 
 export interface Uplink {
   send(event: AgentEvent): void;
+  /**
+   * Komut sonucunu api'ye bildirir.
+   *
+   * Spool'a DÜŞMEZ: bağlantı koptuysa api tarafındaki bekleyen komut zaten
+   * zaman aşımına uğramıştır ve geç gelen bir cevabın karşılığı kalmaz.
+   * Eventlerden farkı bu — event kaybolmamalı, komut cevabı kısa ömürlü.
+   */
+  sendCommandResult(result: AgentCommandResult): void;
   /** Düzgün kapanış: api'ye shutdown bildirir, açık session'lar kapatılsın. */
   shutdown(): Promise<void>;
 }
@@ -119,6 +127,17 @@ export function createUplink(opts: UplinkOptions): Uplink {
   connect();
 
   return {
+    sendCommandResult(result) {
+      if (ws?.readyState !== WebSocket.OPEN) {
+        logger.warn(
+          { correlationId: result.correlationId },
+          'komut sonucu gönderilemedi (bağlantı yok)',
+        );
+        return;
+      }
+      ws.send(JSON.stringify({ type: 'command_result', result }));
+    },
+
     send(event) {
       // Spool boşalmadan canlı gönderim yapılmaz — sıra korunmalı.
       if (canSend() && !draining && !opts.spool.hasPending()) {

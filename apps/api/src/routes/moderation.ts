@@ -1,8 +1,9 @@
 import type { Db } from '@altai/db';
-import { identitySchema, moderationSchema } from '@altai/db';
+import { identitySchema, moderationSchema, presenceSchema } from '@altai/db';
 import { and, eq, isNull } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { agentBagliMi, komutGonder } from '../lib/agent-command-bus.js';
 import { writeAudit } from '../lib/audit.js';
 import { requireSession } from '../lib/auth-guard.js';
 
@@ -114,9 +115,54 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
         return created;
       });
 
-      return reply.code(201).send({ ban });
+      // Ban kaydedildi; şimdi oyuncuyu o anki maçtan çıkar. Bu EN İYİ ÇABA:
+      // agent kopuksa ya da RCON yanıt vermiyorsa ban yine geçerli, oyuncu
+      // bir sonraki girişinde remote ban list tarafından engellenir.
+      // Bu yüzden sonucu 201'in içinde bildiriyoruz, hata olarak değil.
+      const atma = await oyuncuyuAt(playerId.data, parsed.data.reason, actor?.id ?? 'sistem');
+
+      return reply.code(201).send({ ban, atma });
     },
   );
+
+  /**
+   * Oyuncuyu bağlı olduğu sunuculardan atar.
+   *
+   * Hangi sunucuda olduğunu bilmiyoruz (ban sunucu bağımsız olabilir), o
+   * yüzden bağlı tüm agent'lara gönderiyoruz. Oyuncu orada değilse RCON
+   * zararsız bir "bulunamadı" döner.
+   */
+  async function oyuncuyuAt(playerId: string, reason: string, issuedBy: string) {
+    const [p] = await db
+      .select({
+        steamId: identitySchema.players.steamId,
+        eosId: identitySchema.players.eosId,
+      })
+      .from(identitySchema.players)
+      .where(eq(identitySchema.players.id, playerId))
+      .limit(1);
+    if (!p) return { denendi: false as const };
+
+    const sunucular = await db
+      .select({ slug: presenceSchema.servers.slug })
+      .from(presenceSchema.servers);
+
+    const sonuclar: Record<string, string> = {};
+    for (const s of sunucular) {
+      if (!agentBagliMi(s.slug)) {
+        sonuclar[s.slug] = 'agent_yok';
+        continue;
+      }
+      const sonuc = await komutGonder(
+        s.slug,
+        'kick',
+        { steamId: p.steamId, eosId: p.eosId, reason },
+        issuedBy,
+      );
+      sonuclar[s.slug] = sonuc.durum === 'hata' ? `hata: ${sonuc.mesaj}` : sonuc.durum;
+    }
+    return { denendi: true as const, sunucular: sonuclar };
+  }
 
   app.post<{ Params: { id: string }; Body: unknown }>(
     '/bans/:id/revoke',

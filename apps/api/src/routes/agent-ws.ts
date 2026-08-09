@@ -4,6 +4,7 @@ import type { Db } from '@altai/db';
 import type { AppConfig } from '@altai/shared';
 import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
+import { agentBaglandi, agentKoptu, komutSonucuGeldi } from '../lib/agent-command-bus.js';
 import {
   closeAllOpenSessions,
   createPersistenceWriter,
@@ -101,6 +102,10 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
             await reconcileStaleSessions(db, id);
             serverId = id;
             ready = true;
+            // Komut kanalına kaydol: bundan sonra api bu sunucuya kick/warn
+            // gönderebilir. hello DOĞRULANDIKTAN sonra yapılıyor — aksi hâlde
+            // secret'ı bilmeyen bir bağlantı komut alabilirdi.
+            agentBaglandi(msg.serverSlug, { send: (d) => socket.send(d) });
             socket.send(JSON.stringify({ type: 'hello_ack', serverId: id }));
             for (const queued of pending.splice(0)) persist(queued);
           } catch (err) {
@@ -144,13 +149,16 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
       }
 
       if (msg.type === 'command_result') {
-        // Faz 2/3'te kick/ban gibi komutların sonucunu panelde göstermek için.
-        app.log.info({ result: msg.result }, 'agent komut sonucu döndürdü');
+        // Bekleyen komutun promise'ini çözer (lib/agent-command-bus.ts).
+        komutSonucuGeldi(msg.result);
       }
     });
 
     socket.on('close', () => {
-      if (serverSlug) app.log.warn({ serverSlug }, 'agent uplink koptu');
+      if (serverSlug) {
+        agentKoptu(serverSlug);
+        app.log.warn({ serverSlug }, 'agent uplink koptu');
+      }
     });
   });
 }
