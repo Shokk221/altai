@@ -233,7 +233,45 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
       </header>
 
       {/* çalışma alanı: yan yana paneller, her biri kendi içinde kayar */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_1.35fr_1fr]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_0.9fr_1.35fr]">
+        <Panel baslik="Kimlikler" sayac={kimlikler.length}>
+          {kimlikler.length === 0 ? (
+            <Bos metin="Kimlik kaydı yok" />
+          ) : (
+            // Tek tablo: isim, Steam ve EOS aynı listede. Ayrı yerlerde
+            // durduklarında "bu adam hangi kimlikle ne zaman görüldü"
+            // sorusu iki yere bakmayı gerektiriyordu.
+            <ul className="flex flex-col [&>li:last-child]:border-0">
+              {kimlikler.map((k) => (
+                <li
+                  key={`${k.tur}:${k.deger}`}
+                  className="flex items-baseline justify-between gap-3 border-b border-border py-[7px]"
+                >
+                  <span className="min-w-0">
+                    <span
+                      className={cn(
+                        'block truncate text-[13px]',
+                        k.tur === 'İsim' ? '' : 'font-mono text-[11.5px]',
+                      )}
+                    >
+                      {k.deger}
+                    </span>
+                    <span className="text-[10.5px] uppercase tracking-wider text-fg-faint">
+                      {k.tur}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-right">
+                    <span className="num block text-[11.5px] text-fg-muted">{tarih(k.zaman)}</span>
+                    {/* Mutlak tarihin yanında göreli: biri hangi gün
+                        olduğunu, diğeri ne kadar eski olduğunu söylüyor. */}
+                    <span className="block text-[10.5px] text-fg-faint">{gecenSure(k.zaman)}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+
         <Panel baslik="Banlar" sayac={profil.bans.length}>
           {profil.bans.length === 0 ? (
             <Bos metin="Ban kaydı yok" />
@@ -274,91 +312,49 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
           )}
         </Panel>
 
-        <Panel baslik="Kayıtlar" sayac={profil.records.length}>
-          {profil.records.length === 0 ? (
-            <Bos metin="Not, uyarı ya da takip yok" />
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {profil.records.map((k) => (
-                <li
-                  key={k.id}
-                  className="rounded-sm border border-border bg-surface-sunken px-3 py-2.5"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Badge tone={k.kind === 'warning' ? 'accent' : 'neutral'}>
-                        {KAYIT_ETIKET[k.kind]}
-                      </Badge>
-                      <span className="text-[11px] text-fg-faint">{tarihSaat(k.createdAt)}</span>
-                    </div>
-                    {!k.resolvedAt && notYazabilir ? (
-                      <KaydiKapat apiUrl={apiUrl} recordId={k.id} />
-                    ) : null}
-                  </div>
-                  <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-snug">{k.body}</p>
-                  <p className="mt-1 text-[11px] text-fg-faint">
-                    {k.authorName ?? 'bilinmiyor'}
-                    {k.resolvedAt ? ' · kapatıldı' : ''}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-
-        <Panel baslik="Sohbet" sayac={profil.sohbet.length}>
-          <ChatPanel apiUrl={apiUrl} playerId={player.id} ilkMesajlar={profil.sohbet} />
-        </Panel>
-
-        {/* Son sütun ikiye bölünüyor: coplay ve isim geçmişi kısa listeler,
-            tam sütun harcamaya değmiyor. */}
+        {/* Kayıtlar ve coplay kısa listeler; tek sütunu paylaşıyorlar.
+            Sohbet ve kimlikler tam sütunu hak ediyor. */}
         <div className="flex min-h-0 flex-col gap-3">
-          <Panel baslik="Birlikte oynadıkları">
-            <CoplayPanel apiUrl={apiUrl} playerId={player.id} />
-          </Panel>
-
-          <Panel baslik="Kimlikler" sayac={kimlikler.length}>
-            {kimlikler.length === 0 ? (
-              <Bos metin="Kimlik kaydı yok" />
+          <Panel baslik="Kayıtlar" sayac={profil.records.length}>
+            {profil.records.length === 0 ? (
+              <Bos metin="Not, uyarı ya da takip yok" />
             ) : (
-              // Tek tablo: isim, Steam ve EOS aynı listede. Ayrı yerlerde
-              // durduklarında "bu adam hangi kimlikle ne zaman görüldü"
-              // sorusu iki yere bakmayı gerektiriyordu.
-              <ul className="flex flex-col [&>li:last-child]:border-0">
-                {kimlikler.map((k) => (
+              <ul className="flex flex-col gap-2">
+                {profil.records.map((k) => (
                   <li
-                    key={`${k.tur}:${k.deger}`}
-                    className="flex items-baseline justify-between gap-3 border-b border-border py-[7px]"
+                    key={k.id}
+                    className="rounded-sm border border-border bg-surface-sunken px-3 py-2.5"
                   >
-                    <span className="min-w-0">
-                      <span
-                        className={cn(
-                          'block truncate text-[13px]',
-                          k.tur === 'İsim' ? '' : 'font-mono text-[11.5px]',
-                        )}
-                      >
-                        {k.deger}
-                      </span>
-                      <span className="text-[10.5px] uppercase tracking-wider text-fg-faint">
-                        {k.tur}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-right">
-                      <span className="num block text-[11.5px] text-fg-muted">
-                        {tarih(k.zaman)}
-                      </span>
-                      {/* Mutlak tarihin yanında göreli: biri hangi gün
-                          olduğunu, diğeri ne kadar eski olduğunu söylüyor. */}
-                      <span className="block text-[10.5px] text-fg-faint">
-                        {gecenSure(k.zaman)}
-                      </span>
-                    </span>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Badge tone={k.kind === 'warning' ? 'accent' : 'neutral'}>
+                          {KAYIT_ETIKET[k.kind]}
+                        </Badge>
+                        <span className="text-[11px] text-fg-faint">{tarihSaat(k.createdAt)}</span>
+                      </div>
+                      {!k.resolvedAt && notYazabilir ? (
+                        <KaydiKapat apiUrl={apiUrl} recordId={k.id} />
+                      ) : null}
+                    </div>
+                    <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-snug">{k.body}</p>
+                    <p className="mt-1 text-[11px] text-fg-faint">
+                      {k.authorName ?? 'bilinmiyor'}
+                      {k.resolvedAt ? ' · kapatıldı' : ''}
+                    </p>
                   </li>
                 ))}
               </ul>
             )}
           </Panel>
+
+          <Panel baslik="Birlikte oynadıkları">
+            <CoplayPanel apiUrl={apiUrl} playerId={player.id} />
+          </Panel>
         </div>
+
+        <Panel baslik="Sohbet" sayac={profil.sohbet.length}>
+          <ChatPanel apiUrl={apiUrl} playerId={player.id} ilkMesajlar={profil.sohbet} />
+        </Panel>
       </div>
     </main>
   );
