@@ -18,9 +18,16 @@ export type AuditAction =
   | 'record.create'
   | 'record.resolve'
   | 'flag.assign'
-  | 'flag.remove';
+  | 'flag.remove'
+  | 'role_mapping.upsert'
+  | 'role_mapping.delete';
 
-export type AuditTargetType = 'player' | 'ban' | 'player_record' | 'flag_assignment';
+export type AuditTargetType =
+  | 'player'
+  | 'ban'
+  | 'player_record'
+  | 'flag_assignment'
+  | 'role_mapping';
 
 export interface AuditEntry {
   actorUserId: string | null;

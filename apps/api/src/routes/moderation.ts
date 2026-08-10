@@ -271,9 +271,61 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
         return created;
       });
 
-      return reply.code(201).send({ record: kayit });
+      // Uyarı oyuncuya OYUN İÇİNDE gösterilir; kaydedip bırakmak uyarının
+      // kendisini anlamsız kılardı. Kick gibi bu da EN İYİ ÇABA: agent
+      // kopuksa kayıt yine durur, yalnızca teslim edilmemiş sayılır.
+      let teslim: Awaited<ReturnType<typeof uyariGonder>> | undefined;
+      if (parsed.data.kind === 'warning') {
+        teslim = await uyariGonder(playerId.data, parsed.data.body, actor?.id ?? 'sistem');
+        if (teslim.teslimEdildi) {
+          await db
+            .update(moderationSchema.playerRecords)
+            .set({ deliveredAt: new Date() })
+            .where(eq(moderationSchema.playerRecords.id, kayit.id));
+        }
+      }
+
+      return reply.code(201).send({ record: kayit, teslim });
     },
   );
+
+  /**
+   * Uyarıyı oyuncuya oyun içinde gösterir (RCON AdminWarn).
+   *
+   * Oyuncu o an hangi sunucuda bilinmiyor, bağlı tüm agent'lara gönderiliyor;
+   * oyuncu orada değilse RCON zararsız bir yanıt döner. Bir sunucuda bile
+   * başarılıysa teslim edilmiş sayılıyor.
+   */
+  async function uyariGonder(playerId: string, mesaj: string, issuedBy: string) {
+    const [p] = await db
+      .select({ steamId: identitySchema.players.steamId, eosId: identitySchema.players.eosId })
+      .from(identitySchema.players)
+      .where(eq(identitySchema.players.id, playerId))
+      .limit(1);
+    if (!p) return { teslimEdildi: false, sunucular: {} as Record<string, string> };
+
+    const sunucular = await db
+      .select({ slug: presenceSchema.servers.slug })
+      .from(presenceSchema.servers);
+
+    const sonuclar: Record<string, string> = {};
+    let teslimEdildi = false;
+    for (const s of sunucular) {
+      if (!agentBagliMi(s.slug)) {
+        sonuclar[s.slug] = 'agent_yok';
+        continue;
+      }
+      const sonuc = await komutGonder(
+        s.slug,
+        'warn',
+        { steamId: p.steamId, eosId: p.eosId, message: mesaj },
+        issuedBy,
+      );
+      sonuclar[s.slug] = sonuc.durum === 'hata' ? `hata: ${sonuc.mesaj}` : sonuc.durum;
+      if (sonuc.durum === 'ok') teslimEdildi = true;
+    }
+    return { teslimEdildi, sunucular: sonuclar };
+  }
 
   app.post<{ Params: { id: string } }>(
     '/records/:id/resolve',

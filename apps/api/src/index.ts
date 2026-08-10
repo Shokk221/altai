@@ -7,6 +7,7 @@ import { redactedRequestSerializer } from './lib/log-redact.js';
 import { registerDiscordOAuth } from './plugins/discord-oauth.js';
 import { registerRateLimit } from './plugins/rate-limit.js';
 import { registerWebsocket } from './plugins/websocket.js';
+import { accessAdminRoutes } from './routes/access-admin.js';
 import { adminListRoutes } from './routes/admin-list.js';
 import { agentWsRoutes } from './routes/agent-ws.js';
 import { agentRoutes } from './routes/agents.js';
@@ -101,6 +102,7 @@ await app.register(
     await api.register(playerRoutes, { db });
     await api.register(moderationRoutes, { db });
     await api.register(agentRoutes, { db });
+    await api.register(accessAdminRoutes, { db });
   },
   { prefix: '/api' },
 );

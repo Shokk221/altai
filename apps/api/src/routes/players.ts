@@ -89,6 +89,91 @@ export async function playerRoutes(app: FastifyInstance, opts: { db: Db }) {
     },
   );
 
+  /** Atanabilir etiketler. Profildeki seçici bunu kullanıyor. */
+  app.get('/flags', { preHandler: guard }, async () => {
+    const rows = await db
+      .select({
+        id: moderationSchema.flags.id,
+        name: moderationSchema.flags.name,
+        description: moderationSchema.flags.description,
+        color: moderationSchema.flags.color,
+      })
+      .from(moderationSchema.flags)
+      .orderBy(moderationSchema.flags.name);
+    return { flags: rows };
+  });
+
+  /**
+   * Birlikte oynadıkları — plan Bölüm 4.1 "coplay geçmişi".
+   *
+   * Oturumların ZAMAN ÇAKIŞMASINDAN hesaplanıyor: aynı sunucuda, aynı anda
+   * içeride olmuş iki oyuncu. Alt sınır konuyor çünkü bir haritada yan yana
+   * düşmek anlamlı değil; birlikte geçirilen toplam süre asıl sinyal.
+   *
+   * Sorgu ağır (417 bin oturum) — bu yüzden AYRI uç, profille birlikte
+   * yüklenmiyor. Admin ihtiyaç duyduğunda açıyor.
+   */
+  app.get<{ Params: { id: string } }>(
+    '/players/:id/coplay',
+    { preHandler: guard },
+    async (req, reply) => {
+      const id = req.params.id;
+      if (!/^[0-9a-f-]{36}$/i.test(id)) {
+        return reply.code(400).send({ error: 'gecersiz_oyuncu_id' });
+      }
+
+      // Yalnızca son 90 gün: "kimlerle takılıyor" güncel bir soru ve tüm
+      // tarihçeyi taramak sorguyu dakikalara çıkarırdı.
+      const satirlar = await db.execute<{
+        player_id: string;
+        name: string | null;
+        steam_id: string | null;
+        birlikte_saniye: number;
+        oturum: number;
+      }>(sql`
+        with benim as (
+          select server_id, joined_at, coalesce(left_at, now()) as left_at
+            from game_sessions
+           where player_id = ${id}
+             and joined_at > now() - interval '90 days'
+        )
+        select o.player_id,
+               max(pn.name) as name,
+               max(p.steam_id) as steam_id,
+               sum(extract(epoch from (
+                 least(o.left_at_c, b.left_at) - greatest(o.joined_at, b.joined_at)
+               )))::bigint as birlikte_saniye,
+               count(*)::int as oturum
+          from benim b
+          join lateral (
+            select g.player_id, g.joined_at, coalesce(g.left_at, now()) as left_at_c
+              from game_sessions g
+             where g.server_id = b.server_id
+               and g.player_id <> ${id}
+               and g.joined_at < b.left_at
+               and coalesce(g.left_at, now()) > b.joined_at
+          ) o on true
+          join players p on p.id = o.player_id
+          left join player_names pn on pn.player_id = o.player_id
+         group by o.player_id
+        having sum(extract(epoch from (
+                 least(o.left_at_c, b.left_at) - greatest(o.joined_at, b.joined_at)
+               ))) > 3600
+         order by birlikte_saniye desc
+         limit 25
+      `);
+
+      const liste = (satirlar as unknown as Record<string, unknown>[]).map((r) => ({
+        playerId: String(r.player_id),
+        name: (r.name as string | null) ?? '(isim yok)',
+        steamId: (r.steam_id as string | null) ?? null,
+        birlikteSaniye: Number(r.birlikte_saniye ?? 0),
+        oturum: Number(r.oturum ?? 0),
+      }));
+      return { coplay: liste };
+    },
+  );
+
   /**
    * Oyuncunun sohbeti — sayfalı ve aranabilir.
    *
