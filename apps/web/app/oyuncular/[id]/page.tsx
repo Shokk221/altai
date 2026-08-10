@@ -1,7 +1,8 @@
+import { ChatPanel, type Mesaj } from '@/components/chat-panel';
 import { BanKaldir, EtiketKaldir, HizliEylemler, KaydiKapat } from '@/components/player-actions';
 import { Badge } from '@/components/ui/badge';
 import { getJson, getMe, publicApiUrl } from '@/lib/api';
-import { banBitis, saatDakika, sayi, sure, tarih, tarihSaat } from '@/lib/format';
+import { banBitis, sayi, sure, tarih, tarihSaat } from '@/lib/format';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
@@ -49,13 +50,6 @@ interface Kayit {
   authorName: string | null;
   createdAt: string;
   resolvedAt: string | null;
-}
-
-interface Mesaj {
-  id: string;
-  channel: string | null;
-  message: string;
-  sentAt: string;
 }
 
 interface Profil {
@@ -282,25 +276,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
         </Panel>
 
         <Panel baslik="Sohbet" sayac={profil.sohbet.length}>
-          {profil.sohbet.length === 0 ? (
-            <Bos metin="Kayıtlı mesaj yok" />
-          ) : (
-            <ul className="flex flex-col gap-1.5">
-              {profil.sohbet.map((m) => (
-                <li key={m.id} className="text-[13px] leading-snug">
-                  <span className="mr-1.5 text-[11px] tabular-nums text-fg-muted">
-                    {saatDakika(m.sentAt)}
-                  </span>
-                  {m.channel && m.channel !== 'All' ? (
-                    <span className="mr-1 text-[11px] font-semibold text-accent">
-                      [{m.channel}]
-                    </span>
-                  ) : null}
-                  <span className="break-words">{m.message}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <ChatPanel mesajlar={profil.sohbet} />
         </Panel>
 
         <Panel baslik="İsim geçmişi" sayac={profil.names.length}>
