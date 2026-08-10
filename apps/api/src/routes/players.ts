@@ -395,6 +395,11 @@ async function decorate(db: Db, rows: BaseRow[]) {
    * yanlıştı: 99 ismi olan bir oyuncu bütün payı yiyip diğerlerinin isimlerini
    * sonuçtan düşürebiliyordu. Pencere fonksiyonu limiti oyuncu başına
    * uyguluyor.
+   *
+   * KİMLİK LİSTESİ `inArray` İLE GÖMÜLÜYOR, ham `${ids}` ile değil: drizzle
+   * şablonunda bir JS dizisi `(a, b, c)` kayıt (record) olarak açılıyor,
+   * dizi olarak değil — `= any(...)` ya da `::uuid[]` bu yüzden çalışmıyor.
+   * Aynı tuzağa aşağıdaki ban sorgusunda da düşülmüştü.
    */
   const isimSatirlari = await db.execute<{
     player_id: string;
@@ -409,7 +414,7 @@ async function decorate(db: Db, rows: BaseRow[]) {
                row_number() over (partition by pn.player_id order by pn.last_seen desc nulls last) as sira,
                count(*) over (partition by pn.player_id) as toplam
           from player_names pn
-         where pn.player_id = any(${ids}::uuid[])
+         where ${inArray(identitySchema.playerNames.playerId, ids)}
       ) x
      where sira <= 5
   `);
@@ -479,4 +484,3 @@ async function decorate(db: Db, rows: BaseRow[]) {
     };
   });
 }
-
