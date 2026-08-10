@@ -161,9 +161,16 @@ export async function liveActionRoutes(app: FastifyInstance, opts: { db: Db }) {
       if (parsed.data.zaman === 'simdi') {
         const sonuclar = await simdiDegistir(slug, hedefler, parsed.data.mesaj, aktor);
         const basarisiz = sonuclar.filter((s) => s.durum === 'komut_basarisiz').length;
+        const dogrulanamayan = sonuclar.filter((s) => s.durum === 'dogrulanamadi').length;
         // Kısmi başarı gizlenmiyor: dokuz kişilik mangada ikisi geçmediyse
-        // yetkilinin bunu bilmesi gerekiyor.
-        return { ok: basarisiz === 0, sonuclar, basarisiz };
+        // yetkilinin bunu bilmesi gerekiyor. `dogrulanamayan` ayrı: komut
+        // gitti ama Squad taşımadı — sebebi ve söylenecek şey farklı.
+        return {
+          ok: basarisiz === 0 && dogrulanamayan === 0,
+          sonuclar,
+          basarisiz,
+          dogrulanamayan,
+        };
       }
 
       const serverId = await sunucuIdBul(slug);

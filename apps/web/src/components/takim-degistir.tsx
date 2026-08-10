@@ -79,6 +79,7 @@ export function TakimDegistirKutusu({
         error?: string;
         detay?: string;
         basarisiz?: number;
+        dogrulanamayan?: number;
       };
       if (!res.ok) {
         setHata(
@@ -92,6 +93,14 @@ export function TakimDegistirKutusu({
       // yetkili bunu bilmeli, yoksa "yaptım" sanıp devam eder.
       if (govde.basarisiz && govde.basarisiz > 0) {
         setHata(`${govde.basarisiz} oyuncu geçirilemedi (çıkmış olabilir)`);
+        return;
+      }
+      // Squad komutu kabul edip oyuncuyu taşımayabiliyor (kendi denge
+      // kilidi). Sessizce "oldu" demek yanlış bilgi olurdu.
+      if (govde.dogrulanamayan && govde.dogrulanamayan > 0) {
+        setHata(
+          `${govde.dogrulanamayan} oyuncu hâlâ eski takımında — Squad denge kilidi reddetmiş olabilir`,
+        );
         return;
       }
       kapat();

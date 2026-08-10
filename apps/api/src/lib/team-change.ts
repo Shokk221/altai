@@ -5,7 +5,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { kaydet } from './activity-log.js';
 import { komutGonder } from './agent-command-bus.js';
 import { panelKomutuIsaretle } from './panel-komut-izi.js';
-import { sunucuyuTazele, tazelemeyiPlanla } from './player-refresh.js';
+import { sunucuyuTazele } from './player-refresh.js';
 import { applyTeamChange, getServerState } from './server-state.js';
 
 /**
@@ -32,7 +32,18 @@ export type Zaman = 'simdi' | 'mac_sonu';
  * işliyor; önce onun bitmesini bekliyoruz ki çakışan oyuncuyu iki kez
  * çevirip başladığı yere döndürmeyelim.
  */
-const DIGER_SISTEMI_BEKLEME_MS = 8_000;
+const DIGER_SISTEMI_BEKLEME_MS = 25_000;
+
+/**
+ * Komuttan sonra doğrulama için beklenen süre.
+ *
+ * Squad'ın RCON'u komutu KABUL EDİP oyuncuyu taşımayabiliyor (kendi denge
+ * kilidi devredeyse). Eski switch-plugin bunu keşfetmiş ve her switch'ten
+ * sonra listeyi tazeleyip takımın gerçekten değişip değişmediğine bakıyor.
+ * Bizde bu kontrol yoktu: RCON "tamam" dediği anda panelde "geçirildi"
+ * yazıyorduk — Squad reddetse bile.
+ */
+const DOGRULAMA_BEKLEME_MS = 1_200;
 
 export interface Hedef {
   steamId: string;
@@ -53,7 +64,13 @@ export interface Aktor {
 export interface Sonuc {
   steamId: string;
   name: string | null;
-  durum: 'ok' | 'kuyruga_alindi' | 'komut_basarisiz';
+  /**
+   * `dogrulanamadi`: RCON komutu kabul etti ama oyuncu hâlâ eski
+   * takımında. Squad kendi denge kilidiyle sessizce reddetmiş olabilir.
+   * `komut_basarisiz`den ayrı tutuluyor çünkü sebebi farklı ve yetkiliye
+   * söylenecek şey de farklı.
+   */
+  durum: 'ok' | 'kuyruga_alindi' | 'komut_basarisiz' | 'dogrulanamadi';
 }
 
 /** Oyuncuya gösterilecek metin. Yetkilinin kendi mesajı varsa ona eklenir. */
@@ -141,12 +158,36 @@ export async function simdiDegistir(
   // yetkili komutun çalışmadığını sanıyordu.
   if (gecenler.length > 0) {
     applyTeamChange(slug, gecenler);
-    // İyimser güncelleme tahmin; doğrunun kaynağı hâlâ RCON. Kısa bir
-    // gecikmeyle listeyi baştan okuyup teyit ediyoruz.
-    tazelemeyiPlanla(slug);
+    await dogrula(slug, hedefler, sonuclar);
   }
 
   return sonuclar;
+}
+
+/**
+ * Komut sonrası gerçekten değişti mi?
+ *
+ * Tek tazeleme ile TÜM hedefler doğrulanıyor: dokuz kişilik manga için
+ * dokuz ayrı RCON okuması yapmak hem yavaş hem gereksiz.
+ *
+ * Doğrulanamayan varsa iyimser güncelleme de geri alınıyor — ekranın
+ * gerçekleşmemiş bir değişimi göstermesi, hiç göstermemesinden kötü.
+ */
+async function dogrula(slug: string, hedefler: Hedef[], sonuclar: Sonuc[]) {
+  await new Promise((r) => setTimeout(r, DOGRULAMA_BEKLEME_MS));
+  const tazelendi = await sunucuyuTazele(slug, true).catch(() => false);
+  if (!tazelendi) return; // Okuyamadıysak iddiada bulunmuyoruz.
+
+  const durum = getServerState(slug);
+  for (const s of sonuclar) {
+    if (s.durum !== 'ok') continue;
+    const hedef = hedefler.find((h) => h.steamId === s.steamId);
+    const simdiki = durum?.players.find((p) => p.steamId === s.steamId);
+    // Oyuncu çıktıysa ya da takımı okunamıyorsa iddia edecek bir şey yok.
+    if (!simdiki || simdiki.teamId === null) continue;
+    if (hedef?.teamId === null || hedef?.teamId === undefined) continue;
+    if (simdiki.teamId === hedef.teamId) s.durum = 'dogrulanamadi';
+  }
 }
 
 /**
@@ -344,6 +385,7 @@ export async function macSonuIsle(db: Db, slug: string, serverId: string): Promi
 
   const durum = getServerState(slug);
   let uygulanan = 0;
+  const uygulananlar: { steamId: string; kuyrukId: string; oncekiTakim: string | null }[] = [];
 
   for (const kayit of kuyruk) {
     const oyuncu = durum?.players.find((p) => p.steamId === kayit.steamId);
@@ -366,6 +408,11 @@ export async function macSonuIsle(db: Db, slug: string, serverId: string): Promi
       if (komut.durum === 'ok') {
         uygulanan += 1;
         applyTeamChange(slug, [kayit.steamId]);
+        uygulananlar.push({
+          steamId: kayit.steamId,
+          kuyrukId: kayit.id,
+          oncekiTakim: kayit.fromTeam,
+        });
       }
     }
 
@@ -391,7 +438,25 @@ export async function macSonuIsle(db: Db, slug: string, serverId: string): Promi
     });
   }
 
-  if (uygulanan > 0) tazelemeyiPlanla(slug);
+  // Maç sonunda da doğruluyoruz: Squad denge kilidi buradaki komutları da
+  // sessizce reddedebilir ve kuyruk 'ok' işaretlenmiş kalırdı.
+  if (uygulananlar.length > 0) {
+    await new Promise((r) => setTimeout(r, DOGRULAMA_BEKLEME_MS));
+    const okundu = await sunucuyuTazele(slug, true).catch(() => false);
+    if (okundu) {
+      const yeni = getServerState(slug);
+      for (const u of uygulananlar) {
+        const simdiki = yeni?.players.find((p) => p.steamId === u.steamId);
+        if (!simdiki || simdiki.teamId === null || u.oncekiTakim === null) continue;
+        if (String(simdiki.teamId) !== u.oncekiTakim) continue;
+        uygulanan -= 1;
+        await db
+          .update(teamChangeSchema.teamChangeQueue)
+          .set({ result: 'dogrulanamadi' })
+          .where(eq(teamChangeSchema.teamChangeQueue.id, u.kuyrukId));
+      }
+    }
+  }
   logger.info({ slug, kuyruk: kuyruk.length, uygulanan }, 'maç sonu takım değişimleri işlendi');
   return uygulanan;
 }
