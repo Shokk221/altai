@@ -64,6 +64,22 @@ export type KomutSonucu =
   | { durum: 'hata'; mesaj: string };
 
 /**
+ * Komut, bağlı sunuculardan en az birinde gerçekten çalıştı mı?
+ *
+ * Komut bütün sunuculara gönderiliyor çünkü oyuncunun hangisinde olduğunu
+ * bilmiyoruz; oyuncunun bulunmadığı sunucular da 'ok' döner (RCON zararsız
+ * bir "bulunamadı" verir). Yani bu, "oyuncu komutu gördü" değil, "komut
+ * kanalı uçtan uca çalıştı" demek — uyarının `delivered_at`'i buna bakıyor.
+ *
+ * Girdi bilerek `Record<string, string>`: çağıran taraf 'hata' durumunu
+ * mesajıyla birlikte tek dizeye indirgiyor ('hata: ...'), yalnızca tam
+ * 'ok' eşleşmesi başarı sayılır.
+ */
+export function komutUlasti(sonuclar: Record<string, string>): boolean {
+  return Object.values(sonuclar).some((durum) => durum === 'ok');
+}
+
+/**
  * Komutu gönderir ve agent'ın cevabını bekler.
  *
  * Hiçbir durumda throw etmez: çağıran taraf moderasyon eylemini bu sonuca

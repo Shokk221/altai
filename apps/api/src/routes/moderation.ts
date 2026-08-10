@@ -103,6 +103,8 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
 
         await writeAudit(tx, {
           actorUserId: actor?.id ?? null,
+          actorLabel: actor?.discordUsername ?? null,
+          requestId: String(req.id),
           action: 'ban.create',
           targetType: 'ban',
           targetId: created.id,
@@ -119,7 +121,12 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
       // agent kopuksa ya da RCON yanıt vermiyorsa ban yine geçerli, oyuncu
       // bir sonraki girişinde remote ban list tarafından engellenir.
       // Bu yüzden sonucu 201'in içinde bildiriyoruz, hata olarak değil.
-      const atma = await oyuncuyuAt(playerId.data, parsed.data.reason, actor?.id ?? 'sistem');
+      const atma = await oyuncuyuAt(
+        playerId.data,
+        parsed.data.reason,
+        actor?.id ?? 'sistem',
+        parsed.data.serverId ?? null,
+      );
 
       return reply.code(201).send({ ban, atma });
     },
@@ -128,18 +135,23 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
   /**
    * Oyuncuya, bağlı olduğu sunucular üzerinden bir RCON komutu gönderir.
    *
-   * Hangi sunucuda olduğunu bilmiyoruz (ban sunucu bağımsız olabilir), o
-   * yüzden bağlı tüm agent'lara gönderiyoruz. Oyuncu orada değilse RCON
-   * zararsız bir "bulunamadı" döner.
+   * Hangi sunucuda olduğunu bilmiyoruz, o yüzden bağlı tüm agent'lara
+   * gönderiyoruz. Oyuncu orada değilse RCON zararsız bir "bulunamadı" döner.
    *
    * Oyuncu kimliği (steamId/eosId) burada çözülüyor; çağıran taraf yalnızca
    * eyleme özgü alanları veriyor (kick için `reason`, warn için `message`).
+   *
+   * `kapsamServerId` doluysa YALNIZCA o sunucuya gidiliyor. Bu, sunucuya
+   * özel ban'lar için şart: kapsamı yok saymak, turnuva sunucusundan
+   * yasaklanan birinin ana sunucudaki maçından da atılması demekti.
+   * Uyarıda kapsam yok — uyarı sunucuya özel bir ceza değil.
    */
   async function oyuncuyaKomut(
     playerId: string,
     action: 'kick' | 'warn',
     payload: Record<string, unknown>,
     issuedBy: string,
+    kapsamServerId: string | null = null,
   ) {
     const [p] = await db
       .select({
@@ -152,11 +164,12 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
     if (!p) return { denendi: false as const };
 
     const sunucular = await db
-      .select({ slug: presenceSchema.servers.slug })
+      .select({ id: presenceSchema.servers.id, slug: presenceSchema.servers.slug })
       .from(presenceSchema.servers);
+    const kapsam = kapsamServerId ? sunucular.filter((s) => s.id === kapsamServerId) : sunucular;
 
     const sonuclar: Record<string, string> = {};
-    for (const s of sunucular) {
+    for (const s of kapsam) {
       if (!agentBagliMi(s.slug)) {
         sonuclar[s.slug] = 'agent_yok';
         continue;
@@ -172,9 +185,14 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
     return { denendi: true as const, sunucular: sonuclar };
   }
 
-  /** Ban sonrası oyuncuyu o anki maçtan çıkarır. */
-  function oyuncuyuAt(playerId: string, reason: string, issuedBy: string) {
-    return oyuncuyaKomut(playerId, 'kick', { reason }, issuedBy);
+  /** Ban sonrası oyuncuyu o anki maçtan çıkarır — ban'ın kapsadığı yerden. */
+  function oyuncuyuAt(
+    playerId: string,
+    reason: string,
+    issuedBy: string,
+    banServerId: string | null,
+  ) {
+    return oyuncuyaKomut(playerId, 'kick', { reason }, issuedBy, banServerId);
   }
 
   app.post<{ Params: { id: string }; Body: unknown }>(
@@ -204,6 +222,8 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
 
         await writeAudit(tx, {
           actorUserId: actor?.id ?? null,
+          actorLabel: actor?.discordUsername ?? null,
+          requestId: String(req.id),
           action: 'ban.revoke',
           targetType: 'ban',
           targetId: banId.data,
@@ -262,6 +282,8 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
 
         await writeAudit(tx, {
           actorUserId: actor?.id ?? null,
+          actorLabel: actor?.discordUsername ?? null,
+          requestId: String(req.id),
           action: 'record.create',
           targetType: 'player_record',
           targetId: created.id,
@@ -337,6 +359,8 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
 
         await writeAudit(tx, {
           actorUserId: actor?.id ?? null,
+          actorLabel: actor?.discordUsername ?? null,
+          requestId: String(req.id),
           action: 'record.resolve',
           targetType: 'player_record',
           targetId: id.data,
@@ -403,6 +427,8 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
 
         await writeAudit(tx, {
           actorUserId: actor?.id ?? null,
+          actorLabel: actor?.discordUsername ?? null,
+          requestId: String(req.id),
           action: 'flag.assign',
           targetType: 'flag_assignment',
           targetId: created.id,
@@ -445,6 +471,8 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
 
         await writeAudit(tx, {
           actorUserId: actor?.id ?? null,
+          actorLabel: actor?.discordUsername ?? null,
+          requestId: String(req.id),
           action: 'flag.remove',
           targetType: 'flag_assignment',
           targetId: id.data,
