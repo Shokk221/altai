@@ -408,16 +408,23 @@ async function decorate(db: Db, rows: BaseRow[]) {
     .select({
       playerId: identitySchema.playerNames.playerId,
       name: identitySchema.playerNames.name,
+      lastSeen: identitySchema.playerNames.lastSeen,
     })
     .from(identitySchema.playerNames)
     .where(inArray(identitySchema.playerNames.playerId, ids))
     .orderBy(desc(identitySchema.playerNames.lastSeen));
 
   const isimler = new Map<string, string[]>();
+  // Son görülme, isim geçmişinin en yeni damgası: liste zaten o sıraya göre
+  // geldiği için ilk satır yeterli, ayrı sorgu gerekmiyor.
+  const sonGorulme = new Map<string, Date | null>();
   for (const r of isimSatirlari) {
     const liste = isimler.get(r.playerId);
     if (liste) liste.push(r.name);
-    else isimler.set(r.playerId, [r.name]);
+    else {
+      isimler.set(r.playerId, [r.name]);
+      sonGorulme.set(r.playerId, r.lastSeen);
+    }
   }
 
   const now = new Date();
@@ -472,6 +479,7 @@ async function decorate(db: Db, rows: BaseRow[]) {
       // Güncel isim hariç eskiler; eşleşen isim zaten ayrıca gösteriliyor.
       eskiIsimler: hepsi.slice(1, 5).filter((n) => n !== r.matchedName),
       knownNames: hepsi.length,
+      sonGorulme: sonGorulme.get(r.id) ?? null,
       flags: etiketler.get(r.id) ?? [],
       hasActiveBan: banned.has(r.id),
     };

@@ -1,9 +1,9 @@
 'use client';
 
 import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
 import { EmptyState, Skeleton } from '@/components/ui/empty';
 import { Input } from '@/components/ui/input';
+import { tarih } from '@/lib/format';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -16,6 +16,8 @@ interface Result {
   /** Güncel isim hariç, en son kullanılan diğer isimler. */
   eskiIsimler: string[];
   knownNames: number;
+  /** İsim geçmişinin en yeni damgası. */
+  sonGorulme: string | null;
   flags: string[];
   hasActiveBan: boolean;
 }
@@ -94,8 +96,8 @@ export function PlayerSearch({ apiUrl, ilkSorgu = '' }: { apiUrl: string; ilkSor
 
       {state.kind === 'loading' ? (
         <div className="space-y-2" aria-busy="true">
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-[86px] w-full" />
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <Skeleton key={i} className="h-9 w-full" />
           ))}
         </div>
       ) : null}
@@ -110,60 +112,75 @@ export function PlayerSearch({ apiUrl, ilkSorgu = '' }: { apiUrl: string; ilkSor
       ) : null}
 
       {state.kind === 'done' && state.results.length > 0 ? (
-        <ul className="space-y-3">
-          {state.results.map((r) => (
-            <PlayerRow key={r.id} result={r} />
-          ))}
-        </ul>
+        // Kart yığını yerine TABLO: liste taranmak için, okunmak için değil.
+        // Kartlar dikeyde yer yiyip ekrana üç sonuç sığdırıyordu ve ekranın
+        // genişliğini hiç kullanmıyordu. Sütunlar aynı bilgiyi göz tek
+        // hizada tarayacak şekilde diziyor.
+        <div className="overflow-x-auto rounded border border-border">
+          <table className="w-full min-w-[54rem] text-[13px]">
+            <thead>
+              <tr className="border-b border-border text-left text-[10.5px] font-semibold uppercase tracking-wider text-fg-faint">
+                <th className="px-3 py-2">Oyuncu</th>
+                <th className="px-3 py-2">Eski isimler</th>
+                <th className="px-3 py-2">Steam</th>
+                <th className="px-3 py-2">EOS</th>
+                <th className="px-3 py-2 text-right">Son görülme</th>
+              </tr>
+            </thead>
+            <tbody className="[&>tr:last-child]:border-0">
+              {state.results.map((r) => (
+                <PlayerRow key={r.id} result={r} />
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : null}
     </div>
   );
 }
 
-/**
- * Masaüstünde satır, mobilde kart. Plan Bölüm 8: "tablolar mobilde kart
- * görünümüne düşer" — burada tek düzen ikisini de karşılıyor, çünkü
- * içerik zaten dikey akıyor.
- */
+/** Tablo satırı. Tüm satır tıklanabilir; hedef küçük olursa mobilde kullanılamıyor. */
 function PlayerRow({ result }: { result: Result }) {
   return (
-    <li>
-      {/* Tüm kart tıklanabilir: moderasyonda hedef küçük olursa mobilde
-          kullanılamıyor (plan Bölüm 8 — tek elle kullanım). */}
-      <Link href={`/oyuncular/${result.id}`} className="block">
-        <Card className="px-4 py-3 transition-colors hover:bg-surface-2">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+    <tr className="border-b border-border hover:bg-surface-2">
+      <td className="max-w-0 px-3 py-2">
+        <Link href={`/oyuncular/${result.id}`} className="block">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="truncate font-semibold">{result.name}</span>
             {result.hasActiveBan ? <Badge tone="danger">banlı</Badge> : null}
-            {result.flags.map((f) => (
+            {result.flags.slice(0, 3).map((f) => (
               <Badge key={f} tone="info">
                 {f}
               </Badge>
             ))}
-            {result.knownNames > 1 ? (
-              <span className="ml-auto text-[11px] text-fg-faint">{result.knownNames} isim</span>
+            {result.flags.length > 3 ? (
+              <span className="text-[11px] text-fg-faint">+{result.flags.length - 3}</span>
             ) : null}
           </div>
-
-          {/* Aranan isim güncelden farklıysa bunu göstermek şart: admin
-              neden bu sonucun çıktığını anlamalı. */}
+          {/* Aranan isim güncelden farklıysa göstermek şart: admin bu
+              sonucun neden çıktığını anlamalı. */}
           {result.matchedName && result.matchedName !== result.name ? (
-            <p className="mt-1.5 truncate text-[13px] text-fg-muted">
-              eşleşen isim: <span className="font-medium text-fg">{result.matchedName}</span>
-            </p>
+            <span className="mt-0.5 block truncate text-[11.5px] text-fg-muted">
+              eşleşen: <span className="font-medium text-fg">{result.matchedName}</span>
+            </span>
           ) : null}
+        </Link>
+      </td>
 
-          {result.eskiIsimler.length > 0 ? (
-            <p className="mt-1 truncate text-[12px] text-fg-faint">
-              eski: {result.eskiIsimler.join(' · ')}
-            </p>
-          ) : null}
+      <td className="max-w-0 px-3 py-2 text-fg-muted">
+        <span className="block truncate">
+          {result.eskiIsimler.length > 0 ? result.eskiIsimler.join(' · ') : '—'}
+        </span>
+        {result.knownNames > 1 ? (
+          <span className="text-[11px] text-fg-faint">{result.knownNames} isim</span>
+        ) : null}
+      </td>
 
-          <p className="mt-1.5 truncate font-mono text-[11px] text-fg-faint">
-            {result.steamId ?? 'Steam yok'} · {result.eosId ?? 'EOS yok'}
-          </p>
-        </Card>
-      </Link>
-    </li>
+      <td className="px-3 py-2 font-mono text-[11px] text-fg-muted">{result.steamId ?? '—'}</td>
+      <td className="px-3 py-2 font-mono text-[11px] text-fg-faint">{result.eosId ?? '—'}</td>
+      <td className="num whitespace-nowrap px-3 py-2 text-right text-[11.5px] text-fg-muted">
+        {tarih(result.sonGorulme)}
+      </td>
+    </tr>
   );
 }
