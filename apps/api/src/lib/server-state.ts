@@ -127,6 +127,41 @@ export function replacePlayers(
   publish(slug);
 }
 
+/**
+ * Takım değişimini canlı listeye ANINDA yansıtır.
+ *
+ * RCON tazelemesi 20 saniyede bir çalışıyor; ona bırakınca yetkili
+ * oyuncuyu karşıya attıktan sonra ekranda 20 saniye boyunca eski takımda
+ * görüyor ve komut çalışmadı sanıyor. Gerçek kurulumda böyle görüldü.
+ *
+ * Tahmin yürütmüyoruz: AdminForceTeamChange'in ne yaptığı belli —
+ * oyuncu karşı tarafa geçer ve mangasız kalır (mangada kalamaz, manga
+ * öteki takımda). Yine de hemen ardından bir tazeleme isteniyor, yani bu
+ * yalnızca aradaki boşluğu dolduruyor; doğrunun kaynağı hâlâ RCON.
+ */
+export function applyTeamChange(slug: string, steamIds: string[]) {
+  const s = state.get(slug);
+  if (!s) return;
+  const hedefler = new Set(steamIds);
+  let degisti = false;
+
+  s.players = s.players.map((p) => {
+    if (!hedefler.has(p.steamId)) return p;
+    // Takımı bilinmiyorsa çevirecek bir şey yok; tazeleme düzeltir.
+    if (p.teamId !== 1 && p.teamId !== 2) return p;
+    degisti = true;
+    return {
+      ...p,
+      teamId: p.teamId === 1 ? 2 : 1,
+      squadId: null,
+      squadName: null,
+      isLeader: false,
+    };
+  });
+
+  if (degisti) publish(slug);
+}
+
 export function applyPlayerDisconnected(slug: string, steamId: string) {
   const s = getOrInit(slug);
   s.players = s.players.filter((p) => p.steamId !== steamId);

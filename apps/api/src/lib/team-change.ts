@@ -4,7 +4,8 @@ import { logger } from '@altai/shared';
 import { and, eq, isNull } from 'drizzle-orm';
 import { kaydet } from './activity-log.js';
 import { komutGonder } from './agent-command-bus.js';
-import { getServerState } from './server-state.js';
+import { tazelemeyiPlanla } from './player-refresh.js';
+import { applyTeamChange, getServerState } from './server-state.js';
 
 /**
  * Zorla takım değiştirme.
@@ -81,6 +82,7 @@ export async function simdiDegistir(
   const issuedBy = actor.userId ?? 'panel';
   const metin = uyariMetni('simdi', mesaj);
   const sonuclar: Sonuc[] = [];
+  const gecenler: string[] = [];
 
   // Sırayla: RCON zaten tek kanal, paralel göndermek sıraya girmekten
   // hızlı değil ama hata ayıklamayı zorlaştırırdı.
@@ -93,6 +95,7 @@ export async function simdiDegistir(
       issuedBy,
     );
     const ok = sonuc.durum === 'ok';
+    if (ok) gecenler.push(h.steamId);
     sonuclar.push({
       steamId: h.steamId,
       name: h.name ?? null,
@@ -116,6 +119,16 @@ export async function simdiDegistir(
         sonuc: sonuc.durum,
       },
     });
+  }
+
+  // Ekran ANINDA doğruyu göstersin: RCON tazelemesi 20 saniyede bir
+  // çalışıyor ve o süre boyunca oyuncu eski takımında görünüyordu —
+  // yetkili komutun çalışmadığını sanıyordu.
+  if (gecenler.length > 0) {
+    applyTeamChange(slug, gecenler);
+    // İyimser güncelleme tahmin; doğrunun kaynağı hâlâ RCON. Kısa bir
+    // gecikmeyle listeyi baştan okuyup teyit ediyoruz.
+    tazelemeyiPlanla(slug);
   }
 
   return sonuclar;
@@ -283,7 +296,10 @@ export async function macSonuIsle(db: Db, slug: string, serverId: string): Promi
         kayit.requestedByUserId ?? 'panel',
       );
       sonuc = komut.durum === 'ok' ? 'ok' : 'komut_basarisiz';
-      if (komut.durum === 'ok') uygulanan += 1;
+      if (komut.durum === 'ok') {
+        uygulanan += 1;
+        applyTeamChange(slug, [kayit.steamId]);
+      }
     }
 
     await db
@@ -308,6 +324,7 @@ export async function macSonuIsle(db: Db, slug: string, serverId: string): Promi
     });
   }
 
+  if (uygulanan > 0) tazelemeyiPlanla(slug);
   logger.info({ slug, kuyruk: kuyruk.length, uygulanan }, 'maç sonu takım değişimleri işlendi');
   return uygulanan;
 }
