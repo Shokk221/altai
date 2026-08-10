@@ -54,9 +54,11 @@ function tpsRengi(tps: number): string {
   return 'text-danger';
 }
 
+type AdminIslem = 'warn' | 'kick' | 'ban' | 'broadcast' | 'cam_enter' | 'cam_exit';
+
 interface CanliOlay {
   id: string;
-  tur: 'join' | 'leave' | 'squad' | 'chat';
+  tur: 'join' | 'leave' | 'squad' | 'chat' | 'admin';
   serverSlug: string;
   name: string | null;
   steamId: string | null;
@@ -64,8 +66,27 @@ interface CanliOlay {
   message?: string;
   squadId?: string;
   squadName?: string;
+  /** Yalnızca yetkili işlemi. */
+  adminIslem?: AdminIslem;
+  sure?: string;
   timestamp: string;
 }
+
+/**
+ * Yetkili işlemlerinin okunur karşılığı.
+ *
+ * Oyundan gelen ham metin İngilizce ("Remote admin has warned player X");
+ * akışta Türkçe ve kısa duruyor, çünkü satır sohbetin arasında ve göz
+ * ucuyla taranıyor.
+ */
+const ADMIN_ETIKET: Record<AdminIslem, string> = {
+  warn: 'uyarıldı',
+  kick: 'sunucudan atıldı',
+  ban: 'banlandı',
+  broadcast: 'duyuru',
+  cam_enter: 'admin kamerasına girdi',
+  cam_exit: 'admin kamerasından çıktı',
+};
 
 const KANAL_RENK: Record<string, string> = {
   All: 'text-fg-faint',
@@ -291,7 +312,7 @@ export function LiveDashboard({
               <Cip etkin={olaySuzgeci === null} onClick={() => setOlaySuzgeci(null)}>
                 hepsi {olaylar.length}
               </Cip>
-              {(['chat', 'join', 'leave', 'squad'] as const)
+              {(['chat', 'admin', 'join', 'leave', 'squad'] as const)
                 .filter((t) => olaySayilari.has(t))
                 .map((t) => (
                   <Cip
@@ -299,7 +320,15 @@ export function LiveDashboard({
                     etkin={olaySuzgeci === t}
                     onClick={() => setOlaySuzgeci(olaySuzgeci === t ? null : t)}
                   >
-                    {{ chat: 'sohbet', join: 'giriş', leave: 'çıkış', squad: 'manga' }[t]}{' '}
+                    {
+                      {
+                        chat: 'sohbet',
+                        admin: 'yetkili',
+                        join: 'giriş',
+                        leave: 'çıkış',
+                        squad: 'manga',
+                      }[t]
+                    }{' '}
                     {olaySayilari.get(t)}
                   </Cip>
                 ))}
@@ -331,7 +360,7 @@ export function LiveDashboard({
                       'hover:bg-surface-2',
                       // Sistem olayları sohbetle yarışmamalı: sohbet okunmak
                       // için, giriş/çıkış göz ucuyla taranmak için.
-                      o.tur === 'chat' ? 'text-[13px]' : 'text-[12px]',
+                      o.tur === 'chat' || o.tur === 'admin' ? 'text-[13px]' : 'text-[12px]',
                     )}
                   >
                     <span className="num pt-[7px] text-right text-[11px] text-fg-faint">
@@ -565,6 +594,39 @@ function OlaySatiri({ olay }: { olay: CanliOlay }) {
         )}
         <span className="ml-1.5 break-words">{olay.message}</span>
       </>
+    );
+  }
+
+  if (olay.tur === 'admin') {
+    const islem = olay.adminIslem ?? 'warn';
+    // Yetkili işlemi sönük OLMAMALI: giriş/çıkış göz ucuyla taranıyor ama
+    // "şu oyuncu banlandı" satırı akışta kaybolmamalı.
+    const renk = islem === 'ban' || islem === 'kick' ? 'text-danger' : 'text-warn';
+    return (
+      <span className="text-fg-muted">
+        <span className={cn('mr-1.5 align-[0.09em] text-[9px]', renk)} aria-hidden>
+          ◆
+        </span>
+        {olay.name ? (
+          olay.steamId ? (
+            <Link href={`/oyuncular?q=${olay.steamId}`} className="font-medium hover:underline">
+              {olay.name}
+            </Link>
+          ) : (
+            // Squad uyarı satırında kimlik vermiyor; isimden profil
+            // aramasına gitmek yine de işe yarıyor.
+            <Link
+              href={`/oyuncular?q=${encodeURIComponent(olay.name)}`}
+              className="font-medium hover:underline"
+            >
+              {olay.name}
+            </Link>
+          )
+        ) : null}
+        <span className={cn('ml-1.5 font-medium', renk)}>{ADMIN_ETIKET[islem]}</span>
+        {olay.sure ? <span className="ml-1 text-fg-faint">({olay.sure})</span> : null}
+        {olay.message ? <span className="ml-1.5 break-words">· {olay.message}</span> : null}
+      </span>
     );
   }
 

@@ -11,7 +11,7 @@
  * olaylarla dolar — kayıp yok, asıl kayıt zaten yazılıyor.
  */
 
-export type OlayTuru = 'join' | 'leave' | 'squad' | 'chat';
+export type OlayTuru = 'join' | 'leave' | 'squad' | 'chat' | 'admin';
 
 export interface CanliOlay {
   id: string;
@@ -26,6 +26,12 @@ export interface CanliOlay {
   /** Yalnızca manga: numara ve ad. */
   squadId?: string;
   squadName?: string;
+  /**
+   * Yalnızca yetkili işlemi: hangi işlem ve varsa süresi. Metin `message`
+   * alanında taşınıyor — sohbetle aynı alan, çünkü ikisi de "şu yazıldı".
+   */
+  adminIslem?: 'warn' | 'kick' | 'ban' | 'broadcast' | 'cam_enter' | 'cam_exit';
+  sure?: string;
   timestamp: string;
 }
 

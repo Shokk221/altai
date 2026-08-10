@@ -103,6 +103,33 @@ export interface SquadJSTickRateRaw {
   time?: Date | string | undefined;
 }
 
+/**
+ * Yetkili işlemleri.
+ *
+ * Bunlar RCON'un sohbet kanalından geliyor: Squad bir admin komutu
+ * çalıştırıldığında "Remote admin has warned player X. Message was ..."
+ * gibi satırlar yayınlıyor ve SquadJS bunları ayrıştırıp olaya çeviriyor.
+ *
+ * Değeri şurada: oyun İÇİNDEN yapılan işlemler (admin tuşuyla atma, uyarma)
+ * panelden geçmiyor, yani başka hiçbir kaydımıza düşmüyordu. Tek görünür
+ * oldukları yer bu kanal.
+ *
+ * Ham veri kimlik konusunda cimri: uyarıda YALNIZCA isim var, SteamID yok.
+ * Bu yüzden kimlik alanları opsiyonel ve isim her zaman taşınıyor.
+ */
+export interface SquadJSAdminActionRaw {
+  name?: string | undefined;
+  /** Uyarı metni ya da kick/ban sebebi. */
+  reason?: string | undefined;
+  /** Yalnızca ban: "3d", "permanent" gibi Squad'ın kendi yazımı. */
+  interval?: string | undefined;
+  message?: string | undefined;
+  steamID?: string | undefined;
+  eosID?: string | undefined;
+  from?: string | undefined;
+  time?: Date | string | undefined;
+}
+
 // SquadJS'in ürettiği ham event isimleri — upstream'de bunlar sabit.
 export interface SquadJSEngineEvents {
   PLAYER_CONNECTED: (raw: SquadJSPlayerConnectedRaw) => void;
@@ -112,6 +139,12 @@ export interface SquadJSEngineEvents {
   ROUND_ENDED: (raw: SquadJSRoundEndedRaw) => void;
   SQUAD_CREATED: (raw: SquadJSSquadCreatedRaw) => void;
   TICK_RATE: (raw: SquadJSTickRateRaw) => void;
+  PLAYER_WARNED: (raw: SquadJSAdminActionRaw) => void;
+  PLAYER_KICKED: (raw: SquadJSAdminActionRaw) => void;
+  PLAYER_BANNED: (raw: SquadJSAdminActionRaw) => void;
+  ADMIN_BROADCAST: (raw: SquadJSAdminActionRaw) => void;
+  POSSESSED_ADMIN_CAMERA: (raw: SquadJSAdminActionRaw) => void;
+  UNPOSSESSED_ADMIN_CAMERA: (raw: SquadJSAdminActionRaw) => void;
 }
 
 export interface SquadJSEngine {

@@ -6,6 +6,8 @@ import { z } from 'zod';
 import { agentBagliMi, komutGonder } from '../lib/agent-command-bus.js';
 import { writeAudit } from '../lib/audit.js';
 import { requireSession } from '../lib/auth-guard.js';
+import { panelKomutuIsaretle } from '../lib/panel-komut-izi.js';
+import { oyuncuAdi } from '../lib/server-state.js';
 
 /**
  * Canlı ekrandan hızlı eylemler.
@@ -59,6 +61,10 @@ export async function liveActionRoutes(app: FastifyInstance, opts: { db: Db }) {
       const oyuncu = await oyuncuBul(parsed.data.steamId);
       const actor = req.authSession;
 
+      // Oyun bu komutu sohbet kanalından geri yayınlıyor; iz bırakmazsak
+      // aynı işlem günlüğe iki kez düşerdi (bkz. panel-komut-izi.ts).
+      panelKomutuIsaretle(slug, 'kick', oyuncuAdi(slug, parsed.data.steamId));
+
       const sonuc = await komutGonder(
         slug,
         'kick',
@@ -104,6 +110,8 @@ export async function liveActionRoutes(app: FastifyInstance, opts: { db: Db }) {
 
       const oyuncu = await oyuncuBul(parsed.data.steamId);
       const actor = req.authSession;
+
+      panelKomutuIsaretle(slug, 'warn', oyuncuAdi(slug, parsed.data.steamId));
 
       const sonuc = await komutGonder(
         slug,

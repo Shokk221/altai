@@ -1,4 +1,5 @@
 import type {
+  SquadJSAdminActionRaw,
   SquadJSChatMessageRaw,
   SquadJSEngine,
   SquadJSEngineEvents,
@@ -174,6 +175,19 @@ export function createSquadServerEngineAdapter(
             tickRate: data.tickRate,
             time: data.time,
           });
+        }) as RealListener);
+      } else if (
+        event === 'PLAYER_WARNED' ||
+        event === 'PLAYER_KICKED' ||
+        event === 'PLAYER_BANNED' ||
+        event === 'ADMIN_BROADCAST' ||
+        event === 'POSSESSED_ADMIN_CAMERA' ||
+        event === 'UNPOSSESSED_ADMIN_CAMERA'
+      ) {
+        // Altı olayın ham şekli aynı (isim + opsiyonel kimlik + metin);
+        // ayrım hangi olay adıyla geldiklerinde. Tek köprü yeterli.
+        register(event, listener, ((data: SquadJSAdminActionRaw) => {
+          (listener as (raw: SquadJSAdminActionRaw) => void)(data ?? {});
         }) as RealListener);
       } else if (event === 'ROUND_ENDED') {
         register(event, listener, ((data: RealRoundEndedData) => {

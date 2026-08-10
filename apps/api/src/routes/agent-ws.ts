@@ -8,6 +8,7 @@ import { kaydet } from '../lib/activity-log.js';
 import { agentBaglandi, agentKoptu, komutSonucuGeldi } from '../lib/agent-command-bus.js';
 import { girisAninda, kipiAyarla, taramayiBaslat } from '../lib/ban-enforcer.js';
 import { olayYayinla } from '../lib/live-feed.js';
+import { panelKomutuMu } from '../lib/panel-komut-izi.js';
 import {
   closeAllOpenSessions,
   createPersistenceWriter,
@@ -127,6 +128,47 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
             timestamp: event.timestamp,
           });
           break;
+        case 'ADMIN_ACTION': {
+          // Oyun içinden yapılan yetkili işlemleri. Akışta her zaman
+          // görünüyor: panelden gönderilmiş olsa bile "komut oyuna ulaştı"
+          // teyidi değerli.
+          olayYayinla({
+            tur: 'admin',
+            serverSlug,
+            steamId: event.steamId ?? null,
+            name: event.playerName ?? null,
+            adminIslem: event.action,
+            ...(event.message ? { message: event.message } : {}),
+            ...(event.interval ? { sure: event.interval } : {}),
+            timestamp: event.timestamp,
+          });
+
+          // Günlüğe YALNIZCA panelden geçmeyenler yazılıyor; panelin kendi
+          // komutu zaten player.warn / player.kick olarak kayıtlı ve yankısı
+          // ikinci bir satır olsaydı aynı işlem iki kez sayılırdı.
+          // Yalnızca panelin de gönderebildiği üç işlem için yankı
+          // kontrolü yapılıyor; duyuru ve admin kamerası panelden hiç
+          // gönderilmiyor, dolayısıyla yankı olamazlar.
+          const panelinKendisi =
+            (event.action === 'warn' || event.action === 'kick' || event.action === 'ban') &&
+            panelKomutuMu(serverSlug, event.action, event.playerName ?? null);
+          if (!panelinKendisi) {
+            kaydet({
+              actorType: 'game_server',
+              actorLabel: serverSlug,
+              action: `ingame.${event.action}`,
+              category: event.action === 'broadcast' ? 'sistem' : 'moderasyon',
+              targetType: 'player',
+              targetLabel: event.playerName ?? event.steamId ?? null,
+              payload: {
+                ...(event.message ? { mesaj: event.message } : {}),
+                ...(event.interval ? { sure: event.interval } : {}),
+                ...(event.steamId ? { steamId: event.steamId } : {}),
+              },
+            });
+          }
+          break;
+        }
       }
     };
 

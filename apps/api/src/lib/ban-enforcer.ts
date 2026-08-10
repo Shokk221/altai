@@ -6,6 +6,8 @@ import { and, eq, isNull, or } from 'drizzle-orm';
 import { kaydet } from './activity-log.js';
 import { agentBagliMi, komutGonder } from './agent-command-bus.js';
 import { aktifBanKosulu } from './ban-active.js';
+import { panelKomutuIsaretle } from './panel-komut-izi.js';
+import { oyuncuAdi } from './server-state.js';
 
 /**
  * Ban uygulaması — RCON üzerinden canlı denetim.
@@ -143,6 +145,9 @@ async function at(slug: string, ban: BanliOyuncu) {
     );
     return;
   }
+  // Zorlayıcının attığı oyuncu da oyundan yankı olarak geri geliyor;
+  // günlükte "yetkili attı" diye ikinci kez görünmesin.
+  panelKomutuIsaretle(slug, 'kick', ban.steamId ? oyuncuAdi(slug, ban.steamId) : null);
   const sonuc = await komutGonder(
     slug,
     'kick',

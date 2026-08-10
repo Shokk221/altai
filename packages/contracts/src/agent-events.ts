@@ -51,6 +51,32 @@ export const ServerSnapshotEvent = z.object({
 });
 
 /**
+ * Yetkili işlemi — uyarma, atma, banlama, duyuru, admin kamerası.
+ *
+ * Kaynak RCON'un sohbet kanalı: Squad bu işlemleri metin olarak yayınlıyor.
+ * Oyun İÇİNDEN yapılan işlemler panelden geçmediği için başka hiçbir
+ * kaydımıza düşmüyordu — tek görünür oldukları yer burası.
+ *
+ * `steamId` OPSİYONEL ve bu bilinçli: Squad uyarı satırında yalnızca ismi
+ * veriyor, kimlik yok. İsimle oyuncu uydurmak yerine kimliksiz bırakıp
+ * satırı yine de gösteriyoruz.
+ */
+export const AdminActionEvent = z.object({
+  type: z.literal('ADMIN_ACTION'),
+  serverSlug: z.string(),
+  action: z.enum(['warn', 'kick', 'ban', 'broadcast', 'cam_enter', 'cam_exit']),
+  /** İşlemin hedefi (duyuruda yok). */
+  playerName: z.string().optional(),
+  steamId: z.string().optional(),
+  eosId: z.string().optional(),
+  /** Uyarı metni, kick/ban sebebi ya da duyurunun kendisi. */
+  message: z.string().optional(),
+  /** Yalnızca ban: Squad'ın kendi süre yazımı ("3d", "0" = kalıcı). */
+  interval: z.string().optional(),
+  timestamp: z.string().datetime(),
+});
+
+/**
  * Maç başlangıcı — SquadJS'in NEW_GAME olayı.
  *
  * Faz 1'in "PersistenceWriter (… /round/ …)" maddesi. Geçmiş maçlar eski
@@ -106,6 +132,7 @@ export const AgentEvent = z.discriminatedUnion('type', [
   RoundStartedEvent,
   RoundEndedEvent,
   SquadCreatedEvent,
+  AdminActionEvent,
 ]);
 
 export type AgentEvent = z.infer<typeof AgentEvent>;

@@ -1,5 +1,6 @@
 import type { AgentEvent } from '@altai/contracts';
 import type {
+  SquadJSAdminActionRaw,
   SquadJSChatMessageRaw,
   SquadJSEngine,
   SquadJSNewGameRaw,
@@ -138,6 +139,38 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
     sonTickZamani = Date.now();
   };
 
+  /**
+   * Yetkili işlemlerinin altısı da aynı biçime dönüşüyor; tek fark
+   * `action` alanı. Alanlar YALNIZCA doluysa ekleniyor: sözleşmede hepsi
+   * opsiyonel ve boş string göndermek "adı boş olan oyuncu" demek olurdu.
+   */
+  const yetkiliIslemi =
+    (action: 'warn' | 'kick' | 'ban' | 'broadcast' | 'cam_enter' | 'cam_exit') =>
+    (raw: SquadJSAdminActionRaw) => {
+      const ad = raw.name?.trim();
+      // Uyarıda metin `reason` alanında, duyuruda `message` alanında geliyor.
+      const metin = (raw.message ?? raw.reason)?.trim();
+      const zaman = raw.time instanceof Date ? raw.time : new Date();
+      onEvent({
+        type: 'ADMIN_ACTION',
+        serverSlug,
+        action,
+        ...(ad ? { playerName: ad } : {}),
+        ...(raw.steamID ? { steamId: raw.steamID } : {}),
+        ...(raw.eosID ? { eosId: raw.eosID } : {}),
+        ...(metin ? { message: metin } : {}),
+        ...(raw.interval ? { interval: raw.interval } : {}),
+        timestamp: zaman.toISOString(),
+      });
+    };
+
+  const handleWarned = yetkiliIslemi('warn');
+  const handleKicked = yetkiliIslemi('kick');
+  const handleBanned = yetkiliIslemi('ban');
+  const handleBroadcast = yetkiliIslemi('broadcast');
+  const handleCamEnter = yetkiliIslemi('cam_enter');
+  const handleCamExit = yetkiliIslemi('cam_exit');
+
   const handleSquadCreated = (raw: SquadJSSquadCreatedRaw) => {
     const ad = raw.player?.name?.trim();
     const squadId = raw.squadID === undefined || raw.squadID === null ? '' : String(raw.squadID);
@@ -188,6 +221,12 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
       engine.on('ROUND_ENDED', handleRoundEnded);
       engine.on('SQUAD_CREATED', handleSquadCreated);
       engine.on('TICK_RATE', handleTickRate);
+      engine.on('PLAYER_WARNED', handleWarned);
+      engine.on('PLAYER_KICKED', handleKicked);
+      engine.on('PLAYER_BANNED', handleBanned);
+      engine.on('ADMIN_BROADCAST', handleBroadcast);
+      engine.on('POSSESSED_ADMIN_CAMERA', handleCamEnter);
+      engine.on('UNPOSSESSED_ADMIN_CAMERA', handleCamExit);
       snapshotTimer = setInterval(takeSnapshot, snapshotIntervalMs);
       void takeSnapshot();
     },
@@ -199,6 +238,12 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
       engine.off('ROUND_ENDED', handleRoundEnded);
       engine.off('SQUAD_CREATED', handleSquadCreated);
       engine.off('TICK_RATE', handleTickRate);
+      engine.off('PLAYER_WARNED', handleWarned);
+      engine.off('PLAYER_KICKED', handleKicked);
+      engine.off('PLAYER_BANNED', handleBanned);
+      engine.off('ADMIN_BROADCAST', handleBroadcast);
+      engine.off('POSSESSED_ADMIN_CAMERA', handleCamEnter);
+      engine.off('UNPOSSESSED_ADMIN_CAMERA', handleCamExit);
       if (snapshotTimer) clearInterval(snapshotTimer);
     },
   };
