@@ -134,10 +134,12 @@ for await (const doc of readCollection('admingroups')) {
     continue;
   }
   seenGroup.add(name);
+  // Mongo'daki alan adı `permissions`; bizde `squadPermissions` (oyun içi
+  // erişim seviyeleri — panel izinleriyle karışmasın diye ayrıştırıldı).
   const permissions = typeof doc.permissions === 'string' ? doc.permissions : '';
   groupRows.push({
     name,
-    permissions,
+    squadPermissions: permissions,
     grantMode: defaultGrantMode(permissions),
     source: SOURCE,
     externalId: docId(doc),

@@ -6,7 +6,8 @@
   "scripts": {
     "start": "tsx --env-file-if-exists=../../.env src/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "chat": "tsx src/chat.ts"
   },
   "dependencies": {
     "@altai/shared": "workspace:*",
