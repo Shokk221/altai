@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { EmptyState, Skeleton } from '@/components/ui/empty';
 import { Input } from '@/components/ui/input';
+import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 interface Result {
@@ -124,35 +125,39 @@ export function PlayerSearch({ apiUrl }: { apiUrl: string }) {
 function PlayerRow({ result }: { result: Result }) {
   return (
     <li>
-      <Card className="transition-colors hover:bg-surface-2">
-        <div className="flex flex-col gap-2 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2.5">
-              <span className="truncate text-[15px] font-semibold">{result.name}</span>
-              {result.hasActiveBan ? <Badge tone="danger">BANLI</Badge> : null}
-            </div>
+      {/* Tüm kart tıklanabilir: moderasyonda hedef küçük olursa mobilde
+          kullanılamıyor (plan Bölüm 8 — tek elle kullanım). */}
+      <Link href={`/oyuncular/${result.id}`} className="block">
+        <Card className="transition-colors hover:bg-surface-2">
+          <div className="flex flex-col gap-2 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2.5">
+                <span className="truncate text-[15px] font-semibold">{result.name}</span>
+                {result.hasActiveBan ? <Badge tone="danger">BANLI</Badge> : null}
+              </div>
 
-            {/* Aranan isim güncel isimden farklıysa bunu göstermek şart:
+              {/* Aranan isim güncel isimden farklıysa bunu göstermek şart:
                 admin neden bu sonucun çıktığını anlamalı. */}
-            {result.matchedName && result.matchedName !== result.name ? (
-              <p className="mt-1 truncate text-sm text-fg-muted">
-                eşleşen eski isim:{' '}
-                <span className="font-semibold text-fg">{result.matchedName}</span>
+              {result.matchedName && result.matchedName !== result.name ? (
+                <p className="mt-1 truncate text-sm text-fg-muted">
+                  eşleşen eski isim:{' '}
+                  <span className="font-semibold text-fg">{result.matchedName}</span>
+                </p>
+              ) : null}
+
+              <p className="mt-1.5 truncate font-mono text-[11px] text-fg-muted">
+                {result.steamId ?? '— Steam yok'} · {result.eosId ?? '— EOS yok'}
               </p>
-            ) : null}
-
-            <p className="mt-1.5 truncate font-mono text-[11px] text-fg-muted">
-              {result.steamId ?? '— Steam yok'} · {result.eosId ?? '— EOS yok'}
-            </p>
-          </div>
-
-          {result.knownNames > 1 ? (
-            <div className="shrink-0">
-              <Badge>{result.knownNames} isim</Badge>
             </div>
-          ) : null}
-        </div>
-      </Card>
+
+            {result.knownNames > 1 ? (
+              <div className="shrink-0">
+                <Badge>{result.knownNames} isim</Badge>
+              </div>
+            ) : null}
+          </div>
+        </Card>
+      </Link>
     </li>
   );
 }
