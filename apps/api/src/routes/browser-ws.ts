@@ -2,6 +2,7 @@ import type { Db } from '@altai/db';
 import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
 import { requireSession } from '../lib/auth-guard.js';
+import { sohbetDinle, sonMesajlar } from '../lib/live-chat.js';
 import { listServerStates, onServerStateChange } from '../lib/server-state.js';
 
 /**
@@ -18,12 +19,23 @@ export async function browserWsRoutes(app: FastifyInstance, opts: { db: Db }) {
   app.get('/ws', { websocket: true, preValidation: guard }, (socket: WebSocket) => {
     // Bağlanır bağlanmaz mevcut durumun tamamı gönderilir (ilk yükleme için)
     socket.send(JSON.stringify({ type: 'snapshot', servers: listServerStates() }));
+    // Son mesajlar da hemen gidiyor: yeni açılan ekran boş başlamasın,
+    // bağlamı yakalasın.
+    socket.send(JSON.stringify({ type: 'chat_snapshot', messages: sonMesajlar() }));
 
-    const unsubscribe = onServerStateChange((slug, state) => {
+    const durumBirak = onServerStateChange((slug, state) => {
       if (socket.readyState !== socket.OPEN) return;
       socket.send(JSON.stringify({ type: 'update', serverSlug: slug, state }));
     });
 
-    socket.on('close', unsubscribe);
+    const sohbetBirak = sohbetDinle((mesaj) => {
+      if (socket.readyState !== socket.OPEN) return;
+      socket.send(JSON.stringify({ type: 'chat', message: mesaj }));
+    });
+
+    socket.on('close', () => {
+      durumBirak();
+      sohbetBirak();
+    });
   });
 }

@@ -6,6 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
 import { agentBaglandi, agentKoptu, komutSonucuGeldi } from '../lib/agent-command-bus.js';
 import { girisAninda, kipiAyarla, taramayiBaslat } from '../lib/ban-enforcer.js';
+import { sohbetYayinla } from '../lib/live-chat.js';
 import {
   closeAllOpenSessions,
   createPersistenceWriter,
@@ -16,6 +17,7 @@ import {
   applyPlayerConnected,
   applyPlayerDisconnected,
   applyServerSnapshot,
+  oyuncuAdi,
 } from '../lib/server-state.js';
 import { timingSafeCompare } from '../lib/timing-safe.js';
 
@@ -74,6 +76,17 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
           break;
         case 'SERVER_SNAPSHOT':
           applyServerSnapshot(serverSlug, event.playerCount, event.queueCount, event.layer);
+          break;
+        case 'CHAT_MESSAGE':
+          // İsmi olay taşımıyor; canlı oyuncu listesinden çözülüyor.
+          sohbetYayinla({
+            serverSlug,
+            steamId: event.steamId,
+            name: oyuncuAdi(serverSlug, event.steamId),
+            channel: event.channel,
+            message: event.message,
+            timestamp: event.timestamp,
+          });
           break;
         case 'CHAT_MESSAGE':
           // Faz 3'te bot'a / admin cam benzeri özelliklere yönlendirilecek.

@@ -35,6 +35,15 @@ export function getServerState(slug: string): LiveServerState | undefined {
   return state.get(slug);
 }
 
+/**
+ * Canlı listedeki oyuncunun adı. Sohbet olayı isim taşımıyor (sözleşmede
+ * yalnızca steamId var) ama canlı ekranda kimin konuştuğu görünmeli.
+ * Oyuncu listede yoksa null — uydurma isim üretmiyoruz.
+ */
+export function oyuncuAdi(slug: string, steamId: string): string | null {
+  return state.get(slug)?.players.find((p) => p.steamId === steamId)?.name ?? null;
+}
+
 export function listServerStates(): LiveServerState[] {
   return [...state.values()];
 }

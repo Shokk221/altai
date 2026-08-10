@@ -26,8 +26,8 @@ type State =
 const MIN_QUERY = 2;
 const DEBOUNCE_MS = 250;
 
-export function PlayerSearch({ apiUrl }: { apiUrl: string }) {
-  const [query, setQuery] = useState('');
+export function PlayerSearch({ apiUrl, ilkSorgu = '' }: { apiUrl: string; ilkSorgu?: string }) {
+  const [query, setQuery] = useState(ilkSorgu);
   const [state, setState] = useState<State>({ kind: 'idle' });
   // Yavaş bir isteğin, sonradan yazılan aramanın sonucunu ezmesini engeller.
   const requestId = useRef(0);
