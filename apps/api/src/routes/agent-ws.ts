@@ -8,6 +8,7 @@ import { kaydet } from '../lib/activity-log.js';
 import { agentBaglandi, agentKoptu, komutSonucuGeldi } from '../lib/agent-command-bus.js';
 import { girisAninda, kipiAyarla, taramayiBaslat } from '../lib/ban-enforcer.js';
 import { olayYayinla } from '../lib/live-feed.js';
+import { otomatikMi } from '../lib/otomatik-mesaj.js';
 import { panelKomutuMu } from '../lib/panel-komut-izi.js';
 import {
   closeAllOpenSessions,
@@ -167,12 +168,21 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
           const panelinKendisi =
             (event.action === 'warn' || event.action === 'kick' || event.action === 'ban') &&
             panelKomutuMu(serverSlug, event.action, event.playerName ?? null);
+          // Sunucudaki eklentiler (manga uyarısı, TK özür sistemi, hoş
+          // geldin mesajı) insan yetkiliyle AYNI kanaldan yazıyor ve
+          // ölçüldüğünde günlüğün %65'ini kaplıyorlardı. Ayrı eylem adına
+          // alınıyorlar: düşürülmüyor ama moderasyon kırılımını
+          // boğmuyorlar.
+          const otomatik =
+            (event.action === 'warn' || event.action === 'broadcast') &&
+            otomatikMi(serverSlug, event.message);
+
           if (!panelinKendisi) {
             kaydet({
               actorType: 'game_server',
               actorLabel: serverSlug,
-              action: `ingame.${event.action}`,
-              category: event.action === 'broadcast' ? 'sistem' : 'moderasyon',
+              action: otomatik ? `ingame.${event.action}_auto` : `ingame.${event.action}`,
+              category: otomatik || event.action === 'broadcast' ? 'sistem' : 'moderasyon',
               targetType: 'player',
               targetLabel: event.playerName ?? event.steamId ?? null,
               payload: {

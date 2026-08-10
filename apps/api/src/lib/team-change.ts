@@ -1,9 +1,10 @@
 import type { Db } from '@altai/db';
 import { teamChangeSchema } from '@altai/db';
 import { logger } from '@altai/shared';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { kaydet } from './activity-log.js';
 import { komutGonder } from './agent-command-bus.js';
+import { panelKomutuIsaretle } from './panel-komut-izi.js';
 import { sunucuyuTazele, tazelemeyiPlanla } from './player-refresh.js';
 import { applyTeamChange, getServerState } from './server-state.js';
 
@@ -61,6 +62,11 @@ function uyariMetni(zaman: Zaman, mesaj: string | undefined): string {
  * feda etmek olurdu.
  */
 async function uyar(slug: string, hedef: Hedef, metin: string, issuedBy: string) {
+  // Bu uyarı da oyundan yankı olarak geri geliyor ve iz bırakılmazsa
+  // "yetkili oyuncuyu uyardı" diye ikinci kez günlüğe düşüyor. Canlıda
+  // görüldü: "Bir yetkili sizi karşı takıma aldı." metni ingame.warn
+  // olarak 6 kez kayıtlıydı.
+  panelKomutuIsaretle(slug, 'warn', hedef.name ?? null);
   const sonuc = await komutGonder(
     slug,
     'warn',
@@ -149,8 +155,34 @@ export async function macSonunaErtele(
   const issuedBy = actor.userId ?? 'panel';
   const metin = uyariMetni('mac_sonu', mesaj);
 
+  // Aynı oyuncu için ikinci bir bekleyen kayıt açılmıyor: maç sonunda iki
+  // kez çevirmek oyuncuyu başladığı yere geri getirirdi (komut hedef takım
+  // almıyor, sadece "diğer tarafa geç" diyor).
+  const zatenBekleyen = await db
+    .select({ steamId: teamChangeSchema.teamChangeQueue.steamId })
+    .from(teamChangeSchema.teamChangeQueue)
+    .where(
+      and(
+        eq(teamChangeSchema.teamChangeQueue.serverId, serverId),
+        isNull(teamChangeSchema.teamChangeQueue.settledAt),
+        inArray(
+          teamChangeSchema.teamChangeQueue.steamId,
+          hedefler.map((h) => h.steamId),
+        ),
+      ),
+    );
+  const bekleyenKume = new Set(zatenBekleyen.map((r) => r.steamId));
+  const yeniler = hedefler.filter((h) => !bekleyenKume.has(h.steamId));
+  if (yeniler.length === 0) {
+    return hedefler.map((h) => ({
+      steamId: h.steamId,
+      name: h.name ?? null,
+      durum: 'kuyruga_alindi' as const,
+    }));
+  }
+
   await db.insert(teamChangeSchema.teamChangeQueue).values(
-    hedefler.map((h) => ({
+    yeniler.map((h) => ({
       serverId,
       playerId: h.playerId ?? null,
       steamId: h.steamId,
@@ -162,7 +194,7 @@ export async function macSonunaErtele(
     })),
   );
 
-  for (const h of hedefler) {
+  for (const h of yeniler) {
     await uyar(slug, h, metin, issuedBy);
     kaydet({
       actorType: actor.userId ? 'user' : 'system',

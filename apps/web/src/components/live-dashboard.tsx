@@ -624,9 +624,14 @@ function Manga({
   return (
     <div>
       {/* Sürükleme tutamağı manga BAŞLIĞI: satırın kendisi sürüklenebilir
-          olsaydı tek oyuncu taşımak isteyen kişi kazara mangayı taşırdı. */}
+          olsaydı tek oyuncu taşımak isteyen kişi kazara mangayı taşırdı.
+
+          "Mangasız" SÜRÜKLENEMEZ (`sonuk`): o bir manga değil, mangaya
+          girmemiş herkesin toplandığı kutu — dolu sunucuda 20'yi geçiyor.
+          Tek kazara hareketle yarım takımı karşıya atmak maçı bitirirdi.
+          Oradan tek tek oyuncu sürüklemek çalışmaya devam ediyor. */}
       <div
-        draggable={takimYetkisi}
+        draggable={takimYetkisi && !sonuk}
         onDragStart={(e) =>
           yukuYaz(e, {
             adaylar: uyeler.map((u) => ({ steamId: u.steamId, name: u.name })),
@@ -636,9 +641,9 @@ function Manga({
         }
         className={cn(
           'mb-1 flex items-baseline justify-between gap-2 border-b border-border pb-1',
-          takimYetkisi && 'cursor-grab active:cursor-grabbing',
+          takimYetkisi && !sonuk && 'cursor-grab active:cursor-grabbing',
         )}
-        title={takimYetkisi ? 'Karşı takıma sürükle' : undefined}
+        title={takimYetkisi && !sonuk ? 'Karşı takıma sürükle' : undefined}
       >
         <span
           className={cn(
