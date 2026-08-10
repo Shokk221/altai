@@ -339,13 +339,27 @@ export function LiveDashboard({ wsUrl }: { wsUrl: string }) {
             {gosterilenOlaylar.length === 0 ? (
               <p className="py-8 text-center text-xs text-fg-muted">Henüz olay yok</p>
             ) : (
-              <ul className="flex flex-col gap-0.5">
+              <ul className="flex flex-col">
                 {gosterilenOlaylar.map((o) => (
-                  <li key={o.id} className="text-[13px] leading-snug">
-                    <span className="num mr-1.5 text-[11px] text-fg-faint">
+                  <li
+                    key={o.id}
+                    // Izgara ŞART: satır tek parça metin olduğunda uzun mesaj
+                    // sarınca zamanın altına kayıyor ve göz hizayı kaybediyor.
+                    // Sabit zaman sütunu + içerik sütunu asılı girinti veriyor.
+                    className={cn(
+                      'grid grid-cols-[2.6rem_1fr] gap-x-2 rounded-sm px-1.5 py-[3px]',
+                      'hover:bg-surface-2',
+                      // Sistem olayları sohbetle yarışmamalı: sohbet okunmak
+                      // için, giriş/çıkış göz ucuyla taranmak için.
+                      o.tur === 'chat' ? 'text-[13px]' : 'text-[12px]',
+                    )}
+                  >
+                    <span className="num pt-px text-right text-[11px] text-fg-faint">
                       {saat(o.timestamp)}
                     </span>
-                    <OlaySatiri olay={o} />
+                    <span className="min-w-0 leading-[1.45]">
+                      <OlaySatiri olay={o} />
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -357,53 +371,67 @@ export function LiveDashboard({ wsUrl }: { wsUrl: string }) {
   );
 }
 
+/**
+ * Tek olay satırı.
+ *
+ * Sohbette İSİM renkli ve dolgun, MESAJ normal: sohbet istemcilerinin
+ * evrensel kalıbı ve okurken gözün kime ait olduğunu aramasını engelliyor.
+ * Önceki sürümde mesaj sönük griydi — asıl okunacak şey en zayıf renkteydi.
+ *
+ * Kanal, metin etiketi yerine renkli NOKTA ile gösteriliyor: uzun bir
+ * listede her satırın başındaki büyük harfli "GENEL/TAKIM/MANGA" bloğu
+ * gürültü yapıyordu; renk zaten ayırt ediyor, sözcük yer kaplıyor.
+ * Nokta `title` taşıyor, üstüne gelince kanal adı çıkıyor.
+ */
 function OlaySatiri({ olay }: { olay: CanliOlay }) {
-  const isim = olay.steamId ? (
-    <Link href={`/oyuncular?q=${olay.steamId}`} className="font-semibold hover:text-accent">
-      {olay.name ?? olay.steamId}
-    </Link>
-  ) : (
-    <span className="font-semibold">{olay.name ?? '(bilinmiyor)'}</span>
-  );
+  const isimMetni = olay.name ?? olay.steamId ?? '(bilinmiyor)';
 
   if (olay.tur === 'chat') {
+    const renk = KANAL_RENK[olay.channel ?? ''] ?? 'text-fg-muted';
     return (
       <>
         <span
-          className={cn(
-            'mr-1.5 text-[10px] font-semibold tracking-wide',
-            KANAL_RENK[olay.channel ?? ''] ?? 'text-fg-muted',
-          )}
+          className={cn('mr-1.5 align-[0.09em] text-[9px]', renk)}
+          title={KANAL_ETIKET[olay.channel ?? ''] ?? olay.channel}
+          aria-hidden
         >
-          {KANAL_ETIKET[olay.channel ?? ''] ?? olay.channel}
+          ●
         </span>
-        {isim}
-        <span className="ml-1 break-words text-fg-muted">{olay.message}</span>
+        {olay.steamId ? (
+          <Link
+            href={`/oyuncular?q=${olay.steamId}`}
+            className={cn('font-semibold hover:underline', renk)}
+          >
+            {isimMetni}
+          </Link>
+        ) : (
+          <span className={cn('font-semibold', renk)}>{isimMetni}</span>
+        )}
+        <span className="ml-1.5 break-words">{olay.message}</span>
       </>
     );
   }
-  if (olay.tur === 'join') {
-    return (
-      <>
-        {isim} <span className="text-success">sunucuya girdi</span>
-      </>
-    );
-  }
-  if (olay.tur === 'leave') {
-    return (
-      <>
-        {isim} <span className="text-fg-muted">sunucudan çıktı</span>
-      </>
-    );
-  }
+
+  // Sistem olayları: tek renk, ismi vurgulu ama satırın tamamı sönük.
+  const isim = olay.steamId ? (
+    <Link href={`/oyuncular?q=${olay.steamId}`} className="font-medium hover:text-fg">
+      {isimMetni}
+    </Link>
+  ) : (
+    <span className="font-medium">{isimMetni}</span>
+  );
+
+  const aciklama =
+    olay.tur === 'join'
+      ? 'girdi'
+      : olay.tur === 'leave'
+        ? 'çıktı'
+        : `manga ${olay.squadId} kurdu${olay.squadName ? ` · ${olay.squadName}` : ''}`;
+
   return (
-    <>
-      {isim}{' '}
-      <span className="text-fg-muted">
-        manga {olay.squadId} kurdu
-        {olay.squadName ? ` (${olay.squadName})` : ''}
-      </span>
-    </>
+    <span className="text-fg-faint">
+      {isim} {aciklama}
+    </span>
   );
 }
 
