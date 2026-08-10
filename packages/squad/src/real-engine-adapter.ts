@@ -7,6 +7,7 @@ import type {
   SquadJSPlayerConnectedRaw,
   SquadJSPlayerDisconnectedRaw,
   SquadJSRoundEndedRaw,
+  SquadJSSquadCreatedRaw,
   SquadJSServerStatusRaw,
 } from './engine.js';
 
@@ -24,7 +25,16 @@ export interface RealSquadServerLike {
   readonly publicQueue: number;
   readonly currentLayer?: { name?: string } | null;
   // SquadJS bu diziyi RCON ListPlayers ve log eventleriyle güncel tutuyor.
-  readonly players?: { steamID?: string; eosID?: string; name?: string }[];
+  readonly players?: {
+    steamID?: string;
+    eosID?: string;
+    name?: string;
+    teamID?: number | string | null;
+    squadID?: number | string | null;
+    squadName?: string | null;
+    role?: string | null;
+    isLeader?: boolean;
+  }[];
   rcon: {
     execute(command: string): Promise<string>;
   };
@@ -151,6 +161,10 @@ export function createSquadServerEngineAdapter(
           };
           (listener as SquadJSEngineEvents['NEW_GAME'])(raw);
         }) as RealListener);
+      } else if (event === 'SQUAD_CREATED') {
+        register(event, listener, ((data: SquadJSSquadCreatedRaw) => {
+          (listener as SquadJSEngineEvents['SQUAD_CREATED'])(data);
+        }) as RealListener);
       } else if (event === 'ROUND_ENDED') {
         register(event, listener, ((data: RealRoundEndedData) => {
           const raw: SquadJSRoundEndedRaw = {
@@ -181,10 +195,19 @@ export function createSquadServerEngineAdapter(
     async getPlayers(): Promise<SquadJSOnlinePlayer[]> {
       // SquadJS listeyi zaten bellekte tutuyor; her çağrıda RCON'a gitmek
       // 60 saniyede bir gereksiz yük olurdu.
+      const sayiya = (v: unknown): number | null => {
+        const n = typeof v === 'number' ? v : Number(v);
+        return Number.isFinite(n) ? n : null;
+      };
       return (real.players ?? []).map((p) => ({
         steamId: p.steamID ?? null,
         eosId: p.eosID ?? null,
         name: p.name ?? '',
+        teamId: sayiya(p.teamID),
+        squadId: sayiya(p.squadID),
+        squadName: p.squadName ?? null,
+        role: p.role ?? null,
+        isLeader: p.isLeader === true,
       }));
     },
 

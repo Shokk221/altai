@@ -75,6 +75,23 @@ export const RoundEndedEvent = z.object({
   timestamp: z.string().datetime(),
 });
 
+/**
+ * Manga kuruldu. Canlı ekrandaki olay akışının parçası — BattleMetrics'te de
+ * "X has created Squad 3" satırı olarak görünüyor ve moderasyonda kimin
+ * hangi mangayı kurduğu takip ediliyor.
+ */
+export const SquadCreatedEvent = z.object({
+  type: z.literal('SQUAD_CREATED'),
+  serverSlug: z.string(),
+  playerName: z.string(),
+  steamId: z.string().nullish(),
+  eosId: z.string().nullish(),
+  squadId: z.string(),
+  squadName: z.string(),
+  teamName: z.string().nullish(),
+  timestamp: z.string().datetime(),
+});
+
 export const AgentEvent = z.discriminatedUnion('type', [
   PlayerConnectedEvent,
   PlayerDisconnectedEvent,
@@ -82,6 +99,7 @@ export const AgentEvent = z.discriminatedUnion('type', [
   ServerSnapshotEvent,
   RoundStartedEvent,
   RoundEndedEvent,
+  SquadCreatedEvent,
 ]);
 
 export type AgentEvent = z.infer<typeof AgentEvent>;

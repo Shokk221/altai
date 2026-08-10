@@ -1,7 +1,14 @@
 export interface LivePlayer {
   steamId: string;
+  eosId: string | null;
   name: string;
   joinedAt: string;
+  /** RCON tazelemesinden gelir; olaydan gelen satırlarda null olabilir. */
+  teamId: number | null;
+  squadId: number | null;
+  squadName: string | null;
+  role: string | null;
+  isLeader: boolean;
 }
 
 export interface LiveServerState {
@@ -67,9 +74,46 @@ export function applyPlayerConnected(
 ) {
   const s = getOrInit(slug);
   if (!s.players.some((p) => p.steamId === steamId)) {
-    s.players.push({ steamId, name, joinedAt: timestamp });
+    // Takım/manga/rol henüz bilinmiyor: oyuncu daha yeni girdi, mangaya
+    // katılmadı. Bir sonraki RCON tazelemesi dolduruyor.
+    s.players.push({
+      steamId,
+      eosId: null,
+      name,
+      joinedAt: timestamp,
+      teamId: null,
+      squadId: null,
+      squadName: null,
+      role: null,
+      isLeader: false,
+    });
     s.playerCount = s.players.length;
   }
+  publish(slug);
+}
+
+/**
+ * RCON'dan gelen tam listeyle değiştirir.
+ *
+ * Olaylardan türeyen liste zamanla gerçekten AYRIŞIYOR: kaçırılan bir
+ * disconnect oyuncuyu sonsuza kadar listede bırakıyor, takım/manga bilgisi
+ * ise olaylarda hiç gelmiyor. RCON tek doğru kaynak.
+ *
+ * `joinedAt` korunuyor: RCON oyuncunun ne zaman girdiğini bilmiyor, o bilgi
+ * yalnızca bizde var ve canlı ekranda "ne kadardır burada" olarak okunuyor.
+ */
+export function replacePlayers(
+  slug: string,
+  gelenler: Omit<LivePlayer, 'joinedAt'>[],
+  simdi: string,
+) {
+  const s = getOrInit(slug);
+  const oncekiGiris = new Map(s.players.map((p) => [p.steamId, p.joinedAt]));
+  s.players = gelenler.map((p) => ({
+    ...p,
+    joinedAt: oncekiGiris.get(p.steamId) ?? simdi,
+  }));
+  s.playerCount = s.players.length;
   publish(slug);
 }
 
@@ -89,9 +133,8 @@ export function applyServerSnapshot(
   const s = getOrInit(slug);
   s.queueCount = queueCount;
   if (layer !== undefined) s.layer = layer;
-  // playerCount kaynağı asıl connect/disconnect eventleri; snapshot sadece
-  // queue/layer günceller ve RCON'un gördüğü sayı çok sapmışsa (kaçırılmış
-  // event) düzeltir.
+  // Oyuncu sayısının asıl kaynağı artık RCON tazelemesi (replacePlayers);
+  // snapshot yalnızca iki tazeleme arasında sayıyı güncel tutuyor.
   if (Math.abs(s.players.length - playerCount) > 0) s.playerCount = playerCount;
   publish(slug);
 }

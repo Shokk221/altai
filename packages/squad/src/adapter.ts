@@ -6,6 +6,7 @@ import type {
   SquadJSPlayerConnectedRaw,
   SquadJSPlayerDisconnectedRaw,
   SquadJSRoundEndedRaw,
+  SquadJSSquadCreatedRaw,
 } from './engine.js';
 
 const CHAT_CHANNEL_MAP: Record<SquadJSChatMessageRaw['chat'], 'All' | 'Team' | 'Squad' | 'Admin'> =
@@ -113,6 +114,25 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
     });
   };
 
+  const handleSquadCreated = (raw: SquadJSSquadCreatedRaw) => {
+    const ad = raw.player?.name?.trim();
+    const squadId = raw.squadID === undefined || raw.squadID === null ? '' : String(raw.squadID);
+    // Kim kurduğu bilinmiyorsa satırın anlamı kalmıyor; olayı üretmiyoruz.
+    if (!ad || !squadId) return;
+    const zaman = raw.time instanceof Date ? raw.time : new Date();
+    onEvent({
+      type: 'SQUAD_CREATED',
+      serverSlug,
+      playerName: ad,
+      ...(raw.player?.steamID ? { steamId: raw.player.steamID } : {}),
+      ...(raw.player?.eosID ? { eosId: raw.player.eosID } : {}),
+      squadId,
+      squadName: raw.squadName ?? `Squad ${squadId}`,
+      ...(raw.teamName ? { teamName: raw.teamName } : {}),
+      timestamp: zaman.toISOString(),
+    });
+  };
+
   async function takeSnapshot() {
     try {
       const status = await engine.getStatus();
@@ -138,6 +158,7 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
       engine.on('CHAT_MESSAGE', handleChat);
       engine.on('NEW_GAME', handleNewGame);
       engine.on('ROUND_ENDED', handleRoundEnded);
+      engine.on('SQUAD_CREATED', handleSquadCreated);
       snapshotTimer = setInterval(takeSnapshot, snapshotIntervalMs);
       void takeSnapshot();
     },
@@ -147,6 +168,7 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
       engine.off('CHAT_MESSAGE', handleChat);
       engine.off('NEW_GAME', handleNewGame);
       engine.off('ROUND_ENDED', handleRoundEnded);
+      engine.off('SQUAD_CREATED', handleSquadCreated);
       if (snapshotTimer) clearInterval(snapshotTimer);
     },
   };

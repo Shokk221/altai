@@ -6,12 +6,13 @@ import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
 import { agentBaglandi, agentKoptu, komutSonucuGeldi } from '../lib/agent-command-bus.js';
 import { girisAninda, kipiAyarla, taramayiBaslat } from '../lib/ban-enforcer.js';
-import { sohbetYayinla } from '../lib/live-chat.js';
+import { olayYayinla } from '../lib/live-feed.js';
 import {
   closeAllOpenSessions,
   createPersistenceWriter,
   reconcileStaleSessions,
 } from '../lib/persistence-writer.js';
+import { tazelemeyiBaslat } from '../lib/player-refresh.js';
 import { resolveServerId } from '../lib/server-registry.js';
 import {
   applyPlayerConnected,
@@ -32,8 +33,12 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
   // oyuncu içerideyken yenen banları yakalar.
   kipiAyarla(config.BAN_ENFORCEMENT);
   const taramayiDurdur = taramayiBaslat(db);
+  // Canlı oyuncu listesini RCON'dan tazeler: olaylardan türeyen liste
+  // takım/manga taşımıyor ve kaçırılan çıkışlarla ayrışıyor.
+  const tazelemeyiDurdur = tazelemeyiBaslat(db);
   app.addHook('onClose', async () => {
     taramayiDurdur();
+    tazelemeyiDurdur();
     await writer.stop();
   });
 
@@ -60,6 +65,13 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
       switch (event.type) {
         case 'PLAYER_CONNECTED': {
           applyPlayerConnected(serverSlug, event.steamId, event.name, event.timestamp);
+          olayYayinla({
+            tur: 'join',
+            serverSlug,
+            steamId: event.steamId,
+            name: event.name,
+            timestamp: event.timestamp,
+          });
           // Ban uygulaması: girer girmez kontrol. Beklemiyoruz — kalıcı
           // yazımı geciktirmesin; başarısız olursa periyodik tarama yakalar.
           const sslug = serverSlug;
@@ -72,6 +84,14 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
           break;
         }
         case 'PLAYER_DISCONNECTED':
+          olayYayinla({
+            tur: 'leave',
+            serverSlug,
+            steamId: event.steamId,
+            // Ad, oyuncu listeden çıkarılmadan ÖNCE okunmalı.
+            name: oyuncuAdi(serverSlug, event.steamId),
+            timestamp: event.timestamp,
+          });
           applyPlayerDisconnected(serverSlug, event.steamId);
           break;
         case 'SERVER_SNAPSHOT':
@@ -79,12 +99,24 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
           break;
         case 'CHAT_MESSAGE':
           // İsmi olay taşımıyor; canlı oyuncu listesinden çözülüyor.
-          sohbetYayinla({
+          olayYayinla({
+            tur: 'chat',
             serverSlug,
             steamId: event.steamId,
             name: oyuncuAdi(serverSlug, event.steamId),
             channel: event.channel,
             message: event.message,
+            timestamp: event.timestamp,
+          });
+          break;
+        case 'SQUAD_CREATED':
+          olayYayinla({
+            tur: 'squad',
+            serverSlug,
+            steamId: event.steamId ?? null,
+            name: event.playerName,
+            squadId: event.squadId,
+            squadName: event.squadName,
             timestamp: event.timestamp,
           });
           break;

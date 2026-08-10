@@ -39,6 +39,12 @@ export const OnlinePlayer = z.object({
   steamId: z.string().nullable(),
   eosId: z.string().nullable(),
   name: z.string(),
+  /** RCON ListPlayers'tan: takım 1/2, manga numarası, rol, manga lideri mi. */
+  teamId: z.number().int().nullable(),
+  squadId: z.number().int().nullable(),
+  squadName: z.string().nullable(),
+  role: z.string().nullable(),
+  isLeader: z.boolean(),
 });
 export const OnlinePlayers = z.object({ players: z.array(OnlinePlayer) });
 export type OnlinePlayer = z.infer<typeof OnlinePlayer>;

@@ -47,6 +47,20 @@ export interface SquadJSOnlinePlayer {
   steamId: string | null;
   eosId: string | null;
   name: string;
+  teamId: number | null;
+  squadId: number | null;
+  squadName: string | null;
+  role: string | null;
+  isLeader: boolean;
+}
+
+/** SquadJS'in SQUAD_CREATED olayi. */
+export interface SquadJSSquadCreatedRaw {
+  player?: { name?: string; steamID?: string; eosID?: string } | null | undefined;
+  squadID?: string | number | undefined;
+  squadName?: string | undefined;
+  teamName?: string | undefined;
+  time?: Date | string | undefined;
 }
 
 export interface SquadJSServerStatusRaw {
@@ -85,6 +99,7 @@ export interface SquadJSEngineEvents {
   CHAT_MESSAGE: (raw: SquadJSChatMessageRaw) => void;
   NEW_GAME: (raw: SquadJSNewGameRaw) => void;
   ROUND_ENDED: (raw: SquadJSRoundEndedRaw) => void;
+  SQUAD_CREATED: (raw: SquadJSSquadCreatedRaw) => void;
 }
 
 export interface SquadJSEngine {
