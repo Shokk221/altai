@@ -8,9 +8,12 @@ import { type ReactNode, useState } from 'react';
 /**
  * Oyuncu profilindeki yazma eylemleri.
  *
- * Hepsi aynı kalıbı izliyor: istek at, hata varsa AYNI YERDE göster, başarılı
- * olursa sayfayı tazele. Hata mesajını üstte tek bir yere toplamak, hangi
- * eylemin başarısız olduğunu belirsiz bırakıyordu.
+ * Eylemler künye bandının içinde duruyor ve kapalıyken TEK SATIR yer
+ * kaplıyor. İlk sürümde ban formu ve not formu ayrı ayrı, sürekli açık
+ * bloklardı; sayfanın yarısını doldurup asıl bilgiyi ekrandan itiyorlardı.
+ *
+ * Her eylem hatasını kendi yanında gösteriyor: tek bir üst bölgede toplamak
+ * hangi işlemin başarısız olduğunu belirsiz bırakıyordu.
  */
 
 const API_HATALARI: Record<string, string> = {
@@ -62,68 +65,123 @@ function useEylem(apiUrl: string) {
     }
   }
 
-  return { calistir, bekliyor, hata, setHata };
+  return { calistir, bekliyor, hata };
 }
 
 function Hata({ children }: { children: ReactNode }) {
   if (!children) return null;
-  return <p className="mt-2 text-sm font-medium text-danger">{children}</p>;
+  return <p className="mt-2 text-xs font-medium text-danger">{children}</p>;
 }
 
-// --------------------------------------------------------------------- ban
-export function BanFormu({ apiUrl, playerId }: { apiUrl: string; playerId: string }) {
+type Kip = null | 'ban' | 'note' | 'warning' | 'watchlist';
+
+const KAYIT_ETIKET: Record<'note' | 'warning' | 'watchlist', string> = {
+  note: 'Not',
+  warning: 'Uyarı',
+  watchlist: 'Takip',
+};
+
+/**
+ * Kompakt eylem çubuğu.
+ *
+ * Kapalıyken düğme satırı, açıkken aynı yerde tek satırlık form. Formu
+ * açmak sayfanın düzenini kaydırmasın diye yükseklik farkı en aza indirildi.
+ */
+export function HizliEylemler({
+  apiUrl,
+  playerId,
+  banlayabilir,
+  notYazabilir,
+}: {
+  apiUrl: string;
+  playerId: string;
+  banlayabilir: boolean;
+  notYazabilir: boolean;
+}) {
   const { calistir, bekliyor, hata } = useEylem(apiUrl);
-  const [acik, setAcik] = useState(false);
-  const [sebep, setSebep] = useState('');
-  // Süre gün olarak; boş = kalıcı. Tarih girdisi yerine gün, moderasyonda
-  // çok daha hızlı: "3 gün" yazmak takvim açmaktan kolay.
+  const [kip, setKip] = useState<Kip>(null);
+  const [metin, setMetin] = useState('');
+  // Ban süresi gün olarak; boş = kalıcı. Takvim açmaktan hızlı.
   const [gun, setGun] = useState('');
 
-  if (!acik) {
+  const kapat = () => {
+    setKip(null);
+    setMetin('');
+    setGun('');
+  };
+
+  const gonder = async () => {
+    if (!kip) return;
+    let ok = false;
+    if (kip === 'ban') {
+      const g = Number(gun);
+      const expiresAt =
+        gun.trim() === '' ? null : new Date(Date.now() + Math.max(1, g) * 86_400_000).toISOString();
+      ok = await calistir(`/players/${playerId}/bans`, { reason: metin.trim(), expiresAt });
+    } else {
+      ok = await calistir(`/players/${playerId}/records`, { kind: kip, body: metin.trim() });
+    }
+    if (ok) kapat();
+  };
+
+  if (kip === null) {
     return (
-      <Button variant="danger" onClick={() => setAcik(true)}>
-        Ban at
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        {banlayabilir ? (
+          <Button variant="danger" size="sm" onClick={() => setKip('ban')}>
+            Ban at
+          </Button>
+        ) : null}
+        {notYazabilir
+          ? (['note', 'warning', 'watchlist'] as const).map((k) => (
+              <Button key={k} variant="soft" size="sm" onClick={() => setKip(k)}>
+                {KAYIT_ETIKET[k]} ekle
+              </Button>
+            ))
+          : null}
+      </div>
     );
   }
 
-  const gonder = async () => {
-    const g = Number(gun);
-    const expiresAt =
-      gun.trim() === '' ? null : new Date(Date.now() + Math.max(1, g) * 86_400_000).toISOString();
-    const ok = await calistir(`/players/${playerId}/bans`, { reason: sebep.trim(), expiresAt });
-    if (ok) {
-      setAcik(false);
-      setSebep('');
-      setGun('');
-    }
-  };
+  const banKipi = kip === 'ban';
+  const yeterli = banKipi ? metin.trim().length >= 3 : metin.trim().length > 0;
 
   return (
-    <div className="w-full rounded bg-surface-2 p-4">
-      <p className="mb-3 text-sm font-semibold">Ban at</p>
+    <div>
       <div className="flex flex-col gap-2 sm:flex-row">
         <Input
-          placeholder="Sebep (oyuncuya gösterilir)"
-          value={sebep}
-          onChange={(e) => setSebep(e.target.value)}
+          autoFocus
+          placeholder={banKipi ? 'Ban sebebi (oyuncuya gösterilir)' : `${KAYIT_ETIKET[kip]} metni`}
+          value={metin}
+          onChange={(e) => setMetin(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && yeterli) void gonder();
+            if (e.key === 'Escape') kapat();
+          }}
           className="flex-1"
         />
-        <Input
-          placeholder="Gün (boş = kalıcı)"
-          inputMode="numeric"
-          value={gun}
-          onChange={(e) => setGun(e.target.value.replace(/\D/g, ''))}
-          className="sm:w-44"
-        />
-      </div>
-      <div className="mt-3 flex gap-2">
-        <Button variant="danger" onClick={gonder} disabled={bekliyor || sebep.trim().length < 3}>
-          {bekliyor ? 'Uygulanıyor…' : 'Banla'}
-        </Button>
-        <Button variant="ghost" onClick={() => setAcik(false)} disabled={bekliyor}>
-          Vazgeç
-        </Button>
+        {banKipi ? (
+          <Input
+            placeholder="Gün (boş = kalıcı)"
+            inputMode="numeric"
+            value={gun}
+            onChange={(e) => setGun(e.target.value.replace(/\D/g, ''))}
+            className="sm:w-40"
+          />
+        ) : null}
+        <div className="flex gap-2">
+          <Button
+            variant={banKipi ? 'danger' : 'ink'}
+            size="sm"
+            onClick={gonder}
+            disabled={bekliyor || !yeterli}
+          >
+            {bekliyor ? '…' : banKipi ? 'Banla' : 'Ekle'}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={kapat} disabled={bekliyor}>
+            Vazgeç
+          </Button>
+        </div>
       </div>
       <Hata>{hata}</Hata>
     </div>
@@ -147,72 +205,23 @@ export function BanKaldir({ apiUrl, banId }: { apiUrl: string; banId: string }) 
   );
 }
 
-// ----------------------------------------------------------------- kayıtlar
-const KAYIT_TURLERI = [
-  { kind: 'note', etiket: 'Not' },
-  { kind: 'warning', etiket: 'Uyarı' },
-  { kind: 'watchlist', etiket: 'Takip' },
-] as const;
-
-export function KayitFormu({ apiUrl, playerId }: { apiUrl: string; playerId: string }) {
-  const { calistir, bekliyor, hata } = useEylem(apiUrl);
-  const [kind, setKind] = useState<(typeof KAYIT_TURLERI)[number]['kind']>('note');
-  const [metin, setMetin] = useState('');
-
-  const gonder = async () => {
-    const ok = await calistir(`/players/${playerId}/records`, { kind, body: metin.trim() });
-    if (ok) setMetin('');
-  };
-
-  return (
-    <div className="rounded bg-surface-2 p-4">
-      <div className="mb-3 flex gap-2">
-        {KAYIT_TURLERI.map((t) => (
-          <Button
-            key={t.kind}
-            size="sm"
-            variant={kind === t.kind ? 'accent' : 'ghost'}
-            onClick={() => setKind(t.kind)}
-          >
-            {t.etiket}
-          </Button>
-        ))}
-      </div>
-      <textarea
-        value={metin}
-        onChange={(e) => setMetin(e.target.value)}
-        rows={3}
-        placeholder="Ne oldu?"
-        className="w-full rounded bg-surface px-4 py-3 text-base text-fg placeholder:text-fg-muted/70 focus-visible:outline-none sm:text-sm"
-      />
-      <div className="mt-3">
-        <Button onClick={gonder} disabled={bekliyor || metin.trim().length === 0}>
-          {bekliyor ? 'Ekleniyor…' : 'Ekle'}
-        </Button>
-      </div>
-      <Hata>{hata}</Hata>
-    </div>
-  );
-}
-
 export function KaydiKapat({ apiUrl, recordId }: { apiUrl: string; recordId: string }) {
   const { calistir, bekliyor, hata } = useEylem(apiUrl);
   return (
     <div>
-      <Button
-        variant="ghost"
-        size="sm"
+      <button
+        type="button"
         onClick={() => calistir(`/records/${recordId}/resolve`)}
         disabled={bekliyor}
+        className="text-[11px] font-semibold text-fg-muted transition-colors hover:text-fg disabled:opacity-40"
       >
-        {bekliyor ? '…' : 'Kapat'}
-      </Button>
+        {bekliyor ? '…' : 'kapat'}
+      </button>
       <Hata>{hata}</Hata>
     </div>
   );
 }
 
-// ------------------------------------------------------------------ etiket
 export function EtiketKaldir({ apiUrl, atamaId }: { apiUrl: string; atamaId: string }) {
   const { calistir, bekliyor } = useEylem(apiUrl);
   return (
