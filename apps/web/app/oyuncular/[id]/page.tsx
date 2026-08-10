@@ -1,4 +1,6 @@
 import { ChatPanel, type Mesaj } from '@/components/chat-panel';
+import { CoplayPanel } from '@/components/coplay-panel';
+import { FlagPicker } from '@/components/flag-picker';
 import { BanKaldir, EtiketKaldir, HizliEylemler, KaydiKapat } from '@/components/player-actions';
 import { Badge } from '@/components/ui/badge';
 import { getJson, getMe, publicApiUrl } from '@/lib/api';
@@ -99,14 +101,17 @@ function Panel({
   children,
 }: {
   baslik: string;
-  sayac: number;
+  /** Verilmezse başlıkta sayı gösterilmez (henüz yüklenmemiş paneller). */
+  sayac?: number;
   children: ReactNode;
 }) {
   return (
     <section className="flex min-h-0 flex-col rounded bg-surface">
       <header className="flex shrink-0 items-baseline justify-between gap-2 px-4 pt-3.5 pb-2">
         <h2 className="text-sm font-semibold">{baslik}</h2>
-        <span className="text-xs tabular-nums text-fg-muted">{sayac}</span>
+        {sayac === undefined ? null : (
+          <span className="text-xs tabular-nums text-fg-muted">{sayac}</span>
+        )}
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">{children}</div>
     </section>
@@ -179,6 +184,13 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
               {etiketYonetir ? <EtiketKaldir apiUrl={apiUrl} atamaId={f.id} /> : null}
             </span>
           ))}
+          {etiketYonetir ? (
+            <FlagPicker
+              apiUrl={apiUrl}
+              playerId={player.id}
+              atanmisIdler={aktifEtiketler.map((f) => f.flagId)}
+            />
+          ) : null}
           <span className="ml-auto font-mono text-[11px] text-fg-muted">
             {player.steamId ?? 'Steam yok'} · {player.eosId ?? 'EOS yok'}
           </span>
@@ -210,7 +222,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
       </header>
 
       {/* çalışma alanı: yan yana paneller, her biri kendi içinde kayar */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-4">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_1.35fr_1fr]">
         <Panel baslik="Banlar" sayac={profil.bans.length}>
           {profil.bans.length === 0 ? (
             <Bos metin="Ban kaydı yok" />
@@ -281,25 +293,33 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
           <ChatPanel apiUrl={apiUrl} playerId={player.id} ilkMesajlar={profil.sohbet} />
         </Panel>
 
-        <Panel baslik="İsim geçmişi" sayac={profil.names.length}>
-          {profil.names.length === 0 ? (
-            <Bos metin="İsim kaydı yok" />
-          ) : (
-            <ul className="flex flex-col">
-              {profil.names.map((n) => (
-                <li
-                  key={n.name}
-                  className="flex items-baseline justify-between gap-3 py-1.5 text-[13px]"
-                >
-                  <span className="truncate">{n.name}</span>
-                  <span className="shrink-0 text-[11px] tabular-nums text-fg-muted">
-                    {tarih(n.lastSeen)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
+        {/* Son sütun ikiye bölünüyor: coplay ve isim geçmişi kısa listeler,
+            tam sütun harcamaya değmiyor. */}
+        <div className="flex min-h-0 flex-col gap-3">
+          <Panel baslik="Birlikte oynadıkları">
+            <CoplayPanel apiUrl={apiUrl} playerId={player.id} />
+          </Panel>
+
+          <Panel baslik="İsim geçmişi" sayac={profil.names.length}>
+            {profil.names.length === 0 ? (
+              <Bos metin="İsim kaydı yok" />
+            ) : (
+              <ul className="flex flex-col">
+                {profil.names.map((n) => (
+                  <li
+                    key={n.name}
+                    className="flex items-baseline justify-between gap-3 py-1.5 text-[13px]"
+                  >
+                    <span className="truncate">{n.name}</span>
+                    <span className="shrink-0 text-[11px] tabular-nums text-fg-muted">
+                      {tarih(n.lastSeen)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </div>
       </div>
     </main>
   );

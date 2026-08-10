@@ -150,6 +150,13 @@ export async function playerRoutes(app: FastifyInstance, opts: { db: Db }) {
               from game_sessions g
              where g.server_id = b.server_id
                and g.player_id <> ${id}
+               -- PENCERE. Bu satır olmadan sorgu 417 bin oturumu tam
+               -- tarıyordu (564 ms): "benden önce başlamış" koşulu
+               -- tarihsel olarak neredeyse her satırı kapsıyor ve indeks
+               -- seçici olamıyor. Bir oturum sonsuza kadar sürmez;
+               -- veritabanındaki en uzunu 55 saat, üç gün rahat bir üst
+               -- sınır. Pencereyle 15 ms.
+               and g.joined_at > b.joined_at - interval '3 days'
                and g.joined_at < b.left_at
                and coalesce(g.left_at, now()) > b.joined_at
           ) o on true
