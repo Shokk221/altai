@@ -223,84 +223,16 @@ export function LiveDashboard({ wsUrl }: { wsUrl: string }) {
         {/* Bölüm bağlantıları üst çubukta; burada tekrarlamıyoruz. */}
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[1.25fr_1fr]">
-        {/* ------------------------------------------------ oyuncu tablosu */}
-        <section className="flex min-h-0 flex-col rounded border border-border bg-surface">
-          <div className="shrink-0 px-4 pt-3.5 pb-2">
-            <div className="mb-2 flex items-baseline justify-between">
-              <h2 className="text-sm font-semibold">Sunucudakiler</h2>
-              <span className="num text-xs text-fg-faint">{gosterilenOyuncular.length}</span>
-            </div>
-            <Input
-              value={oyuncuArama}
-              onChange={(e) => setOyuncuArama(e.target.value)}
-              placeholder="İsim, SteamID, EOS ya da manga…"
-              className="min-h-9 px-3.5 text-[13px]"
-            />
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-            {gosterilenOyuncular.length === 0 ? (
-              <p className="py-8 text-center text-xs text-fg-muted">
-                {tumOyuncular.length === 0 ? 'Sunucuda kimse yok' : 'Eşleşen oyuncu yok'}
-              </p>
-            ) : (
-              <table className="w-full text-[13px]">
-                <thead className="sticky top-0 bg-surface text-left text-[10.5px] font-semibold uppercase tracking-wider text-fg-faint">
-                  <tr>
-                    <th className="pb-1.5 font-bold">Oyuncu</th>
-                    <th className="pb-1.5 font-bold">Tk</th>
-                    <th className="pb-1.5 font-bold">Mg</th>
-                    <th className="pb-1.5 font-bold">Rol</th>
-                    <th className="pb-1.5 text-right font-bold">Süre</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {gosterilenOyuncular.map((p) => (
-                    <tr key={`${p.serverSlug}:${p.steamId}`} className="hover:bg-surface-2">
-                      <td className="max-w-0 py-1 pr-2">
-                        <Link href={`/oyuncular?q=${p.steamId}`} className="block truncate">
-                          <span className="font-medium">{p.name}</span>
-                          {p.isLeader ? (
-                            <span className="ml-1.5 text-[10px] font-semibold text-accent">SL</span>
-                          ) : null}
-                          <span className="block truncate font-mono text-[10.5px] text-fg-faint">
-                            {p.steamId}
-                          </span>
-                        </Link>
-                      </td>
-                      <td className="num py-1 pr-2">
-                        <span
-                          className={cn(
-                            'font-semibold',
-                            // Takım renkleri oyundaki karşılığıyla eşleşiyor
-                            // ve her ekranda aynı kalıyor.
-                            p.teamId === 1
-                              ? 'text-team1'
-                              : p.teamId === 2
-                                ? 'text-team2'
-                                : 'text-fg-faint',
-                          )}
-                        >
-                          {p.teamId ?? '—'}
-                        </span>
-                      </td>
-                      <td className="max-w-[7rem] truncate py-1 pr-2 text-fg-muted">
-                        {p.squadId ? (p.squadName ?? p.squadId) : '—'}
-                      </td>
-                      <td className="max-w-[6rem] truncate py-1 pr-2 text-fg-muted">
-                        {rolKisalt(p.role)}
-                      </td>
-                      <td className="num py-1 text-right text-[11px] text-fg-faint">
-                        {suredir(p.joinedAt)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </section>
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_1.1fr]">
+        {/* --------------------------------------------- takım tahtaları */}
+        <TakimPaneli
+          takim={1}
+          oyuncular={gosterilenOyuncular}
+          toplam={tumOyuncular.length}
+          arama={oyuncuArama}
+          setArama={setOyuncuArama}
+        />
+        <TakimPaneli takim={2} oyuncular={gosterilenOyuncular} toplam={tumOyuncular.length} />
 
         {/* ------------------------------------------------------ olay akışı */}
         <section className="flex min-h-0 flex-col rounded border border-border bg-surface">
@@ -388,6 +320,144 @@ export function LiveDashboard({ wsUrl }: { wsUrl: string }) {
  * gürültü yapıyordu; renk zaten ayırt ediyor, sözcük yer kaplıyor.
  * Nokta `title` taşıyor, üstüne gelince kanal adı çıkıyor.
  */
+/**
+ * Takım tahtası: oyuncular MANGAYA göre gruplu.
+ *
+ * Düz liste, sunucudaki gerçek yapıyı gizliyordu — Squad'da anlamlı birim
+ * manga ve moderasyon "hangi mangada kim var" diye bakıyor. Oyun içindeki
+ * skor tahtasıyla aynı kırılım.
+ *
+ * Mangasızlar en sona: sayıları çok ve genelde yeni girenler, mangaların
+ * arasına karışınca yapı okunmuyor.
+ */
+function TakimPaneli({
+  takim,
+  oyuncular,
+  toplam,
+  arama,
+  setArama,
+}: {
+  takim: 1 | 2;
+  oyuncular: (LivePlayer & { serverSlug: string })[];
+  toplam: number;
+  arama?: string;
+  setArama?: (v: string) => void;
+}) {
+  const benimkiler = oyuncular.filter((p) => p.teamId === takim);
+
+  const mangalar = new Map<number, (LivePlayer & { serverSlug: string })[]>();
+  const mangasiz: (LivePlayer & { serverSlug: string })[] = [];
+  for (const p of benimkiler) {
+    if (p.squadId) {
+      const liste = mangalar.get(p.squadId);
+      if (liste) liste.push(p);
+      else mangalar.set(p.squadId, [p]);
+    } else {
+      mangasiz.push(p);
+    }
+  }
+  const sirali = [...mangalar.entries()].sort((a, b) => a[0] - b[0]);
+  const renk = takim === 1 ? 'text-team1' : 'text-team2';
+
+  return (
+    <section className="flex min-h-0 flex-col rounded border border-border bg-surface">
+      <div className="shrink-0 px-4 pt-3.5 pb-2">
+        <div className="mb-2 flex items-baseline justify-between">
+          <h2 className={cn('text-sm font-semibold', renk)}>Takım {takim}</h2>
+          <span className="num text-xs text-fg-faint">
+            {benimkiler.length} · {sirali.length} manga
+          </span>
+        </div>
+        {setArama ? (
+          <Input
+            value={arama ?? ''}
+            onChange={(e) => setArama(e.target.value)}
+            placeholder="İsim, SteamID, EOS ya da manga…"
+            className="min-h-9 px-3.5 text-[13px]"
+          />
+        ) : (
+          // İkinci panelde kutu yok ama hizanın bozulmaması için aynı
+          // yüksekliği ayırıyoruz.
+          <div className="min-h-9" aria-hidden />
+        )}
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+        {benimkiler.length === 0 ? (
+          <p className="py-8 text-center text-xs text-fg-muted">
+            {toplam === 0 ? 'Sunucuda kimse yok' : 'Bu takımda eşleşen yok'}
+          </p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {sirali.map(([no, uyeler]) => (
+              <Manga
+                key={no}
+                baslik={`${no}. ${uyeler[0]?.squadName ?? 'Manga'}`}
+                uyeler={uyeler}
+              />
+            ))}
+            {mangasiz.length > 0 ? <Manga baslik="Mangasız" uyeler={mangasiz} sonuk /> : null}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function Manga({
+  baslik,
+  uyeler,
+  sonuk,
+}: {
+  baslik: string;
+  uyeler: (LivePlayer & { serverSlug: string })[];
+  sonuk?: boolean;
+}) {
+  // Manga lideri başta: skor tahtasında da öyle ve "kime yazayım" sorusunun
+  // cevabı o.
+  const sirali = [...uyeler].sort(
+    (a, b) => Number(b.isLeader) - Number(a.isLeader) || a.name.localeCompare(b.name, 'tr'),
+  );
+  return (
+    <div>
+      <div className="mb-1 flex items-baseline justify-between gap-2 border-b border-border pb-1">
+        <span
+          className={cn(
+            'truncate text-[11px] font-semibold uppercase tracking-wide',
+            sonuk ? 'text-fg-faint' : 'text-fg-muted',
+          )}
+        >
+          {baslik}
+        </span>
+        <span className="num shrink-0 text-[11px] text-fg-faint">{uyeler.length}</span>
+      </div>
+      <ul className="flex flex-col">
+        {sirali.map((p) => (
+          <li key={`${p.serverSlug}:${p.steamId}`}>
+            <Link
+              href={`/oyuncular?q=${p.steamId}`}
+              className="flex items-baseline justify-between gap-2 rounded-sm px-1 py-[3px] text-[13px] hover:bg-surface-2"
+            >
+              <span className="min-w-0 truncate">
+                {p.isLeader ? (
+                  <span className="mr-1.5 text-[10px] font-semibold text-accent">SL</span>
+                ) : null}
+                {p.name}
+              </span>
+              {/* Rol ve ne kadardır içeride: ikisi de moderasyonda bakılan
+                  şeyler, yan yana sığıyor. */}
+              <span className="num shrink-0 text-[11px] text-fg-faint">
+                {rolKisalt(p.role)}
+                <span className="ml-1.5 opacity-70">{suredir(p.joinedAt)}</span>
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function OlaySatiri({ olay }: { olay: CanliOlay }) {
   const isimMetni = olay.name ?? olay.steamId ?? '(bilinmiyor)';
 
