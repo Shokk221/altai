@@ -3,7 +3,7 @@ import { identitySchema, moderationSchema, presenceSchema } from '@altai/db';
 import { and, eq, isNull } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { agentBagliMi, komutGonder } from '../lib/agent-command-bus.js';
+import { agentBagliMi, komutGonder, komutUlasti } from '../lib/agent-command-bus.js';
 import { writeAudit } from '../lib/audit.js';
 import { requireSession } from '../lib/auth-guard.js';
 
@@ -103,8 +103,6 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
 
         await writeAudit(tx, {
           actorUserId: actor?.id ?? null,
-          actorLabel: actor?.discordUsername ?? null,
-          requestId: String(req.id),
           action: 'ban.create',
           targetType: 'ban',
           targetId: created.id,
@@ -121,32 +119,27 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
       // agent kopuksa ya da RCON yanıt vermiyorsa ban yine geçerli, oyuncu
       // bir sonraki girişinde remote ban list tarafından engellenir.
       // Bu yüzden sonucu 201'in içinde bildiriyoruz, hata olarak değil.
-      const atma = await oyuncuyuAt(
-        playerId.data,
-        parsed.data.reason,
-        actor?.id ?? 'sistem',
-        parsed.data.serverId ?? null,
-      );
+      const atma = await oyuncuyuAt(playerId.data, parsed.data.reason, actor?.id ?? 'sistem');
 
       return reply.code(201).send({ ban, atma });
     },
   );
 
   /**
-   * Oyuncuyu banın kapsadığı sunuculardan atar.
+   * Oyuncuya, bağlı olduğu sunucular üzerinden bir RCON komutu gönderir.
    *
-   * Ban sunucuya özelse (serverId dolu) YALNIZCA o sunucudan atılır. Küresel
-   * bansa hepsinden — hangi sunucuda olduğunu bilmiyoruz ve oyuncu orada
-   * değilse RCON zararsız bir "bulunamadı" döner.
+   * Hangi sunucuda olduğunu bilmiyoruz (ban sunucu bağımsız olabilir), o
+   * yüzden bağlı tüm agent'lara gönderiyoruz. Oyuncu orada değilse RCON
+   * zararsız bir "bulunamadı" döner.
    *
-   * Kapsamı yok saymak, turnuva sunucusundan yasaklanan birinin ana
-   * sunucudaki maçından da atılması demekti.
+   * Oyuncu kimliği (steamId/eosId) burada çözülüyor; çağıran taraf yalnızca
+   * eyleme özgü alanları veriyor (kick için `reason`, warn için `message`).
    */
-  async function oyuncuyuAt(
+  async function oyuncuyaKomut(
     playerId: string,
-    reason: string,
+    action: 'kick' | 'warn',
+    payload: Record<string, unknown>,
     issuedBy: string,
-    banServerId: string | null,
   ) {
     const [p] = await db
       .select({
@@ -159,25 +152,29 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
     if (!p) return { denendi: false as const };
 
     const sunucular = await db
-      .select({ id: presenceSchema.servers.id, slug: presenceSchema.servers.slug })
+      .select({ slug: presenceSchema.servers.slug })
       .from(presenceSchema.servers);
-    const kapsam = banServerId ? sunucular.filter((s) => s.id === banServerId) : sunucular;
 
     const sonuclar: Record<string, string> = {};
-    for (const s of kapsam) {
+    for (const s of sunucular) {
       if (!agentBagliMi(s.slug)) {
         sonuclar[s.slug] = 'agent_yok';
         continue;
       }
       const sonuc = await komutGonder(
         s.slug,
-        'kick',
-        { steamId: p.steamId, eosId: p.eosId, reason },
+        action,
+        { steamId: p.steamId, eosId: p.eosId, ...payload },
         issuedBy,
       );
       sonuclar[s.slug] = sonuc.durum === 'hata' ? `hata: ${sonuc.mesaj}` : sonuc.durum;
     }
     return { denendi: true as const, sunucular: sonuclar };
+  }
+
+  /** Ban sonrası oyuncuyu o anki maçtan çıkarır. */
+  function oyuncuyuAt(playerId: string, reason: string, issuedBy: string) {
+    return oyuncuyaKomut(playerId, 'kick', { reason }, issuedBy);
   }
 
   app.post<{ Params: { id: string }; Body: unknown }>(
@@ -207,8 +204,6 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
 
         await writeAudit(tx, {
           actorUserId: actor?.id ?? null,
-          actorLabel: actor?.discordUsername ?? null,
-          requestId: String(req.id),
           action: 'ban.revoke',
           targetType: 'ban',
           targetId: banId.data,
@@ -267,8 +262,6 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
 
         await writeAudit(tx, {
           actorUserId: actor?.id ?? null,
-          actorLabel: actor?.discordUsername ?? null,
-          requestId: String(req.id),
           action: 'record.create',
           targetType: 'player_record',
           targetId: created.id,
@@ -277,61 +270,43 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
         return created;
       });
 
-      // Uyarı oyuncuya OYUN İÇİNDE gösterilir; kaydedip bırakmak uyarının
-      // kendisini anlamsız kılardı. Kick gibi bu da EN İYİ ÇABA: agent
-      // kopuksa kayıt yine durur, yalnızca teslim edilmemiş sayılır.
-      let teslim: Awaited<ReturnType<typeof uyariGonder>> | undefined;
-      if (parsed.data.kind === 'warning') {
-        teslim = await uyariGonder(playerId.data, parsed.data.body, actor?.id ?? 'sistem');
-        if (teslim.teslimEdildi) {
-          await db
-            .update(moderationSchema.playerRecords)
-            .set({ deliveredAt: new Date() })
-            .where(eq(moderationSchema.playerRecords.id, kayit.id));
-        }
+      // Uyarı burada nottan ve takipten ayrılıyor: uyarı oyuncuya GÖRÜNEN
+      // bir eylem, diğer ikisi değil. Kayıt commit olduktan SONRA
+      // gönderiyoruz — RCON cevabını beklerken transaction'ı açık tutmak
+      // bağlantı havuzunu boş yere kilitler.
+      //
+      // EN İYİ ÇABA, ban akışındaki `atma` ile aynı sözleşme: agent kopuksa
+      // ya da RCON yanıt vermezse uyarı yine kayıtlıdır ve moderasyon
+      // geçmişinde durur. Bu yüzden uç 201 dönmeye devam ediyor ve sonuç
+      // `teslim` alanında bildiriliyor, hata olarak değil.
+      if (parsed.data.kind !== 'warning') {
+        return reply.code(201).send({ record: kayit });
       }
 
-      return reply.code(201).send({ record: kayit, teslim });
+      const teslim = await oyuncuyaKomut(
+        playerId.data,
+        'warn',
+        { message: parsed.data.body },
+        actor?.id ?? 'sistem',
+      );
+
+      // `delivered_at` yalnızca komut gerçekten çalıştığında dolar. Denetim
+      // kaydına ayrıca yazmıyoruz: "uyarı gitti mi" sorusunun cevabı kaydın
+      // kendi alanında duruyor, ikinci bir yere kopyalamak iki doğruluk
+      // kaynağı yaratırdı.
+      let sonKayit = kayit;
+      if (teslim.denendi && komutUlasti(teslim.sunucular)) {
+        const [guncel] = await db
+          .update(moderationSchema.playerRecords)
+          .set({ deliveredAt: new Date() })
+          .where(eq(moderationSchema.playerRecords.id, kayit.id))
+          .returning();
+        if (guncel) sonKayit = guncel;
+      }
+
+      return reply.code(201).send({ record: sonKayit, teslim });
     },
   );
-
-  /**
-   * Uyarıyı oyuncuya oyun içinde gösterir (RCON AdminWarn).
-   *
-   * Oyuncu o an hangi sunucuda bilinmiyor, bağlı tüm agent'lara gönderiliyor;
-   * oyuncu orada değilse RCON zararsız bir yanıt döner. Bir sunucuda bile
-   * başarılıysa teslim edilmiş sayılıyor.
-   */
-  async function uyariGonder(playerId: string, mesaj: string, issuedBy: string) {
-    const [p] = await db
-      .select({ steamId: identitySchema.players.steamId, eosId: identitySchema.players.eosId })
-      .from(identitySchema.players)
-      .where(eq(identitySchema.players.id, playerId))
-      .limit(1);
-    if (!p) return { teslimEdildi: false, sunucular: {} as Record<string, string> };
-
-    const sunucular = await db
-      .select({ slug: presenceSchema.servers.slug })
-      .from(presenceSchema.servers);
-
-    const sonuclar: Record<string, string> = {};
-    let teslimEdildi = false;
-    for (const s of sunucular) {
-      if (!agentBagliMi(s.slug)) {
-        sonuclar[s.slug] = 'agent_yok';
-        continue;
-      }
-      const sonuc = await komutGonder(
-        s.slug,
-        'warn',
-        { steamId: p.steamId, eosId: p.eosId, message: mesaj },
-        issuedBy,
-      );
-      sonuclar[s.slug] = sonuc.durum === 'hata' ? `hata: ${sonuc.mesaj}` : sonuc.durum;
-      if (sonuc.durum === 'ok') teslimEdildi = true;
-    }
-    return { teslimEdildi, sunucular: sonuclar };
-  }
 
   app.post<{ Params: { id: string } }>(
     '/records/:id/resolve',
@@ -362,8 +337,6 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
 
         await writeAudit(tx, {
           actorUserId: actor?.id ?? null,
-          actorLabel: actor?.discordUsername ?? null,
-          requestId: String(req.id),
           action: 'record.resolve',
           targetType: 'player_record',
           targetId: id.data,
@@ -430,8 +403,6 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
 
         await writeAudit(tx, {
           actorUserId: actor?.id ?? null,
-          actorLabel: actor?.discordUsername ?? null,
-          requestId: String(req.id),
           action: 'flag.assign',
           targetType: 'flag_assignment',
           targetId: created.id,
@@ -474,8 +445,6 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
 
         await writeAudit(tx, {
           actorUserId: actor?.id ?? null,
-          actorLabel: actor?.discordUsername ?? null,
-          requestId: String(req.id),
           action: 'flag.remove',
           targetType: 'flag_assignment',
           targetId: id.data,
