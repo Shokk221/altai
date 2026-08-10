@@ -13,6 +13,9 @@ export const PERMISSIONS = [
   'ticket.manage',
   'rules.manage',
   'server.control',
+  // Sistem gunlugunu okuma. Ayri izin: gunluk kimin kime baktigini da
+  // tutuyor, yani her moderatorun gormesi gereken bir sey degil.
+  'audit.read',
   'super_admin',
 ] as const;
 

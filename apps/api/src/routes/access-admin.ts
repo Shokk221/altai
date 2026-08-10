@@ -123,6 +123,8 @@ export async function accessAdminRoutes(app: FastifyInstance, opts: { db: Db }) 
 
       await writeAudit(tx, {
         actorUserId: actor?.id ?? null,
+        actorLabel: actor?.discordUsername ?? null,
+        requestId: String(req.id),
         action: 'role_mapping.upsert',
         targetType: 'role_mapping',
         targetId: kaydedilen.id,
@@ -157,6 +159,8 @@ export async function accessAdminRoutes(app: FastifyInstance, opts: { db: Db }) 
         if (!row) return null;
         await writeAudit(tx, {
           actorUserId: actor?.id ?? null,
+          actorLabel: actor?.discordUsername ?? null,
+          requestId: String(req.id),
           action: 'role_mapping.delete',
           targetType: 'role_mapping',
           targetId: row.id,

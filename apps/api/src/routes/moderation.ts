@@ -103,6 +103,8 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
 
         await writeAudit(tx, {
           actorUserId: actor?.id ?? null,
+          actorLabel: actor?.discordUsername ?? null,
+          requestId: String(req.id),
           action: 'ban.create',
           targetType: 'ban',
           targetId: created.id,
@@ -205,6 +207,8 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
 
         await writeAudit(tx, {
           actorUserId: actor?.id ?? null,
+          actorLabel: actor?.discordUsername ?? null,
+          requestId: String(req.id),
           action: 'ban.revoke',
           targetType: 'ban',
           targetId: banId.data,
@@ -263,6 +267,8 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
 
         await writeAudit(tx, {
           actorUserId: actor?.id ?? null,
+          actorLabel: actor?.discordUsername ?? null,
+          requestId: String(req.id),
           action: 'record.create',
           targetType: 'player_record',
           targetId: created.id,
@@ -356,6 +362,8 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
 
         await writeAudit(tx, {
           actorUserId: actor?.id ?? null,
+          actorLabel: actor?.discordUsername ?? null,
+          requestId: String(req.id),
           action: 'record.resolve',
           targetType: 'player_record',
           targetId: id.data,
@@ -422,6 +430,8 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
 
         await writeAudit(tx, {
           actorUserId: actor?.id ?? null,
+          actorLabel: actor?.discordUsername ?? null,
+          requestId: String(req.id),
           action: 'flag.assign',
           targetType: 'flag_assignment',
           targetId: created.id,
@@ -464,6 +474,8 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
 
         await writeAudit(tx, {
           actorUserId: actor?.id ?? null,
+          actorLabel: actor?.discordUsername ?? null,
+          requestId: String(req.id),
           action: 'flag.remove',
           targetType: 'flag_assignment',
           targetId: id.data,

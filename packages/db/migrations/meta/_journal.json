@@ -85,6 +85,13 @@
       "when": 1786361127002,
       "tag": "0011_boring_doctor_octopus",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1786373275227,
+      "tag": "0012_activity_log",
+      "breakpoints": true
     }
   ]
 }

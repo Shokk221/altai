@@ -3,11 +3,14 @@ import { loadConfig, logger } from '@altai/shared';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import Fastify, { type FastifyError, type FastifyServerOptions } from 'fastify';
+import { activityLogBaslat, activityLogDurdur, kaydet } from './lib/activity-log.js';
 import { redactedRequestSerializer } from './lib/log-redact.js';
+import { registerActivityLog } from './plugins/activity.js';
 import { registerDiscordOAuth } from './plugins/discord-oauth.js';
 import { registerRateLimit } from './plugins/rate-limit.js';
 import { registerWebsocket } from './plugins/websocket.js';
 import { accessAdminRoutes } from './routes/access-admin.js';
+import { activityRoutes } from './routes/activity.js';
 import { adminListRoutes } from './routes/admin-list.js';
 import { agentWsRoutes } from './routes/agent-ws.js';
 import { agentRoutes } from './routes/agents.js';
@@ -54,6 +57,11 @@ const serverOptions: FastifyServerOptions = {
   trustProxy: resolveTrustProxy(config.TRUST_PROXY),
 };
 const app = Fastify(serverOptions);
+
+// Günlük yazıcısı rotalardan ÖNCE ayağa kalkıyor: açılış olayının kendisi
+// de kayda düşsün istiyoruz.
+activityLogBaslat(db);
+registerActivityLog(app);
 
 // Beklenmeyen hatalar: gerçek sebep loglanır, istemciye genel mesaj döner.
 // Fastify varsayılanı hata mesajını olduğu gibi gönderiyor ve bu iç detay
@@ -105,6 +113,7 @@ await app.register(
     await api.register(agentRoutes, { db });
     await api.register(accessAdminRoutes, { db });
     await api.register(liveActionRoutes, { db });
+    await api.register(activityRoutes, { db });
   },
   { prefix: '/api' },
 );
@@ -116,6 +125,15 @@ await app.register(browserWsRoutes, { db });
 const port = Number(process.env.PORT ?? 3001);
 app.listen({ port, host: '0.0.0.0' }).then(() => {
   logger.info(`api ${config.NODE_ENV} modunda :${port} portunda`);
+  // Servis açılışı da günlüğe düşüyor: "o saatte panel neden cevap
+  // vermiyordu" sorusunda yeniden başlatmalar ilk bakılan şey.
+  kaydet({
+    actorType: 'system',
+    actorLabel: 'api',
+    action: 'service.start',
+    category: 'sistem',
+    payload: { ortam: config.NODE_ENV, port },
+  });
 });
 
 // Düzgün kapanış zorunlu: kalıcı yazım artık api'de ve raw_events 2 saniyelik
@@ -126,11 +144,21 @@ async function shutdown(signal: string) {
   if (shuttingDown) return;
   shuttingDown = true;
   logger.info({ signal }, 'api kapanıyor, bekleyen yazımlar boşaltılıyor');
+  kaydet({
+    actorType: 'system',
+    actorLabel: 'api',
+    action: 'service.stop',
+    category: 'sistem',
+    payload: { signal },
+  });
   try {
     await app.close();
   } catch (err) {
     logger.error({ err }, 'kapanışta hata');
   }
+  // app.close()'tan SONRA: kapanış sırasında yazılan son kayıtlar da
+  // (onClose kancaları dahil) tamponda kalmasın.
+  await activityLogDurdur();
   process.exit(0);
 }
 

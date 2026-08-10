@@ -3,6 +3,7 @@ import type { Db } from '@altai/db';
 import { identitySchema, moderationSchema, presenceSchema } from '@altai/db';
 import { logger } from '@altai/shared';
 import { and, eq, isNull, or } from 'drizzle-orm';
+import { kaydet } from './activity-log.js';
 import { agentBagliMi, komutGonder } from './agent-command-bus.js';
 import { aktifBanKosulu } from './ban-active.js';
 
@@ -154,6 +155,18 @@ async function at(slug: string, ban: BanliOyuncu) {
     // Atamadıysak bir sonraki tarama tekrar dener — bu yüzden hata değil uyarı.
     logger.warn({ slug, playerId: ban.playerId, sonuc }, 'banlı oyuncu atılamadı');
   }
+  // Başarısızlık da yazılıyor: "banlıydı ama oynamaya devam etti"
+  // şikâyetinin cevabı tam olarak burada.
+  kaydet({
+    actorType: 'system',
+    actorLabel: 'ban-zorlayici',
+    action: 'ban.enforce',
+    category: 'moderasyon',
+    targetType: 'player',
+    targetId: ban.playerId,
+    targetLabel: ban.steamId,
+    payload: { sunucu: slug, sebep: ban.reason, sonuc: sonuc.durum },
+  });
 }
 
 /**

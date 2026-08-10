@@ -69,6 +69,8 @@ export async function liveActionRoutes(app: FastifyInstance, opts: { db: Db }) {
       await db.transaction(async (tx) => {
         await writeAudit(tx, {
           actorUserId: actor?.id ?? null,
+          actorLabel: actor?.discordUsername ?? null,
+          requestId: String(req.id),
           action: 'player.kick',
           targetType: 'player',
           targetId: oyuncu?.id ?? null,
@@ -126,6 +128,8 @@ export async function liveActionRoutes(app: FastifyInstance, opts: { db: Db }) {
         }
         await writeAudit(tx, {
           actorUserId: actor?.id ?? null,
+          actorLabel: actor?.discordUsername ?? null,
+          requestId: String(req.id),
           action: 'player.warn',
           targetType: 'player',
           targetId: oyuncu?.id ?? null,

@@ -5,6 +5,7 @@ import type { AppConfig } from '@altai/shared';
 import { verifyPassword } from '@altai/shared';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
+import { kaydet } from '../lib/activity-log.js';
 import { resolveRoles } from '../lib/roles.js';
 import { createSession, destroySession, verifySession } from '../lib/session.js';
 import { timingSafeCompare } from '../lib/timing-safe.js';
@@ -113,6 +114,19 @@ export async function authRoutes(app: FastifyInstance, opts: { db: Db; config: A
       { discordId: discordUser.id, systemRole: resolved.systemRole },
       'kullanıcı giriş yaptı',
     );
+    kaydet({
+      actorType: 'user',
+      actorUserId: user.id,
+      actorLabel: discordUser.username,
+      action: 'auth.login',
+      category: 'oturum',
+      ip: req.ip,
+      payload: {
+        yontem: 'discord',
+        rol: resolved.systemRole,
+        izinler: resolved.permissions.length,
+      },
+    });
 
     reply.redirect(config.WEB_APP_URL ?? 'http://localhost:3000');
   });
@@ -142,6 +156,16 @@ export async function authRoutes(app: FastifyInstance, opts: { db: Db; config: A
       const passOk = await verifyPassword(body.password, config.BREAK_GLASS_PASSWORD_HASH);
       if (!userOk || !passOk) {
         app.log.warn({ ip: req.ip }, 'başarısız break-glass denemesi');
+        // Süper admin şifresine yapılan denemeler günlüğün en önemli
+        // satırları: hangi IP'den kaç kez denendiği saldırıyı görmenin
+        // tek yolu.
+        kaydet({
+          actorType: 'anonymous',
+          action: 'auth.break_glass_failed',
+          category: 'oturum',
+          ip: req.ip,
+          payload: { kullaniciAdiDogru: userOk },
+        });
         return reply.code(401).send({ error: 'invalid_credentials' });
       }
 
@@ -175,6 +199,14 @@ export async function authRoutes(app: FastifyInstance, opts: { db: Db; config: A
         { username: config.BREAK_GLASS_USER, ip: req.ip },
         'break-glass girişi kullanıldı',
       );
+      kaydet({
+        actorType: 'user',
+        actorUserId: user.id,
+        actorLabel: config.BREAK_GLASS_USER,
+        action: 'auth.break_glass',
+        category: 'oturum',
+        ip: req.ip,
+      });
 
       return { ok: true };
     },
@@ -192,7 +224,22 @@ export async function authRoutes(app: FastifyInstance, opts: { db: Db; config: A
 
   app.post('/auth/logout', async (req, reply) => {
     const token = req.cookies[COOKIE_NAME];
-    if (token) await destroySession(db, token);
+    if (token) {
+      // Oturum yok edilmeden ÖNCE kim olduğunu çözüyoruz; sonrasında
+      // çıkışın sahibi öğrenilemez.
+      const session = await verifySession(db, token);
+      if (session) {
+        kaydet({
+          actorType: 'user',
+          actorUserId: session.id,
+          actorLabel: session.discordUsername,
+          action: 'auth.logout',
+          category: 'oturum',
+          ip: req.ip,
+        });
+      }
+      await destroySession(db, token);
+    }
     reply.clearCookie(COOKIE_NAME, { path: '/' });
     return { ok: true };
   });

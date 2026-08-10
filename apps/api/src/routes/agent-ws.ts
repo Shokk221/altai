@@ -4,6 +4,7 @@ import type { Db } from '@altai/db';
 import type { AppConfig } from '@altai/shared';
 import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
+import { kaydet } from '../lib/activity-log.js';
 import { agentBaglandi, agentKoptu, komutSonucuGeldi } from '../lib/agent-command-bus.js';
 import { girisAninda, kipiAyarla, taramayiBaslat } from '../lib/ban-enforcer.js';
 import { olayYayinla } from '../lib/live-feed.js';
@@ -120,10 +121,6 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
             timestamp: event.timestamp,
           });
           break;
-        case 'CHAT_MESSAGE':
-          // Faz 3'te bot'a / admin cam benzeri özelliklere yönlendirilecek.
-          // Şimdilik raw_events'te duruyor (writer yazdı).
-          break;
       }
     };
 
@@ -146,12 +143,29 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
           !config.AGENT_SHARED_SECRET ||
           !timingSafeCompare(msg.secret, config.AGENT_SHARED_SECRET)
         ) {
+          // Yanlış sırla bağlanma denemesi: oyun sunucusu kılığında gelen
+          // bir bağlantı canlı oyuncu listesini görebilirdi, kayda değer.
+          kaydet({
+            actorType: 'system',
+            actorLabel: 'agent-ws',
+            action: 'agent.auth_failed',
+            category: 'sistem',
+            targetLabel: msg.serverSlug,
+          });
           socket.send(JSON.stringify({ type: 'hello_reject', reason: 'invalid_secret' }));
           socket.close();
           return;
         }
         serverSlug = msg.serverSlug;
         app.log.info({ serverSlug }, 'agent uplink bağlandı');
+        kaydet({
+          actorType: 'agent',
+          actorLabel: msg.serverSlug,
+          action: 'agent.connect',
+          category: 'sistem',
+          targetType: 'server',
+          targetLabel: msg.serverSlug,
+        });
 
         // Slug -> UUID çözümlemesi (yoksa satır oluşturulur) ve ardından
         // reconciler: bir önceki çalıştırmadan crash nedeniyle açık kalmış
@@ -187,6 +201,14 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
         const id = serverId;
         if (id) {
           app.log.info({ serverSlug }, "agent düzgün kapanıyor, session'lar kapatılıyor");
+          kaydet({
+            actorType: 'agent',
+            actorLabel: serverSlug,
+            action: 'agent.shutdown',
+            category: 'sistem',
+            targetType: 'server',
+            targetLabel: serverSlug,
+          });
           void closeAllOpenSessions(db, id).catch((err) =>
             app.log.error({ err, serverSlug }, 'kapanışta session kapatma başarısız'),
           );
@@ -219,6 +241,14 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
       if (serverSlug) {
         agentKoptu(serverSlug);
         app.log.warn({ serverSlug }, 'agent uplink koptu');
+        kaydet({
+          actorType: 'agent',
+          actorLabel: serverSlug,
+          action: 'agent.disconnect',
+          category: 'sistem',
+          targetType: 'server',
+          targetLabel: serverSlug,
+        });
       }
     });
   });
