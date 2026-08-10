@@ -52,6 +52,12 @@ export const gameSessions = pgTable(
   (table) => [
     index('game_sessions_player_idx').on(table.playerId),
     index('game_sessions_server_open_idx').on(table.serverId, table.leftAt),
+    // Coplay hesabı (kim kiminle oynamış) sunucu + zaman aralığı üzerinden
+    // kesişim arıyor. Bu indeks olmadan 417 bin satırda tam tarama yapıyordu.
+    index('game_sessions_server_joined_idx').on(table.serverId, table.joinedAt),
+    // Oyuncunun kendi oturumlarını tarih sırasıyla okumak: profil ve coplay
+    // sorgusunun ilk adımı.
+    index('game_sessions_player_joined_idx').on(table.playerId, table.joinedAt),
     uniqueIndex('game_sessions_source_external_idx').on(table.source, table.externalId),
   ],
 );

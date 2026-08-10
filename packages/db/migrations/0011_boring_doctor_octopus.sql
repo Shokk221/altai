@@ -1,0 +1,2 @@
+CREATE INDEX IF NOT EXISTS "game_sessions_server_joined_idx" ON "game_sessions" USING btree ("server_id","joined_at");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "game_sessions_player_joined_idx" ON "game_sessions" USING btree ("player_id","joined_at");
