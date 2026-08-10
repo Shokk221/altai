@@ -96,7 +96,13 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
           applyPlayerDisconnected(serverSlug, event.steamId);
           break;
         case 'SERVER_SNAPSHOT':
-          applyServerSnapshot(serverSlug, event.playerCount, event.queueCount, event.layer);
+          applyServerSnapshot(
+            serverSlug,
+            event.playerCount,
+            event.queueCount,
+            event.layer,
+            event.tickRate,
+          );
           break;
         case 'CHAT_MESSAGE':
           // İsmi olay taşımıyor; canlı oyuncu listesinden çözülüyor.

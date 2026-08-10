@@ -92,6 +92,17 @@ export interface SquadJSRoundEndedRaw {
   time: Date;
 }
 
+/**
+ * Sunucu tick hızı. Squad log'a düzenli aralıklarla
+ * "USQGameState: Server Tick Rate: 39.42" satırı yazıyor; SquadJS bunu
+ * ayrıştırıp TICK_RATE olarak yayınlıyor. RCON'da karşılığı YOK, tek
+ * kaynak bu satır.
+ */
+export interface SquadJSTickRateRaw {
+  tickRate: number;
+  time?: Date | string | undefined;
+}
+
 // SquadJS'in ürettiği ham event isimleri — upstream'de bunlar sabit.
 export interface SquadJSEngineEvents {
   PLAYER_CONNECTED: (raw: SquadJSPlayerConnectedRaw) => void;
@@ -100,6 +111,7 @@ export interface SquadJSEngineEvents {
   NEW_GAME: (raw: SquadJSNewGameRaw) => void;
   ROUND_ENDED: (raw: SquadJSRoundEndedRaw) => void;
   SQUAD_CREATED: (raw: SquadJSSquadCreatedRaw) => void;
+  TICK_RATE: (raw: SquadJSTickRateRaw) => void;
 }
 
 export interface SquadJSEngine {

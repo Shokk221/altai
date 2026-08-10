@@ -1,0 +1,1 @@
+ALTER TABLE "server_snapshots" ADD COLUMN "tick_rate" double precision;

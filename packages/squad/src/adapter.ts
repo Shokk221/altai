@@ -7,6 +7,7 @@ import type {
   SquadJSPlayerDisconnectedRaw,
   SquadJSRoundEndedRaw,
   SquadJSSquadCreatedRaw,
+  SquadJSTickRateRaw,
 } from './engine.js';
 
 const CHAT_CHANNEL_MAP: Record<SquadJSChatMessageRaw['chat'], 'All' | 'Team' | 'Squad' | 'Admin'> =
@@ -41,6 +42,9 @@ export interface SquadJSAdapterHandle {
 export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapterHandle {
   const { serverSlug, engine, onEvent } = opts;
   const snapshotIntervalMs = opts.snapshotIntervalMs ?? 60_000;
+  // Bu süredir yeni tick satırı görülmediyse değer bayat sayılır. Log
+  // satırı ~30 sn'de bir düşüyor; üç kaçırılan satır sorun işareti.
+  const TICK_TAZELIK_MS = 3 * 60_000;
   let snapshotTimer: ReturnType<typeof setInterval> | undefined;
 
   const handleConnected = (raw: SquadJSPlayerConnectedRaw) => {
@@ -114,6 +118,26 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
     });
   };
 
+  /**
+   * En son görülen tick hızı.
+   *
+   * Kendi olayı olarak gönderilmiyor, snapshot'a bindiriliyor: log satırı
+   * ~30 sn'de bir düşüyor ve her birini ayrı uplink mesajı yapmak dakikada
+   * iki gereksiz yazma demekti. TPS yavaş değişen bir büyüklük, 60 sn'lik
+   * snapshot ritmi yeterli.
+   *
+   * Yaşı da tutuluyor: sunucu kapalıyken son bilinen değeri "canlı" gibi
+   * göstermek yanlış bilgi olurdu.
+   */
+  let sonTickRate: number | undefined;
+  let sonTickZamani = 0;
+
+  const handleTickRate = (raw: SquadJSTickRateRaw) => {
+    if (!Number.isFinite(raw.tickRate)) return;
+    sonTickRate = raw.tickRate;
+    sonTickZamani = Date.now();
+  };
+
   const handleSquadCreated = (raw: SquadJSSquadCreatedRaw) => {
     const ad = raw.player?.name?.trim();
     const squadId = raw.squadID === undefined || raw.squadID === null ? '' : String(raw.squadID);
@@ -136,12 +160,16 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
   async function takeSnapshot() {
     try {
       const status = await engine.getStatus();
+      // Bayat tick hızı gönderilmiyor: log akışı durduysa (sunucu çöktü,
+      // log dosyası döndü) son bilinen değer saatlerce "canlı" görünürdü.
+      const tickTaze = sonTickRate !== undefined && Date.now() - sonTickZamani < TICK_TAZELIK_MS;
       onEvent({
         type: 'SERVER_SNAPSHOT',
         serverSlug,
         playerCount: status.playerCount,
         queueCount: status.publicQueue,
         layer: status.currentLayer,
+        ...(tickTaze ? { tickRate: sonTickRate } : {}),
         timestamp: new Date().toISOString(),
       });
     } catch {
@@ -159,6 +187,7 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
       engine.on('NEW_GAME', handleNewGame);
       engine.on('ROUND_ENDED', handleRoundEnded);
       engine.on('SQUAD_CREATED', handleSquadCreated);
+      engine.on('TICK_RATE', handleTickRate);
       snapshotTimer = setInterval(takeSnapshot, snapshotIntervalMs);
       void takeSnapshot();
     },
@@ -169,6 +198,7 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
       engine.off('NEW_GAME', handleNewGame);
       engine.off('ROUND_ENDED', handleRoundEnded);
       engine.off('SQUAD_CREATED', handleSquadCreated);
+      engine.off('TICK_RATE', handleTickRate);
       if (snapshotTimer) clearInterval(snapshotTimer);
     },
   };

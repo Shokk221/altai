@@ -41,6 +41,12 @@ export const ServerSnapshotEvent = z.object({
   playerCount: z.number().int().nonnegative(),
   queueCount: z.number().int().nonnegative().default(0),
   layer: z.string().optional(),
+  /**
+   * Sunucu tick hızı (TPS). Yalnızca oyun log'undan geliyor, RCON'da
+   * karşılığı yok; log okunamıyorsa ya da değer bayatsa alan hiç
+   * gönderilmiyor — 0 yazmak "sunucu donmuş" demek olurdu.
+   */
+  tickRate: z.number().positive().max(200).optional(),
   timestamp: z.string().datetime(),
 });
 

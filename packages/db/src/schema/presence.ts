@@ -1,5 +1,6 @@
 import {
   boolean,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -73,6 +74,13 @@ export const serverSnapshots = pgTable(
     playerCount: integer('player_count').notNull(),
     queueCount: integer('queue_count').notNull().default(0),
     layer: text('layer'),
+    /**
+     * Sunucu tick hızı. NULLABLE: değer yalnızca oyun log'undan geliyor
+     * ve agent'ın log'u okuyamadığı ya da değerin bayat olduğu anlarda
+     * hiç gelmiyor. 0 yazmak "sunucu donmuş" demek olurdu — bilinmiyor
+     * ile donmuş arasındaki farkı korumak için null.
+     */
+    tickRate: doublePrecision('tick_rate'),
     takenAt: timestamp('taken_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [index('server_snapshots_server_time_idx').on(table.serverId, table.takenAt)],

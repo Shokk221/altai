@@ -16,6 +16,16 @@ export interface LiveServerState {
   playerCount: number;
   queueCount: number;
   layer?: string;
+  /**
+   * Sunucu tick hızı (TPS). Tanımsız = bilinmiyor (agent log okuyamıyor ya
+   * da değer bayat). 0 ile karıştırılmamalı: 0 "sunucu donmuş" demek.
+   */
+  // `| undefined` açıkça yazılıyor: exactOptionalPropertyTypes altında
+  // `?: number` alana undefined ATAMAYA izin vermiyor, oysa TPS bilinmez
+  // hâle geldiğinde değeri temizlemek zorundayız.
+  tickRate?: number | undefined;
+  /** tickRate'in okunduğu an; ekranda "ne kadar eski" sorusunu cevaplıyor. */
+  tickRateAt?: string | undefined;
   players: LivePlayer[];
   updatedAt: string;
 }
@@ -129,10 +139,21 @@ export function applyServerSnapshot(
   playerCount: number,
   queueCount: number,
   layer: string | undefined,
+  tickRate?: number | undefined,
 ) {
   const s = getOrInit(slug);
   s.queueCount = queueCount;
   if (layer !== undefined) s.layer = layer;
+  // Gelmediğinde ESKİ DEĞER SİLİNİYOR: agent log'u okuyamaz hâle geldiyse
+  // ekranda donmuş bir TPS'in doğruymuş gibi durması, hiç göstermemekten
+  // daha kötü.
+  if (tickRate !== undefined) {
+    s.tickRate = tickRate;
+    s.tickRateAt = new Date().toISOString();
+  } else {
+    s.tickRate = undefined;
+    s.tickRateAt = undefined;
+  }
   // Oyuncu sayısının asıl kaynağı artık RCON tazelemesi (replacePlayers);
   // snapshot yalnızca iki tazeleme arasında sayıyı güncel tutuyor.
   if (Math.abs(s.players.length - playerCount) > 0) s.playerCount = playerCount;

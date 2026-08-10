@@ -246,6 +246,7 @@ export function createPersistenceWriter(db: Db): PersistenceWriter {
       playerCount: event.playerCount,
       queueCount: event.queueCount,
       layer: event.layer ?? null,
+      tickRate: event.tickRate ?? null,
       takenAt: new Date(event.timestamp),
     });
   }

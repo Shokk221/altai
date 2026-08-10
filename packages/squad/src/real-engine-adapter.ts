@@ -165,6 +165,16 @@ export function createSquadServerEngineAdapter(
         register(event, listener, ((data: SquadJSSquadCreatedRaw) => {
           (listener as SquadJSEngineEvents['SQUAD_CREATED'])(data);
         }) as RealListener);
+      } else if (event === 'TICK_RATE') {
+        register(event, listener, ((data: { tickRate?: number; time?: Date | string }) => {
+          // Ayrıştırma başarısızsa parseFloat NaN veriyor; NaN'ı olay
+          // olarak yaymak snapshot'a NaN yazmak demekti.
+          if (typeof data?.tickRate !== 'number' || !Number.isFinite(data.tickRate)) return;
+          (listener as SquadJSEngineEvents['TICK_RATE'])({
+            tickRate: data.tickRate,
+            time: data.time,
+          });
+        }) as RealListener);
       } else if (event === 'ROUND_ENDED') {
         register(event, listener, ((data: RealRoundEndedData) => {
           const raw: SquadJSRoundEndedRaw = {

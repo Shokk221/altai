@@ -34,8 +34,23 @@ interface LiveServerState {
   playerCount: number;
   queueCount: number;
   layer?: string;
+  /** Sunucu tick hızı. Tanımsız = bilinmiyor, 0 ile aynı şey değil. */
+  tickRate?: number;
   players: LivePlayer[];
   updatedAt: string;
+}
+
+/**
+ * TPS'in rengi.
+ *
+ * Sunucu 50 tick hedefliyor; oyuncular düşüşü 30'un altında hissetmeye
+ * başlıyor, 20'nin altı "sunucu kasıyor" şikâyetinin geldiği bölge.
+ * Sayının kendisini okumak yerine renge bakmak yeterli olsun diye.
+ */
+function tpsRengi(tps: number): string {
+  if (tps >= 38) return 'text-success';
+  if (tps >= 25) return 'text-warn';
+  return 'text-danger';
 }
 
 interface CanliOlay {
@@ -229,6 +244,15 @@ export function LiveDashboard({
           <span key={s.serverSlug} className="text-xs text-fg-muted last:mr-auto">
             <span className="font-semibold text-fg">{s.serverSlug}</span>
             {s.layer ? ` · ${s.layer}` : ''} · {s.playerCount}
+            {s.tickRate !== undefined ? (
+              <>
+                {' · '}
+                <span className={cn('num font-semibold', tpsRengi(s.tickRate))}>
+                  {s.tickRate.toFixed(1)}
+                </span>
+                <span className="ml-0.5">TPS</span>
+              </>
+            ) : null}
           </span>
         ))}
         {/* Bölüm bağlantıları üst çubukta; burada tekrarlamıyoruz. */}
