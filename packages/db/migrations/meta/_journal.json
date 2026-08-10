@@ -71,6 +71,13 @@
       "when": 1786309056882,
       "tag": "0009_sema_sadelestirme",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786309056883,
+      "tag": "0010_chat_messages",
+      "breakpoints": true
     }
   ]
 }

@@ -10,7 +10,8 @@
     "migrate": "tsx src/migrate.ts",
     "typecheck": "tsc --noEmit",
     "seed:bootstrap-admin": "tsx src/seed-bootstrap-admin.ts",
-    "seed:role-mapping": "tsx src/seed-role-mapping.ts"
+    "seed:role-mapping": "tsx src/seed-role-mapping.ts",
+    "backfill:chat": "tsx src/backfill-chat.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.36.0",

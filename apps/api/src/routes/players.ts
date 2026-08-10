@@ -1,4 +1,4 @@
-import { identitySchema, moderationSchema } from '@altai/db';
+import { chatSchema, identitySchema, moderationSchema } from '@altai/db';
 import type { Db } from '@altai/db';
 import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
@@ -112,7 +112,7 @@ export async function playerRoutes(app: FastifyInstance, opts: { db: Db }) {
       .limit(1);
     if (!player) return reply.code(404).send({ error: 'oyuncu_bulunamadi' });
 
-    const [names, banRows, flagRows, records, sure, sonOturum] = await Promise.all([
+    const [names, banRows, flagRows, records, sohbet, sure, sonOturum] = await Promise.all([
       db
         .select({
           name: identitySchema.playerNames.name,
@@ -156,6 +156,21 @@ export async function playerRoutes(app: FastifyInstance, opts: { db: Db }) {
         .orderBy(desc(moderationSchema.playerRecords.createdAt))
         .limit(100),
 
+      // Son mesajlar. Tamamı değil: aktif bir oyuncuda on binlerce satır
+      // olabilir ve profil ekranında son konuşulanlar yeterli. Tam arama
+      // ayrı bir ekranın işi.
+      db
+        .select({
+          id: chatSchema.chatMessages.id,
+          channel: chatSchema.chatMessages.channel,
+          message: chatSchema.chatMessages.message,
+          sentAt: chatSchema.chatMessages.sentAt,
+        })
+        .from(chatSchema.chatMessages)
+        .where(eq(chatSchema.chatMessages.playerId, id))
+        .orderBy(desc(chatSchema.chatMessages.sentAt))
+        .limit(200),
+
       // Süre ve oturum sayısı: satırları taşımadan tek toplamda.
       db.execute<{ oturum: number; saniye: number; ilk: string | null; son: string | null }>(sql`
           select count(*)::int as oturum,
@@ -197,6 +212,7 @@ export async function playerRoutes(app: FastifyInstance, opts: { db: Db }) {
       })),
       flags: flagRows,
       records,
+      sohbet,
       oyun: {
         oturum: Number(s.oturum ?? 0),
         toplamSaniye: Number(s.saniye ?? 0),

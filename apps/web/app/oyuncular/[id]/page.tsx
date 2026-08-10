@@ -1,7 +1,7 @@
 import { BanKaldir, EtiketKaldir, HizliEylemler, KaydiKapat } from '@/components/player-actions';
 import { Badge } from '@/components/ui/badge';
 import { getJson, getMe, publicApiUrl } from '@/lib/api';
-import { banBitis, sayi, sure, tarih, tarihSaat } from '@/lib/format';
+import { banBitis, saatDakika, sayi, sure, tarih, tarihSaat } from '@/lib/format';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
@@ -51,6 +51,13 @@ interface Kayit {
   resolvedAt: string | null;
 }
 
+interface Mesaj {
+  id: string;
+  channel: string | null;
+  message: string;
+  sentAt: string;
+}
+
 interface Profil {
   player: {
     id: string;
@@ -63,6 +70,7 @@ interface Profil {
   bans: Ban[];
   flags: Flag[];
   records: Kayit[];
+  sohbet: Mesaj[];
   oyun: {
     oturum: number;
     toplamSaniye: number;
@@ -208,7 +216,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
       </header>
 
       {/* çalışma alanı: yan yana paneller, her biri kendi içinde kayar */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-3">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-4">
         <Panel baslik="Banlar" sayac={profil.bans.length}>
           {profil.bans.length === 0 ? (
             <Bos metin="Ban kaydı yok" />
@@ -267,6 +275,28 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
                     {k.authorName ?? 'bilinmiyor'}
                     {k.resolvedAt ? ' · kapatıldı' : ''}
                   </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+
+        <Panel baslik="Sohbet" sayac={profil.sohbet.length}>
+          {profil.sohbet.length === 0 ? (
+            <Bos metin="Kayıtlı mesaj yok" />
+          ) : (
+            <ul className="flex flex-col gap-1.5">
+              {profil.sohbet.map((m) => (
+                <li key={m.id} className="text-[13px] leading-snug">
+                  <span className="mr-1.5 text-[11px] tabular-nums text-fg-muted">
+                    {saatDakika(m.sentAt)}
+                  </span>
+                  {m.channel && m.channel !== 'All' ? (
+                    <span className="mr-1 text-[11px] font-semibold text-accent">
+                      [{m.channel}]
+                    </span>
+                  ) : null}
+                  <span className="break-words">{m.message}</span>
                 </li>
               ))}
             </ul>

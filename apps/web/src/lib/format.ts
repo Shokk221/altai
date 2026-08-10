@@ -51,3 +51,20 @@ export function sayi(n: number | null | undefined): string {
 export function banBitis(expiresAt: string | null): string {
   return expiresAt ? tarihSaat(expiresAt) : 'kalıcı';
 }
+
+const GUN_SAAT = new Intl.DateTimeFormat('tr-TR', {
+  day: '2-digit',
+  month: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+/**
+ * Sohbet satırları için kısa damga: "09.08 22:41".
+ * Yıl yok — sohbet okunurken gün ve saat yeterli, yıl satırı uzatıyor.
+ */
+export function saatDakika(v: string | Date | null | undefined): string {
+  if (!v) return '—';
+  const d = typeof v === 'string' ? new Date(v) : v;
+  return Number.isNaN(d.getTime()) ? '—' : GUN_SAAT.format(d);
+}

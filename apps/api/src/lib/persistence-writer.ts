@@ -1,11 +1,23 @@
 import type { AgentEvent } from '@altai/contracts';
 import type { Db } from '@altai/db';
-import { identitySchema, matchesSchema, presenceSchema } from '@altai/db';
+import { chatSchema, identitySchema, matchesSchema, presenceSchema } from '@altai/db';
 import { logger } from '@altai/shared';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 
 const RAW_EVENTS_FLUSH_INTERVAL_MS = 2_000;
 const RAW_EVENTS_FLUSH_MAX_BATCH = 200;
+
+/**
+ * steam_id -> player_id önbelleği.
+ *
+ * Sohbet en yüksek hacimli olay: mesaj başına bir SELECT atmak dolu bir
+ * sunucuda dakikada yüzlerce gereksiz sorgu demek. Oyuncu girişte zaten
+ * upsert ediliyor ve id'si biliniyor; oradan besleniyor.
+ *
+ * Sınırlı: sunucu 100 kişilik, gün boyu gelip gidenlerle birlikte birkaç
+ * bin giriş yeterli. Dolunca en eskiler atılıyor (Map ekleme sırasını korur).
+ */
+const OYUNCU_ONBELLEK_TAVANI = 5_000;
 
 /**
  * Kalıcı yazım katmanı — api'de çalışır.
@@ -106,9 +118,65 @@ async function upsertPlayer(db: Db, steamId: string, eosId: string | undefined, 
 
 export function createPersistenceWriter(db: Db): PersistenceWriter {
   let rawEventQueue: { serverId: string; eventType: string; payload: unknown }[] = [];
+  let chatQueue: (typeof chatSchema.chatMessages.$inferInsert)[] = [];
+  const playerIdBySteam = new Map<string, string>();
   let stopped = false;
 
-  const flushTimer = setInterval(() => void flushRawEvents(), RAW_EVENTS_FLUSH_INTERVAL_MS);
+  function onbellegeYaz(steamId: string, playerId: string) {
+    if (playerIdBySteam.size >= OYUNCU_ONBELLEK_TAVANI) {
+      const enEski = playerIdBySteam.keys().next().value;
+      if (enEski) playerIdBySteam.delete(enEski);
+    }
+    playerIdBySteam.set(steamId, playerId);
+  }
+
+  /** Önbellekten, yoksa tek sorguyla. Bulunamazsa null — mesaj yine yazılır. */
+  async function playerIdBul(steamId: string): Promise<string | null> {
+    const onbellekten = playerIdBySteam.get(steamId);
+    if (onbellekten) return onbellekten;
+    const [row] = await db
+      .select({ id: identitySchema.players.id })
+      .from(identitySchema.players)
+      .where(eq(identitySchema.players.steamId, steamId))
+      .limit(1);
+    if (row) onbellegeYaz(steamId, row.id);
+    return row?.id ?? null;
+  }
+
+  const flushTimer = setInterval(() => {
+    void flushRawEvents();
+    void flushChat();
+  }, RAW_EVENTS_FLUSH_INTERVAL_MS);
+
+  async function flushChat() {
+    if (chatQueue.length === 0) return;
+    const batch = chatQueue;
+    chatQueue = [];
+    try {
+      await db.insert(chatSchema.chatMessages).values(batch);
+    } catch (err) {
+      logger.error({ err, count: batch.length }, 'sohbet batch insert başarısız');
+    }
+  }
+
+  async function handleChat(
+    serverId: string,
+    event: Extract<AgentEvent, { type: 'CHAT_MESSAGE' }>,
+  ) {
+    const playerId = await playerIdBul(event.steamId);
+    chatQueue.push({
+      serverId,
+      playerId,
+      steamId: event.steamId,
+      // Sözleşmede sohbet olayı eos taşımıyor; kimlik steam üzerinden.
+      name: null,
+      channel: event.channel,
+      message: event.message,
+      sentAt: new Date(event.timestamp),
+      source: 'altai',
+    });
+    if (chatQueue.length >= RAW_EVENTS_FLUSH_MAX_BATCH) void flushChat();
+  }
 
   async function flushRawEvents() {
     if (rawEventQueue.length === 0) return;
@@ -127,6 +195,8 @@ export function createPersistenceWriter(db: Db): PersistenceWriter {
   ) {
     const player = await upsertPlayer(db, event.steamId, event.eosId, event.name);
     if (!player) return;
+    // Sohbet yazımı bu önbellekten besleniyor.
+    onbellegeYaz(event.steamId, player.id);
 
     // Açık kalan eski bir session varsa (crash sonrası) reconciler onu kapatır;
     // burada sadece yeni session açılır.
@@ -280,8 +350,9 @@ export function createPersistenceWriter(db: Db): PersistenceWriter {
           );
           break;
         case 'CHAT_MESSAGE':
-          // Şimdilik sadece raw_events'te duruyor; chat log tablosu Faz 3/4
-          // kapsamında (moderasyon/plugin ihtiyaçları netleşince) eklenecek.
+          void handleChat(serverId, event).catch((err) =>
+            logger.error({ err, event }, 'CHAT_MESSAGE işlenemedi'),
+          );
           break;
       }
     },
@@ -289,6 +360,7 @@ export function createPersistenceWriter(db: Db): PersistenceWriter {
       stopped = true;
       clearInterval(flushTimer);
       await flushRawEvents();
+      await flushChat();
     },
   };
 }
