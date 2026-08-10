@@ -409,11 +409,17 @@ async function decorate(db: Db, rows: BaseRow[]) {
   }>(sql`
     select player_id, name, sira, toplam
       from (
-        select pn.player_id,
-               pn.name,
-               row_number() over (partition by pn.player_id order by pn.last_seen desc nulls last) as sira,
-               count(*) over (partition by pn.player_id) as toplam
-          from player_names pn
+        -- Takma ad KULLANILMIYOR: inArray sutunu tam adiyla niteliyor
+        -- (player_names.player_id); alt sorguda takma ad olsaydi Postgres
+        -- "invalid reference to FROM-clause entry" verirdi.
+        select player_names.player_id,
+               player_names.name,
+               row_number() over (
+                 partition by player_names.player_id
+                 order by player_names.last_seen desc nulls last
+               ) as sira,
+               count(*) over (partition by player_names.player_id) as toplam
+          from player_names
          where ${inArray(identitySchema.playerNames.playerId, ids)}
       ) x
      where sira <= 5
