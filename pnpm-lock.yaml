@@ -131,12 +131,18 @@ importers:
       '@altai/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@altai/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@altai/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       discord.js:
         specifier: ^14.14.1
         version: 14.27.0
+      drizzle-orm:
+        specifier: ^0.36.0
+        version: 0.36.4(@types/react@18.3.31)(postgres@3.4.9)(react@18.3.1)
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
