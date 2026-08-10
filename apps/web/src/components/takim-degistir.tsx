@@ -176,7 +176,7 @@ export function TakimDegistirKutusu({
         <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
           {zaman === 'simdi'
             ? `Takım ${hedefTakim}'de olmayanlar hemen alınır; geçmeden önce uyarı görürler.`
-            : `Oyuncular şimdi uyarılır, geçiş maç bitince yapılır. O ana kadar iptal edilebilir.`}
+            : 'Oyuncular şimdi uyarılır, geçiş maç bitince yapılır. O ana kadar iptal edilebilir.'}
         </p>
 
         <input
