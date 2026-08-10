@@ -73,8 +73,9 @@ export interface SeciliKayit {
 }
 
 interface SurukleYuku {
-  adaylar: { steamId: string; name: string }[];
-  kaynakTakim: 1 | 2;
+  /** Her adayın o anki takımı da taşınıyor: hedef panel neyi taşıyacağını
+   *  ve neyin zaten yerinde olduğunu bırakma anında bilmeli. */
+  adaylar: { steamId: string; name: string; takim: 1 | 2 }[];
   baslik?: string;
 }
 
@@ -280,16 +281,13 @@ export function LiveDashboard({
   /**
    * Ctrl+tıklama ile seçimi değiştirir.
    *
-   * Seçim TEK TAKIMLA sınırlı: komut "karşı tarafa geçir" dediği için iki
-   * takımdan karışık seçim yapılsaydı herkes kendi karşısına giderdi, yani
-   * iki taraf birbirinin yerine geçerdi — kimsenin istediği bu değil.
-   * Diğer takımdan biri seçilince önceki seçim temizleniyor.
+   * Seçim İKİ TAKIMDAN da olabiliyor: işlem "karşıya çevir" değil "şu
+   * takımda topla" olduğu için karışık seçimin anlamı net — hepsi
+   * bırakıldığı panelin takımına gider, zaten orada olanlara dokunulmaz.
    */
   const seciliDegistir = useCallback((steamId: string, name: string, takim: 1 | 2) => {
     setSecili((eski) => {
       const yeni = new Map(eski);
-      const ilk = yeni.values().next().value as SeciliKayit | undefined;
-      if (ilk && ilk.takim !== takim) yeni.clear();
       if (yeni.has(steamId)) yeni.delete(steamId);
       else yeni.set(steamId, { steamId, name, takim });
       return yeni;
@@ -561,16 +559,19 @@ function TakimPaneli({
   const renk = takim === 1 ? 'text-team1' : 'text-team2';
 
   /**
-   * Bırakma yalnızca KARŞI takımın panelinde anlamlı: aynı takıma
-   * bırakmak hiçbir şey yapmaz ama komut gönderilseydi oyuncuyu karşıya
-   * atardı (komut hedef takım almıyor, sadece "diğer tarafa geçir" diyor).
+   * Bırakılan panelin takımı HEDEF oluyor.
+   *
+   * Aynı panele bırakmak da geçerli olabilir: karışık bir seçimde bazıları
+   * zaten burada, bazıları karşıda. Yapacak iş yoksa (herkes zaten bu
+   * takımda) bırakma yok sayılıyor — boş bir onay kutusu açmak kullanıcıyı
+   * "bir şey oldu" sanmaya iter.
    */
   function yukuOku(e: React.DragEvent): SurukleYuku | null {
     try {
       const ham = e.dataTransfer.getData(SURUKLE_TURU);
       if (!ham) return null;
       const yuk = JSON.parse(ham) as SurukleYuku;
-      return yuk.kaynakTakim === takim ? null : yuk;
+      return yuk.adaylar.some((a) => a.takim !== takim) ? yuk : null;
     } catch {
       return null;
     }
@@ -590,7 +591,7 @@ function TakimPaneli({
         if (!takimYetkisi) return;
         e.preventDefault();
         const yuk = yukuOku(e);
-        if (yuk) takimaSurukle(yuk);
+        if (yuk) takimaSurukle({ ...yuk, hedefTakim: takim });
       }}
       className={cn(
         'flex min-h-0 flex-col rounded border bg-surface transition-colors',
@@ -711,8 +712,7 @@ function Manga({
         draggable={takimYetkisi && !sonuk}
         onDragStart={(e) =>
           yukuYaz(e, {
-            adaylar: uyeler.map((u) => ({ steamId: u.steamId, name: u.name })),
-            kaynakTakim: takim,
+            adaylar: uyeler.map((u) => ({ steamId: u.steamId, name: u.name, takim })),
             baslik,
           })
         }
@@ -749,9 +749,8 @@ function Manga({
               const cokluMu = secili.has(p.steamId) && secim.length > 1;
               yukuYaz(e, {
                 adaylar: cokluMu
-                  ? secim.map((x) => ({ steamId: x.steamId, name: x.name }))
-                  : [{ steamId: p.steamId, name: p.name }],
-                kaynakTakim: takim,
+                  ? secim.map((x) => ({ steamId: x.steamId, name: x.name, takim: x.takim }))
+                  : [{ steamId: p.steamId, name: p.name, takim }],
                 ...(cokluMu ? { baslik: `${secim.length} seçili oyuncu` } : {}),
               });
             }}
@@ -806,7 +805,7 @@ function Manga({
               kickYetkisi={kickYetkisi}
               warnYetkisi={warnYetkisi}
               takimYetkisi={takimYetkisi}
-              takimaAt={() => {
+              takimaAt={(hedefTakim) => {
                 // Sürüklemeyle aynı kural: bu oyuncu seçiliyse seçimin
                 // tamamı taşınıyor. İki giriş noktasının farklı davranması
                 // en kötüsü olurdu.
@@ -814,12 +813,13 @@ function Manga({
                 const cokluMu = secili.has(p.steamId) && secim.length > 1;
                 takimaSurukle({
                   adaylar: cokluMu
-                    ? secim.map((x) => ({ steamId: x.steamId, name: x.name }))
-                    : [{ steamId: p.steamId, name: p.name }],
-                  kaynakTakim: takim,
+                    ? secim.map((x) => ({ steamId: x.steamId, name: x.name, takim: x.takim }))
+                    : [{ steamId: p.steamId, name: p.name, takim }],
+                  hedefTakim,
                   ...(cokluMu ? { baslik: `${secim.length} seçili oyuncu` } : {}),
                 });
               }}
+              oyuncuTakimi={takim}
             />
           </li>
         ))}

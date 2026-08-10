@@ -1,0 +1,1 @@
+ALTER TABLE "team_change_queue" ADD COLUMN "target_team" text;

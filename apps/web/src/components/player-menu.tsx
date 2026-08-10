@@ -26,6 +26,7 @@ export function PlayerMenu({
   warnYetkisi,
   takimYetkisi,
   takimaAt,
+  oyuncuTakimi,
 }: {
   apiUrl: string;
   slug: string;
@@ -35,7 +36,9 @@ export function PlayerMenu({
   warnYetkisi: boolean;
   takimYetkisi?: boolean;
   /** Takım değiştirme onay kutusunu açar; kutu panelin üstünde duruyor. */
-  takimaAt?: () => void;
+  takimaAt?: (hedefTakim: 1 | 2) => void;
+  /** Oyuncunun şu anki takımı — kendi takımı seçenek olarak gösterilmiyor. */
+  oyuncuTakimi?: 1 | 2;
 }) {
   const [acik, setAcik] = useState(false);
   const [eylem, setEylem] = useState<Eylem>(null);
@@ -132,18 +135,26 @@ export function PlayerMenu({
                   Uyar
                 </button>
               ) : null}
-              {takimYetkisi && takimaAt ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAcik(false);
-                    takimaAt();
-                  }}
-                  className="rounded-sm px-2.5 py-1.5 text-left text-[13px] text-fg-muted hover:bg-surface-2 hover:text-fg"
-                >
-                  Karşı takıma at
-                </button>
-              ) : null}
+              {/* İki takım da açıkça yazılı. "Karşı takıma at" tek oyuncuda
+                  netti ama çoklu seçimde belirsizdi: iki taraftan seçilmiş
+                  oyuncular için "karşı" diye bir yön yok. */}
+              {takimYetkisi && takimaAt
+                ? ([1, 2] as const)
+                    .filter((t) => t !== oyuncuTakimi)
+                    .map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => {
+                          setAcik(false);
+                          takimaAt(t);
+                        }}
+                        className="rounded-sm px-2.5 py-1.5 text-left text-[13px] text-fg-muted hover:bg-surface-2 hover:text-fg"
+                      >
+                        Takım {t}'e al
+                      </button>
+                    ))
+                : null}
               {kickYetkisi ? (
                 <button
                   type="button"

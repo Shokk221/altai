@@ -33,7 +33,7 @@ function kur(slug: string) {
 describe('canlı listede takım değişimi', () => {
   it('oyuncuyu karşı takıma alır', () => {
     kur('t1');
-    applyTeamChange('t1', ['76561190000000001']);
+    applyTeamChange('t1', ['76561190000000001'], 2);
 
     const p = getServerState('t1')?.players.find((x) => x.steamId === '76561190000000001');
     expect(p?.teamId).toBe(2);
@@ -41,7 +41,7 @@ describe('canlı listede takım değişimi', () => {
 
   it('mangadan çıkarır — manga öteki takımda kalıyor', () => {
     kur('t2');
-    applyTeamChange('t2', ['76561190000000001']);
+    applyTeamChange('t2', ['76561190000000001'], 2);
 
     const p = getServerState('t2')?.players.find((x) => x.steamId === '76561190000000001');
     expect(p?.squadId).toBeNull();
@@ -51,18 +51,39 @@ describe('canlı listede takım değişimi', () => {
 
   it('diğer oyunculara dokunmaz', () => {
     kur('t3');
-    applyTeamChange('t3', ['76561190000000001']);
+    applyTeamChange('t3', ['76561190000000001'], 2);
 
     const p = getServerState('t3')?.players.find((x) => x.steamId === '76561190000000002');
     expect(p?.teamId).toBe(2);
     expect(p?.squadId).toBe(3);
   });
 
-  it('takımı bilinmeyeni olduğu gibi bırakır — tazeleme düzeltir', () => {
+  it('takımı bilinmeyeni hedefe yazar — hedef mutlak, çevirme değil', () => {
     replacePlayers('t4', [oyuncu('76561190000000003', null, null)], new Date().toISOString());
-    applyTeamChange('t4', ['76561190000000003']);
+    applyTeamChange('t4', ['76561190000000003'], 2);
 
-    expect(getServerState('t4')?.players[0]?.teamId).toBeNull();
+    expect(getServerState('t4')?.players[0]?.teamId).toBe(2);
+  });
+
+  it('zaten hedefteki oyuncuya dokunmaz', () => {
+    replacePlayers('t6', [oyuncu('76561190000000005', 2, 4)], new Date().toISOString());
+    applyTeamChange('t6', ['76561190000000005'], 2);
+
+    const p = getServerState('t6')?.players[0];
+    expect(p?.teamId).toBe(2);
+    // Mangası da korunuyor: taşınmadıysa mangadan da çıkmadı.
+    expect(p?.squadId).toBe(4);
+  });
+
+  it('farklı takımlardaki oyuncuları tek takımda toplar', () => {
+    replacePlayers(
+      't7',
+      [oyuncu('76561190000000006', 1, 1), oyuncu('76561190000000007', 2, 5)],
+      new Date().toISOString(),
+    );
+    applyTeamChange('t7', ['76561190000000006', '76561190000000007'], 1);
+
+    expect(getServerState('t7')?.players.every((p) => p.teamId === 1)).toBe(true);
   });
 
   it('mangayı komple geçirir', () => {
@@ -71,12 +92,12 @@ describe('canlı listede takım değişimi', () => {
       [oyuncu('76561190000000001', 1, 1), oyuncu('76561190000000004', 1, 1)],
       new Date().toISOString(),
     );
-    applyTeamChange('t5', ['76561190000000001', '76561190000000004']);
+    applyTeamChange('t5', ['76561190000000001', '76561190000000004'], 2);
 
     expect(getServerState('t5')?.players.every((p) => p.teamId === 2)).toBe(true);
   });
 
   it('bilinmeyen sunucuda çökmez', () => {
-    expect(() => applyTeamChange('yok-boyle-sunucu', ['76561190000000001'])).not.toThrow();
+    expect(() => applyTeamChange('yok-boyle-sunucu', ['76561190000000001'], 2)).not.toThrow();
   });
 });

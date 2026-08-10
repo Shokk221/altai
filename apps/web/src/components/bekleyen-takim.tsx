@@ -18,6 +18,7 @@ interface Bekleyen {
   id: string;
   steamId: string;
   playerName: string | null;
+  targetTeam: string | null;
   fromTeam: string | null;
   requestedByName: string | null;
   createdAt: string;
@@ -94,9 +95,7 @@ export function BekleyenTakim({
 
       {acik ? (
         <div className="absolute left-0 top-7 z-40 w-72 rounded-sm border border-border-strong bg-surface p-1 shadow-lift">
-          <p className="px-2.5 py-1.5 text-[11px] text-fg-faint">
-            Maç bitince karşı takıma alınacaklar
-          </p>
+          <p className="px-2.5 py-1.5 text-[11px] text-fg-faint">Maç bitince takımı değişecekler</p>
           <ul className="max-h-64 overflow-y-auto">
             {liste.map((b) => (
               <li
@@ -105,6 +104,9 @@ export function BekleyenTakim({
               >
                 <span className="min-w-0 flex-1 truncate">
                   {b.playerName ?? b.steamId}
+                  {b.targetTeam ? (
+                    <span className="ml-1.5 text-[11px] text-accent">→ T{b.targetTeam}</span>
+                  ) : null}
                   {b.requestedByName ? (
                     <span className="ml-1.5 text-[11px] text-fg-faint">{b.requestedByName}</span>
                   ) : null}

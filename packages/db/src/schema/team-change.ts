@@ -27,10 +27,19 @@ export const teamChangeQueue = pgTable(
     /** Kuyruğa alındığı andaki oyun içi adı — günlükte okunabilir kalsın. */
     playerName: text('player_name'),
     /**
-     * Kuyruğa alındığı andaki takımı. Maç sonunda oyuncu zaten karşıya
-     * geçmişse (kendi geçti, başka yetkili geçirdi) komutu çalıştırmak
-     * onu GERİ getirirdi; bu alan o kontrolü mümkün kılıyor.
+     * Oyuncunun VARMASI istenen takım ('1' | '2').
+     *
+     * Başlangıçta yalnızca `fromTeam` vardı ve mantık "karşıya çevir"di.
+     * O model iki yerde kırılgandı: aynı kayıt iki kez işlenirse oyuncu
+     * başladığı yere dönüyordu ve iki oyuncuyu FARKLI takımlardan alıp
+     * aynı takımda toplamak mümkün değildi.
+     *
+     * Hedefle çalışmak bunların ikisini de çözüyor: işlem artık
+     * "oyuncu şu takımda olsun" demek, yani tekrarlanabilir. Oyuncu zaten
+     * oradaysa komut hiç gönderilmiyor.
      */
+    targetTeam: text('target_team'),
+    /** Kuyruğa alındığı andaki takımı — yalnızca kayıt için. */
     fromTeam: text('from_team'),
     requestedByUserId: uuid('requested_by_user_id').references(() => users.id),
     requestedByName: text('requested_by_name'),

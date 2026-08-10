@@ -20,6 +20,8 @@ export type Zaman = 'simdi' | 'mac_sonu';
 export interface Aday {
   steamId: string;
   name: string;
+  /** Şu anki takımı; kaçının gerçekten taşınacağını göstermek için. */
+  takim?: 1 | 2;
 }
 
 export interface Istek {
@@ -27,8 +29,13 @@ export interface Istek {
   adaylar: Aday[];
   /** Ekranda "X mangası" gibi bir başlık gösterilecekse. */
   baslik?: string;
-  /** Nereden nereye — kullanıcı ne yaptığını görsün. */
-  kaynakTakim: 1 | 2;
+  /**
+   * Oyuncuların VARMASI istenen takım.
+   *
+   * "Karşıya çevir" değil: seçim iki taraftan da olabiliyor ve hepsi bu
+   * takımda toplanıyor. Zaten orada olanlara komut gönderilmiyor.
+   */
+  hedefTakim: 1 | 2;
 }
 
 export function TakimDegistirKutusu({
@@ -58,8 +65,12 @@ export function TakimDegistirKutusu({
     return () => document.removeEventListener('keydown', tus);
   }, [kapat]);
 
-  const hedefTakim = istek.kaynakTakim === 1 ? 2 : 1;
+  const hedefTakim = istek.hedefTakim;
   const cok = istek.adaylar.length > 1;
+  // Takımı bilinmeyeni "taşınacak" sayıyoruz: uç zaten hedefte olana
+  // komut göndermiyor, buradaki sayı yalnızca beklentiyi anlatıyor.
+  const tasinacak = istek.adaylar.filter((a) => a.takim !== hedefTakim).length;
+  const zatenOrada = istek.adaylar.length - tasinacak;
 
   async function gonder() {
     setBekliyor(true);
@@ -72,6 +83,7 @@ export function TakimDegistirKutusu({
         body: JSON.stringify({
           steamIds: istek.adaylar.map((a) => a.steamId),
           zaman,
+          hedefTakim,
           ...(mesaj.trim() ? { mesaj: mesaj.trim() } : {}),
         }),
       });
@@ -123,18 +135,27 @@ export function TakimDegistirKutusu({
         ref={kutu}
         className="w-full max-w-sm rounded-lg border border-border-strong bg-surface p-4 shadow-lift"
       >
-        <h2 className="text-[15px] font-semibold">
-          Takım {istek.kaynakTakim} → Takım {hedefTakim}
-        </h2>
+        <h2 className="text-[15px] font-semibold">Takım {hedefTakim}'e al</h2>
         <p className="mt-1 text-[13px] text-fg-muted">
           {istek.baslik ? `${istek.baslik} · ` : ''}
           {cok ? `${istek.adaylar.length} oyuncu` : istek.adaylar[0]?.name}
+          {zatenOrada > 0 ? (
+            // Sessizce atlanmıyor: "5 kişi seçtim ama 2'si taşındı"
+            // sürprizi, önceden söylenmiş olmasından kötü.
+            <span className="text-fg-faint"> · {zatenOrada}’i zaten bu takımda</span>
+          ) : null}
         </p>
 
         {cok ? (
-          <ul className="mt-2 max-h-28 overflow-y-auto rounded-sm bg-surface-sunken px-2.5 py-1.5 text-[12px] text-fg-muted">
+          <ul className="mt-2 max-h-28 overflow-y-auto rounded-sm bg-surface-sunken px-2.5 py-1.5 text-[12px]">
             {istek.adaylar.map((a) => (
-              <li key={a.steamId} className="truncate leading-[1.6]">
+              <li
+                key={a.steamId}
+                className={cn(
+                  'truncate leading-[1.6]',
+                  a.takim === hedefTakim ? 'text-fg-faint line-through' : 'text-fg-muted',
+                )}
+              >
                 {a.name}
               </li>
             ))}
@@ -154,8 +175,8 @@ export function TakimDegistirKutusu({
 
         <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
           {zaman === 'simdi'
-            ? 'Oyuncu hemen geçirilir; geçmeden önce uyarı görür.'
-            : 'Oyuncu şimdi uyarılır, geçiş maç bitince yapılır. O ana kadar iptal edilebilir.'}
+            ? `Takım ${hedefTakim}'de olmayanlar hemen alınır; geçmeden önce uyarı görürler.`
+            : `Oyuncular şimdi uyarılır, geçiş maç bitince yapılır. O ana kadar iptal edilebilir.`}
         </p>
 
         <input
@@ -184,7 +205,11 @@ export function TakimDegistirKutusu({
             disabled={bekliyor}
             className="rounded-full bg-ink px-3.5 py-1.5 text-[13px] font-medium text-ink-fg disabled:opacity-40"
           >
-            {bekliyor ? '…' : zaman === 'simdi' ? 'Şimdi geçir' : 'Maç sonuna al'}
+            {bekliyor
+              ? '…'
+              : zaman === 'simdi'
+                ? `Şimdi al${tasinacak > 1 ? ` (${tasinacak})` : ''}`
+                : `Maç sonuna al${tasinacak > 1 ? ` (${tasinacak})` : ''}`}
           </button>
         </div>
       </div>

@@ -12,15 +12,14 @@ import { applyTeamChange, getServerState } from './server-state.js';
  * Zorla takım değiştirme.
  *
  * Squad'ın komutu `AdminForceTeamChange <id>` ve HEDEF TAKIM ALMIYOR:
- * oyuncuyu karşı tarafa geçiriyor, o kadar. "1'e al" diye bir şey yok.
- * Bunun iki sonucu var:
+ * oyuncuyu karşı tarafa geçiriyor, o kadar. Bu ham komutun iki sakıncası
+ * var: iki kez göndermek oyuncuyu başladığı yere döndürüyor ve farklı
+ * takımlardaki oyuncuları aynı takımda toplamak mümkün olmuyor.
  *
- *  1. Komutu iki kez göndermek oyuncuyu başladığı yere geri getirir —
- *     yani tekrar denemek zararsız DEĞİL.
- *  2. Maç sonuna ertelenen bir değişimde, oyuncu bu arada kendi geçtiyse
- *     komutu çalıştırmak onu geri alır. Bu yüzden kuyrukta oyuncunun
- *     istek anındaki takımı saklanıyor ve çalıştırmadan önce hâlâ orada
- *     mı diye bakılıyor.
+ * Bu yüzden ÜST KATMANDA hedefle çalışıyoruz: "oyuncu şu takımda olsun".
+ * Komut yalnızca hedefte OLMAYANLARA gönderiliyor. Böylece işlem
+ * tekrarlanabilir hâle geliyor (aynı isteği iki kez göndermek zarar
+ * vermiyor) ve iki taraftan seçilen oyuncular tek takımda birleşebiliyor.
  */
 
 export type Zaman = 'simdi' | 'mac_sonu';
@@ -61,24 +60,28 @@ export interface Aktor {
   name: string | null;
 }
 
+export type Takim = 1 | 2;
+
 export interface Sonuc {
   steamId: string;
   name: string | null;
   /**
-   * `dogrulanamadi`: RCON komutu kabul etti ama oyuncu hâlâ eski
-   * takımında. Squad kendi denge kilidiyle sessizce reddetmiş olabilir.
-   * `komut_basarisiz`den ayrı tutuluyor çünkü sebebi farklı ve yetkiliye
-   * söylenecek şey de farklı.
+   * `zaten_hedefte`: oyuncu istenen takımda zaten; komut gönderilmedi.
+   *   Hata değil, iş yok demek.
+   * `dogrulanamadi`: RCON komutu kabul etti ama oyuncu hedefe geçmemiş.
+   *   Squad kendi denge kilidiyle sessizce reddetmiş olabilir.
+   *   `komut_basarisiz`den ayrı tutuluyor çünkü sebebi ve yetkiliye
+   *   söylenecek şey farklı.
    */
-  durum: 'ok' | 'kuyruga_alindi' | 'komut_basarisiz' | 'dogrulanamadi';
+  durum: 'ok' | 'zaten_hedefte' | 'kuyruga_alindi' | 'komut_basarisiz' | 'dogrulanamadi';
 }
 
 /** Oyuncuya gösterilecek metin. Yetkilinin kendi mesajı varsa ona eklenir. */
-function uyariMetni(zaman: Zaman, mesaj: string | undefined): string {
+function uyariMetni(zaman: Zaman, hedefTakim: Takim, mesaj: string | undefined): string {
   const temel =
     zaman === 'simdi'
-      ? 'Bir yetkili sizi karşı takıma aldı.'
-      : 'Maç sonunda karşı takıma alınacaksınız.';
+      ? `Bir yetkili sizi Takım ${hedefTakim}'e aldı.`
+      : `Maç sonunda Takım ${hedefTakim}'e alınacaksınız.`;
   return mesaj ? `${temel} ${mesaj}` : temel;
 }
 
@@ -108,17 +111,24 @@ async function uyar(slug: string, hedef: Hedef, metin: string, issuedBy: string)
 export async function simdiDegistir(
   slug: string,
   hedefler: Hedef[],
+  hedefTakim: Takim,
   mesaj: string | undefined,
   actor: Aktor,
 ): Promise<Sonuc[]> {
   const issuedBy = actor.userId ?? 'panel';
-  const metin = uyariMetni('simdi', mesaj);
+  const metin = uyariMetni('simdi', hedefTakim, mesaj);
   const sonuclar: Sonuc[] = [];
   const gecenler: string[] = [];
 
   // Sırayla: RCON zaten tek kanal, paralel göndermek sıraya girmekten
   // hızlı değil ama hata ayıklamayı zorlaştırırdı.
   for (const h of hedefler) {
+    // Hedefte olana dokunmuyoruz: komut "karşıya çevir" dediği için
+    // göndermek onu hedeften ÇIKARIRDI.
+    if (h.teamId === hedefTakim) {
+      sonuclar.push({ steamId: h.steamId, name: h.name ?? null, durum: 'zaten_hedefte' });
+      continue;
+    }
     await uyar(slug, h, metin, issuedBy);
     const sonuc = await komutGonder(
       slug,
@@ -147,6 +157,7 @@ export async function simdiDegistir(
         sunucu: slug,
         steamId: h.steamId,
         onceki_takim: h.teamId ?? null,
+        hedef_takim: hedefTakim,
         ...(mesaj ? { mesaj } : {}),
         sonuc: sonuc.durum,
       },
@@ -157,8 +168,8 @@ export async function simdiDegistir(
   // çalışıyor ve o süre boyunca oyuncu eski takımında görünüyordu —
   // yetkili komutun çalışmadığını sanıyordu.
   if (gecenler.length > 0) {
-    applyTeamChange(slug, gecenler);
-    await dogrula(slug, hedefler, sonuclar);
+    applyTeamChange(slug, gecenler, hedefTakim);
+    await dogrula(slug, hedefTakim, sonuclar);
   }
 
   return sonuclar;
@@ -173,7 +184,7 @@ export async function simdiDegistir(
  * Doğrulanamayan varsa iyimser güncelleme de geri alınıyor — ekranın
  * gerçekleşmemiş bir değişimi göstermesi, hiç göstermemesinden kötü.
  */
-async function dogrula(slug: string, hedefler: Hedef[], sonuclar: Sonuc[]) {
+async function dogrula(slug: string, hedefTakim: Takim, sonuclar: Sonuc[]) {
   await new Promise((r) => setTimeout(r, DOGRULAMA_BEKLEME_MS));
   const tazelendi = await sunucuyuTazele(slug, true).catch(() => false);
   if (!tazelendi) return; // Okuyamadıysak iddiada bulunmuyoruz.
@@ -181,12 +192,10 @@ async function dogrula(slug: string, hedefler: Hedef[], sonuclar: Sonuc[]) {
   const durum = getServerState(slug);
   for (const s of sonuclar) {
     if (s.durum !== 'ok') continue;
-    const hedef = hedefler.find((h) => h.steamId === s.steamId);
     const simdiki = durum?.players.find((p) => p.steamId === s.steamId);
     // Oyuncu çıktıysa ya da takımı okunamıyorsa iddia edecek bir şey yok.
     if (!simdiki || simdiki.teamId === null) continue;
-    if (hedef?.teamId === null || hedef?.teamId === undefined) continue;
-    if (simdiki.teamId === hedef.teamId) s.durum = 'dogrulanamadi';
+    if (simdiki.teamId !== hedefTakim) s.durum = 'dogrulanamadi';
   }
 }
 
@@ -199,11 +208,12 @@ export async function macSonunaErtele(
   slug: string,
   serverId: string,
   hedefler: Hedef[],
+  hedefTakim: Takim,
   mesaj: string | undefined,
   actor: Aktor,
 ): Promise<Sonuc[]> {
   const issuedBy = actor.userId ?? 'panel';
-  const metin = uyariMetni('mac_sonu', mesaj);
+  const metin = uyariMetni('mac_sonu', hedefTakim, mesaj);
 
   // Aynı oyuncu için ikinci bir bekleyen kayıt açılmıyor: maç sonunda iki
   // kez çevirmek oyuncuyu başladığı yere geri getirirdi (komut hedef takım
@@ -237,6 +247,7 @@ export async function macSonunaErtele(
       playerId: h.playerId ?? null,
       steamId: h.steamId,
       playerName: h.name ?? null,
+      targetTeam: String(hedefTakim),
       fromTeam: h.teamId === null || h.teamId === undefined ? null : String(h.teamId),
       requestedByUserId: actor.userId,
       requestedByName: actor.name,
@@ -259,6 +270,7 @@ export async function macSonunaErtele(
         sunucu: slug,
         steamId: h.steamId,
         onceki_takim: h.teamId ?? null,
+        hedef_takim: hedefTakim,
         ...(mesaj ? { mesaj } : {}),
       },
     });
@@ -278,6 +290,7 @@ export async function bekleyenler(db: Db, serverId: string) {
       id: teamChangeSchema.teamChangeQueue.id,
       steamId: teamChangeSchema.teamChangeQueue.steamId,
       playerName: teamChangeSchema.teamChangeQueue.playerName,
+      targetTeam: teamChangeSchema.teamChangeQueue.targetTeam,
       fromTeam: teamChangeSchema.teamChangeQueue.fromTeam,
       requestedByName: teamChangeSchema.teamChangeQueue.requestedByName,
       createdAt: teamChangeSchema.teamChangeQueue.createdAt,
@@ -324,14 +337,26 @@ export async function iptalEt(db: Db, id: string, actor: Aktor): Promise<boolean
  * Ayrı ve saf: buradaki hata sessiz olurdu — yanlış karar oyuncuyu
  * yanlış takıma atar ve kimse bunu bir hata olarak görmez, "panel
  * saçmaladı" diye geçilir.
+ *
+ * Hedef biliniyorsa karar basit ve tekrarlanabilir: oyuncu hedefteyse
+ * yapacak bir şey yok. Hedefi olmayan ESKİ kayıtlar (target_team sütunu
+ * eklenmeden önce açılanlar) eski kuralla, `fromTeam` karşılaştırmasıyla
+ * işleniyor — kuyrukta bekleyen bir söz, şema değişti diye düşmemeli.
  */
 export function degisimKarari(
+  targetTeam: string | null,
   fromTeam: string | null,
   oyuncu: { teamId: number | null } | undefined,
-): 'oyuncu_yok' | 'zaten_karsida' | 'uygula' {
+): 'oyuncu_yok' | 'zaten_hedefte' | 'zaten_karsida' | 'uygula' {
   if (!oyuncu) return 'oyuncu_yok';
-  // Takımı bilmiyorsak uyguluyoruz: kaydı yetkili bilerek açtı, kararı
-  // eksik bilgi yüzünden düşürmek sözü tutmamak olurdu.
+
+  if (targetTeam !== null) {
+    // Takımı okunamıyorsa uyguluyoruz: yetkilinin kararını eksik bilgi
+    // yüzünden düşürmek, verilen sözü tutmamak olurdu.
+    if (oyuncu.teamId === null) return 'uygula';
+    return String(oyuncu.teamId) === targetTeam ? 'zaten_hedefte' : 'uygula';
+  }
+
   if (fromTeam === null || oyuncu.teamId === null) return 'uygula';
   return String(oyuncu.teamId) === fromTeam ? 'uygula' : 'zaten_karsida';
 }
@@ -385,11 +410,11 @@ export async function macSonuIsle(db: Db, slug: string, serverId: string): Promi
 
   const durum = getServerState(slug);
   let uygulanan = 0;
-  const uygulananlar: { steamId: string; kuyrukId: string; oncekiTakim: string | null }[] = [];
+  const uygulananlar: { steamId: string; kuyrukId: string; hedef: Takim }[] = [];
 
   for (const kayit of kuyruk) {
     const oyuncu = durum?.players.find((p) => p.steamId === kayit.steamId);
-    const karar = degisimKarari(kayit.fromTeam, oyuncu);
+    const karar = degisimKarari(kayit.targetTeam, kayit.fromTeam, oyuncu);
     let sonuc: string;
 
     if (karar !== 'uygula') {
@@ -407,12 +432,17 @@ export async function macSonuIsle(db: Db, slug: string, serverId: string): Promi
       sonuc = komut.durum === 'ok' ? 'ok' : 'komut_basarisiz';
       if (komut.durum === 'ok') {
         uygulanan += 1;
-        applyTeamChange(slug, [kayit.steamId]);
-        uygulananlar.push({
-          steamId: kayit.steamId,
-          kuyrukId: kayit.id,
-          oncekiTakim: kayit.fromTeam,
-        });
+        // Hedef biliniyorsa oraya; hedefi olmayan ESKİ kayıtlarda komut
+        // "karşıya çevir" demek, o yüzden varılan takım oyuncunun o anki
+        // takımının tersi.
+        const varilan: Takim =
+          kayit.targetTeam === '1' || kayit.targetTeam === '2'
+            ? (Number(kayit.targetTeam) as Takim)
+            : oyuncu?.teamId === 1
+              ? 2
+              : 1;
+        applyTeamChange(slug, [kayit.steamId], varilan);
+        uygulananlar.push({ steamId: kayit.steamId, kuyrukId: kayit.id, hedef: varilan });
       }
     }
 
@@ -447,8 +477,8 @@ export async function macSonuIsle(db: Db, slug: string, serverId: string): Promi
       const yeni = getServerState(slug);
       for (const u of uygulananlar) {
         const simdiki = yeni?.players.find((p) => p.steamId === u.steamId);
-        if (!simdiki || simdiki.teamId === null || u.oncekiTakim === null) continue;
-        if (String(simdiki.teamId) !== u.oncekiTakim) continue;
+        if (!simdiki || simdiki.teamId === null) continue;
+        if (simdiki.teamId === u.hedef) continue;
         uygulanan -= 1;
         await db
           .update(teamChangeSchema.teamChangeQueue)

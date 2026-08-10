@@ -135,11 +135,11 @@ export function replacePlayers(
  * görüyor ve komut çalışmadı sanıyor. Gerçek kurulumda böyle görüldü.
  *
  * Tahmin yürütmüyoruz: AdminForceTeamChange'in ne yaptığı belli —
- * oyuncu karşı tarafa geçer ve mangasız kalır (mangada kalamaz, manga
+ * oyuncu hedef takıma geçer ve mangasız kalır (mangada kalamaz, manga
  * öteki takımda). Yine de hemen ardından bir tazeleme isteniyor, yani bu
  * yalnızca aradaki boşluğu dolduruyor; doğrunun kaynağı hâlâ RCON.
  */
-export function applyTeamChange(slug: string, steamIds: string[]) {
+export function applyTeamChange(slug: string, steamIds: string[], hedefTakim: 1 | 2) {
   const s = state.get(slug);
   if (!s) return;
   const hedefler = new Set(steamIds);
@@ -147,12 +147,11 @@ export function applyTeamChange(slug: string, steamIds: string[]) {
 
   s.players = s.players.map((p) => {
     if (!hedefler.has(p.steamId)) return p;
-    // Takımı bilinmiyorsa çevirecek bir şey yok; tazeleme düzeltir.
-    if (p.teamId !== 1 && p.teamId !== 2) return p;
+    if (p.teamId === hedefTakim) return p;
     degisti = true;
     return {
       ...p,
-      teamId: p.teamId === 1 ? 2 : 1,
+      teamId: hedefTakim,
       squadId: null,
       squadName: null,
       isLeader: false,

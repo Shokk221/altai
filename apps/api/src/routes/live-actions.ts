@@ -48,6 +48,12 @@ const TakimGovdesi = z.object({
     .min(1)
     .max(50),
   zaman: z.enum(['simdi', 'mac_sonu']),
+  /**
+   * Oyuncuların VARMASI istenen takım. "Karşıya çevir" değil "şurada
+   * olsun": iki taraftan seçilenleri tek takımda toplamayı mümkün kılıyor
+   * ve aynı isteği iki kez göndermeyi zararsız hâle getiriyor.
+   */
+  hedefTakim: z.union([z.literal(1), z.literal(2)]),
   /** Yetkilinin eklediği açıklama; oyuncuya gösterilen uyarıya ekleniyor. */
   mesaj: z.string().trim().max(200).optional(),
 });
@@ -159,9 +165,16 @@ export async function liveActionRoutes(app: FastifyInstance, opts: { db: Db }) {
       }
 
       if (parsed.data.zaman === 'simdi') {
-        const sonuclar = await simdiDegistir(slug, hedefler, parsed.data.mesaj, aktor);
+        const sonuclar = await simdiDegistir(
+          slug,
+          hedefler,
+          parsed.data.hedefTakim,
+          parsed.data.mesaj,
+          aktor,
+        );
         const basarisiz = sonuclar.filter((s) => s.durum === 'komut_basarisiz').length;
         const dogrulanamayan = sonuclar.filter((s) => s.durum === 'dogrulanamadi').length;
+        const zatenHedefte = sonuclar.filter((s) => s.durum === 'zaten_hedefte').length;
         // Kısmi başarı gizlenmiyor: dokuz kişilik mangada ikisi geçmediyse
         // yetkilinin bunu bilmesi gerekiyor. `dogrulanamayan` ayrı: komut
         // gitti ama Squad taşımadı — sebebi ve söylenecek şey farklı.
@@ -170,6 +183,7 @@ export async function liveActionRoutes(app: FastifyInstance, opts: { db: Db }) {
           sonuclar,
           basarisiz,
           dogrulanamayan,
+          zatenHedefte,
         };
       }
 
@@ -180,6 +194,7 @@ export async function liveActionRoutes(app: FastifyInstance, opts: { db: Db }) {
         slug,
         serverId,
         hedefler,
+        parsed.data.hedefTakim,
         parsed.data.mesaj,
         aktor,
       );
