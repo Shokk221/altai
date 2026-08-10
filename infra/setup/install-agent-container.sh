@@ -53,7 +53,23 @@ say "2/4 bağımlılıklar (/data içine, kalıcı)"
 # devDependencies'i atlıyor — ama agent TypeScript'i doğrudan tsx ile
 # çalıştırdığı için tsx bir RUNTIME bağımlılığı. Panel kurulumunda tam bu
 # yüzden "tsx: not found" alınmıştı.
-pnpm install --frozen-lockfile --prod=false --filter '@altai/agent...'
+# pnpm'i DEPONUN SAHİBİ olarak çalıştırıyoruz.
+#
+# Sebep: pnpm paketleri mağazadan sabit bağ (hardlink) ile kuruyor ve bağ,
+# mağazadaki dosyanın sahipliğini taşıyor. Mağaza `linuxgsm` kullanıcısına
+# ait; biz root olarak kurunca pnpm bin dosyalarına chmod atmaya çalışıyor ve
+# bu konteyner kullanıcı ad alanında olduğu için "EPERM: operation not
+# permitted" alıyor — root olmamıza rağmen. Dosyayı silip yeniden kurmak da
+# çözmüyor, çünkü yeni bağ yine aynı inode'a düşüyor.
+SAHIP="$(stat -c '%U' "$ALTAI_DIR")"
+KURULUM=(pnpm install --frozen-lockfile --prod=false --filter '@altai/agent...')
+if [[ "$SAHIP" != "$(id -un)" ]] && id "$SAHIP" >/dev/null 2>&1; then
+  echo "    pnpm '$SAHIP' kullanıcısıyla çalıştırılıyor (depo sahibi)"
+  su -s /bin/bash "$SAHIP" -c \
+    "cd '$ALTAI_DIR' && export COREPACK_ENABLE_DOWNLOAD_PROMPT=0 && ${KURULUM[*]}"
+else
+  "${KURULUM[@]}"
+fi
 TSX_BIN="$ALTAI_DIR/apps/agent/node_modules/.bin/tsx"
 [[ -x "$TSX_BIN" ]] || die "tsx bulunamadı ($TSX_BIN)"
 
