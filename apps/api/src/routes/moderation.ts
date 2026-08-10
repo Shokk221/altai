@@ -119,20 +119,33 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
       // agent kopuksa ya da RCON yanıt vermiyorsa ban yine geçerli, oyuncu
       // bir sonraki girişinde remote ban list tarafından engellenir.
       // Bu yüzden sonucu 201'in içinde bildiriyoruz, hata olarak değil.
-      const atma = await oyuncuyuAt(playerId.data, parsed.data.reason, actor?.id ?? 'sistem');
+      const atma = await oyuncuyuAt(
+        playerId.data,
+        parsed.data.reason,
+        actor?.id ?? 'sistem',
+        parsed.data.serverId ?? null,
+      );
 
       return reply.code(201).send({ ban, atma });
     },
   );
 
   /**
-   * Oyuncuyu bağlı olduğu sunuculardan atar.
+   * Oyuncuyu banın kapsadığı sunuculardan atar.
    *
-   * Hangi sunucuda olduğunu bilmiyoruz (ban sunucu bağımsız olabilir), o
-   * yüzden bağlı tüm agent'lara gönderiyoruz. Oyuncu orada değilse RCON
-   * zararsız bir "bulunamadı" döner.
+   * Ban sunucuya özelse (serverId dolu) YALNIZCA o sunucudan atılır. Küresel
+   * bansa hepsinden — hangi sunucuda olduğunu bilmiyoruz ve oyuncu orada
+   * değilse RCON zararsız bir "bulunamadı" döner.
+   *
+   * Kapsamı yok saymak, turnuva sunucusundan yasaklanan birinin ana
+   * sunucudaki maçından da atılması demekti.
    */
-  async function oyuncuyuAt(playerId: string, reason: string, issuedBy: string) {
+  async function oyuncuyuAt(
+    playerId: string,
+    reason: string,
+    issuedBy: string,
+    banServerId: string | null,
+  ) {
     const [p] = await db
       .select({
         steamId: identitySchema.players.steamId,
@@ -144,11 +157,12 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
     if (!p) return { denendi: false as const };
 
     const sunucular = await db
-      .select({ slug: presenceSchema.servers.slug })
+      .select({ id: presenceSchema.servers.id, slug: presenceSchema.servers.slug })
       .from(presenceSchema.servers);
+    const kapsam = banServerId ? sunucular.filter((s) => s.id === banServerId) : sunucular;
 
     const sonuclar: Record<string, string> = {};
-    for (const s of sunucular) {
+    for (const s of kapsam) {
       if (!agentBagliMi(s.slug)) {
         sonuclar[s.slug] = 'agent_yok';
         continue;
