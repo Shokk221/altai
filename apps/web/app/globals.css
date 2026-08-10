@@ -60,6 +60,34 @@
     @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-bg;
   }
 
+  /* Kaydırma çubuğu.
+     Tarayıcı varsayılanı koyu zeminde açık gri, kalın ve gürültülü bir şerit
+     çiziyor; dört panelli bir ekranda dört tane birden görünüyor ve arayüzü
+     paramparça gösteriyor. İnce ve zeminle aynı sıcaklıkta, yalnızca üstüne
+     gelince belirginleşiyor. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 999px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--fg-muted) / 0.6);
+  }
+  /* Köşedeki kare (yatay+dikey kesişimi) varsayılan olarak açık kalıyor. */
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
   /* Büyük sayılar: dolgun ve sıkı. Rakamlar sabit genişlikte, yoksa
      sütun hâlinde dizildiklerinde zıplıyorlar. */
   .display {

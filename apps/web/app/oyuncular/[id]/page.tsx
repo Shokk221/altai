@@ -2,7 +2,7 @@ import { ChatPanel, type Mesaj } from '@/components/chat-panel';
 import { BanKaldir, EtiketKaldir, HizliEylemler, KaydiKapat } from '@/components/player-actions';
 import { Badge } from '@/components/ui/badge';
 import { getJson, getMe, publicApiUrl } from '@/lib/api';
-import { banBitis, sayi, sure, tarih, tarihSaat } from '@/lib/format';
+import { banBitis, banSebebi, sayi, sure, tarih, tarihSaat } from '@/lib/format';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
@@ -160,7 +160,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
   return (
     // h-screen + min-h-0 zinciri: paneller taşmak yerine kendi içlerinde
     // kaysın diye yükseklik yukarıdan aşağı aktarılıyor.
-    <main className="mx-auto flex h-screen w-full max-w-6xl flex-col gap-3 px-4 py-4">
+    <main className="mx-auto flex h-screen w-full max-w-[104rem] flex-col gap-3 px-5 py-4">
       <Link
         href="/oyuncular"
         className="shrink-0 text-xs font-semibold text-fg-muted hover:text-fg"
@@ -230,7 +230,9 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
                       {tarih(b.createdAt)} → {banBitis(b.expiresAt)}
                     </span>
                   </div>
-                  <p className="mt-1.5 text-[13px] leading-snug">{b.reason}</p>
+                  <p className="mt-1.5 text-[13px] leading-snug">
+                    {banSebebi(b.reason, b.expiresAt)}
+                  </p>
                   <p className="mt-1 text-[11px] text-fg-muted">
                     {b.issuedByName ?? 'bilinmiyor'}
                     {b.source !== 'altai' ? ` · ${b.source}` : ''}

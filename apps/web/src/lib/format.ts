@@ -68,3 +68,30 @@ export function saatDakika(v: string | Date | null | undefined): string {
   const d = typeof v === 'string' ? new Date(v) : v;
   return Number.isNaN(d.getTime()) ? '—' : GUN_SAAT.format(d);
 }
+
+function insanSure(ms: number): string {
+  if (ms <= 0) return 'süresi doldu';
+  const saat = Math.floor(ms / 3_600_000);
+  if (saat < 24) return `${saat} saat`;
+  const gun = Math.floor(saat / 24);
+  if (gun < 30) return `${gun} gün`;
+  return `${Math.floor(gun / 30)} ay`;
+}
+
+/**
+ * Ban sebebindeki şablon yer tutucularını doldurur.
+ *
+ * Eski sistemden gelen sebepler `{{expires}}` ve `{{timeLeft}}` içeriyor;
+ * bunlar ban listesi üretilirken dolduruluyordu ama panelde ham hâlde
+ * görünüyordu — admin ekranda "{{timeLeft}}" okuyordu.
+ */
+export function banSebebi(reason: string, expiresAt: string | null): string {
+  const bitis = expiresAt ? new Date(expiresAt) : null;
+  const bitisMetni = bitis ? tarihSaat(bitis) : 'kalıcı';
+  const kalanMetni = bitis ? insanSure(bitis.getTime() - Date.now()) : 'kalıcı';
+  return reason
+    .replaceAll('{{expires}}', bitisMetni)
+    .replaceAll('{{timeLeft}}', kalanMetni)
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
