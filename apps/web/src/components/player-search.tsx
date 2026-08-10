@@ -13,8 +13,8 @@ interface Result {
   eosId: string | null;
   name: string;
   matchedName: string | null;
-  /** Güncel isim hariç, en son kullanılan diğer isimler. */
-  eskiIsimler: string[];
+  /** Güncel isim hariç, en son kullanılan diğer isimler — tarihleriyle. */
+  eskiIsimler: { name: string; lastSeen: string | null }[];
   knownNames: number;
   /** İsim geçmişinin en yeni damgası. */
   sonGorulme: string | null;
@@ -138,7 +138,7 @@ function PlayerRow({ result }: { result: Result }) {
     <li>
       <Link
         href={`/oyuncular/${result.id}`}
-        className="flex items-center justify-between gap-4 rounded border border-border bg-surface px-4 py-3 transition-colors hover:border-border-strong hover:bg-surface-2"
+        className="flex items-start justify-between gap-4 rounded border border-border bg-surface px-4 py-3 transition-colors hover:border-border-strong hover:bg-surface-2"
       >
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -166,9 +166,28 @@ function PlayerRow({ result }: { result: Result }) {
             </span>
           ) : null}
 
+          {/* Eski nickler ALT ALTA, her biri kendi tarihiyle. Tek satırda
+              nokta ile birleştirilince hem taşıyor hem "hangi isim ne zaman"
+              bilgisi kayboluyordu. */}
           {result.eskiIsimler.length > 0 ? (
-            <span className="mt-1 block truncate text-[12.5px] text-fg-faint">
-              eski: {result.eskiIsimler.join(' · ')}
+            <span className="mt-2 block border-t border-border pt-2">
+              {result.eskiIsimler.map((n) => (
+                <span
+                  key={n.name}
+                  className="flex items-baseline justify-between gap-3 py-[3px] text-[12.5px]"
+                >
+                  <span className="truncate text-fg-muted">{n.name}</span>
+                  <span className="num shrink-0 text-[11px] text-fg-faint">
+                    {tarih(n.lastSeen)}
+                    <span className="ml-1.5">{gecenSure(n.lastSeen)}</span>
+                  </span>
+                </span>
+              ))}
+              {result.knownNames > result.eskiIsimler.length + 1 ? (
+                <span className="mt-0.5 block text-[11px] text-fg-faint">
+                  +{result.knownNames - result.eskiIsimler.length - 1} isim daha
+                </span>
+              ) : null}
             </span>
           ) : null}
         </span>
@@ -178,9 +197,6 @@ function PlayerRow({ result }: { result: Result }) {
           {/* Mutlak tarih hangi gün olduğunu, göreli ne kadar eski olduğunu
               söylüyor; ikisi de gerekiyor. */}
           <span className="block text-[11px] text-fg-faint">{gecenSure(result.sonGorulme)}</span>
-          {result.knownNames > 1 ? (
-            <span className="mt-1 block text-[11px] text-fg-faint">{result.knownNames} isim</span>
-          ) : null}
         </span>
       </Link>
     </li>

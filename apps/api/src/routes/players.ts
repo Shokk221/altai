@@ -414,15 +414,15 @@ async function decorate(db: Db, rows: BaseRow[]) {
     .where(inArray(identitySchema.playerNames.playerId, ids))
     .orderBy(desc(identitySchema.playerNames.lastSeen));
 
-  const isimler = new Map<string, string[]>();
+  const isimler = new Map<string, { name: string; lastSeen: Date | null }[]>();
   // Son görülme, isim geçmişinin en yeni damgası: liste zaten o sıraya göre
   // geldiği için ilk satır yeterli, ayrı sorgu gerekmiyor.
   const sonGorulme = new Map<string, Date | null>();
   for (const r of isimSatirlari) {
     const liste = isimler.get(r.playerId);
-    if (liste) liste.push(r.name);
+    if (liste) liste.push({ name: r.name, lastSeen: r.lastSeen });
     else {
-      isimler.set(r.playerId, [r.name]);
+      isimler.set(r.playerId, [{ name: r.name, lastSeen: r.lastSeen }]);
       sonGorulme.set(r.playerId, r.lastSeen);
     }
   }
@@ -468,7 +468,7 @@ async function decorate(db: Db, rows: BaseRow[]) {
 
   return rows.map((r) => {
     const hepsi = isimler.get(r.id) ?? [];
-    const guncel = hepsi[0] ?? r.matchedName ?? '(isim yok)';
+    const guncel = hepsi[0]?.name ?? r.matchedName ?? '(isim yok)';
     // Gösterilen eski isim sayısı sınırlı ama SAYAÇ tam listeden geliyor.
     return {
       id: r.id,
@@ -477,7 +477,9 @@ async function decorate(db: Db, rows: BaseRow[]) {
       name: guncel,
       matchedName: r.matchedName ?? null,
       // Güncel isim hariç eskiler; eşleşen isim zaten ayrıca gösteriliyor.
-      eskiIsimler: hepsi.slice(1, 5).filter((n) => n !== r.matchedName),
+      // İsimler tarihleriyle birlikte: arama listesinde her biri kendi
+      // satırında, ne zaman kullanıldığıyla gösteriliyor.
+      eskiIsimler: hepsi.slice(1, 6).filter((n) => n.name !== r.matchedName),
       knownNames: hepsi.length,
       sonGorulme: sonGorulme.get(r.id) ?? null,
       flags: etiketler.get(r.id) ?? [],
