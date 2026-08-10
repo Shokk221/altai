@@ -4,7 +4,8 @@ import { FlagPicker } from '@/components/flag-picker';
 import { BanKaldir, EtiketKaldir, HizliEylemler, KaydiKapat } from '@/components/player-actions';
 import { Badge } from '@/components/ui/badge';
 import { getJson, getMe, publicApiUrl } from '@/lib/api';
-import { banBitis, banSebebi, sayi, sure, tarih, tarihSaat } from '@/lib/format';
+import { cn } from '@/lib/cn';
+import { banBitis, banSebebi, gecenSure, sayi, sure, tarih, tarihSaat } from '@/lib/format';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
@@ -160,6 +161,18 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
   const kd = oyun.olum > 0 ? (oyun.kill / oyun.olum).toFixed(2) : String(oyun.kill);
   const acikKayit = profil.records.filter((k) => !k.resolvedAt).length;
 
+  /**
+   * Kimlikler tek listede: isimler + Steam + EOS.
+   *
+   * Steam ve EOS künyede de yazıyor ama orada "ne zaman görüldü" bilgisi
+   * yok; burada isimlerle aynı zaman çizgisinde duruyorlar.
+   */
+  const kimlikler: { deger: string; tur: string; zaman: string | null }[] = [
+    ...(player.steamId ? [{ deger: player.steamId, tur: 'Steam ID', zaman: oyun.sonGorulme }] : []),
+    ...(player.eosId ? [{ deger: player.eosId, tur: 'EOS ID', zaman: oyun.sonGorulme }] : []),
+    ...profil.names.map((n) => ({ deger: n.name, tur: 'İsim', zaman: n.lastSeen })),
+  ];
+
   return (
     // h-screen + min-h-0 zinciri: paneller taşmak yerine kendi içlerinde
     // kaysın diye yükseklik yukarıdan aşağı aktarılıyor.
@@ -304,19 +317,41 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
             <CoplayPanel apiUrl={apiUrl} playerId={player.id} />
           </Panel>
 
-          <Panel baslik="İsim geçmişi" sayac={profil.names.length}>
-            {profil.names.length === 0 ? (
-              <Bos metin="İsim kaydı yok" />
+          <Panel baslik="Kimlikler" sayac={kimlikler.length}>
+            {kimlikler.length === 0 ? (
+              <Bos metin="Kimlik kaydı yok" />
             ) : (
-              <ul className="flex flex-col">
-                {profil.names.map((n) => (
+              // Tek tablo: isim, Steam ve EOS aynı listede. Ayrı yerlerde
+              // durduklarında "bu adam hangi kimlikle ne zaman görüldü"
+              // sorusu iki yere bakmayı gerektiriyordu.
+              <ul className="flex flex-col [&>li:last-child]:border-0">
+                {kimlikler.map((k) => (
                   <li
-                    key={n.name}
-                    className="flex items-baseline justify-between gap-3 py-1.5 text-[13px]"
+                    key={`${k.tur}:${k.deger}`}
+                    className="flex items-baseline justify-between gap-3 border-b border-border py-[7px]"
                   >
-                    <span className="truncate">{n.name}</span>
-                    <span className="num shrink-0 text-[11px] text-fg-faint">
-                      {tarih(n.lastSeen)}
+                    <span className="min-w-0">
+                      <span
+                        className={cn(
+                          'block truncate text-[13px]',
+                          k.tur === 'İsim' ? '' : 'font-mono text-[11.5px]',
+                        )}
+                      >
+                        {k.deger}
+                      </span>
+                      <span className="text-[10.5px] uppercase tracking-wider text-fg-faint">
+                        {k.tur}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="num block text-[11.5px] text-fg-muted">
+                        {tarih(k.zaman)}
+                      </span>
+                      {/* Mutlak tarihin yanında göreli: biri hangi gün
+                          olduğunu, diğeri ne kadar eski olduğunu söylüyor. */}
+                      <span className="block text-[10.5px] text-fg-faint">
+                        {gecenSure(k.zaman)}
+                      </span>
                     </span>
                   </li>
                 ))}

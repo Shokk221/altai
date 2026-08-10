@@ -3,7 +3,7 @@
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, Skeleton } from '@/components/ui/empty';
 import { Input } from '@/components/ui/input';
-import { tarih } from '@/lib/format';
+import { gecenSure, tarih } from '@/lib/format';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -178,8 +178,11 @@ function PlayerRow({ result }: { result: Result }) {
 
       <td className="px-3 py-2 font-mono text-[11px] text-fg-muted">{result.steamId ?? '—'}</td>
       <td className="px-3 py-2 font-mono text-[11px] text-fg-faint">{result.eosId ?? '—'}</td>
-      <td className="num whitespace-nowrap px-3 py-2 text-right text-[11.5px] text-fg-muted">
-        {tarih(result.sonGorulme)}
+      <td className="whitespace-nowrap px-3 py-2 text-right">
+        <span className="num block text-[11.5px] text-fg-muted">{tarih(result.sonGorulme)}</span>
+        {/* Mutlak tarih hangi gün olduğunu, göreli ne kadar eski olduğunu
+            söylüyor; moderasyonda ikisi de gerekiyor. */}
+        <span className="block text-[10.5px] text-fg-faint">{gecenSure(result.sonGorulme)}</span>
       </td>
     </tr>
   );

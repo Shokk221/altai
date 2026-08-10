@@ -95,3 +95,32 @@ export function banSebebi(reason: string, expiresAt: string | null): string {
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
+
+const BIRIMLER: [Intl.RelativeTimeFormatUnit, number][] = [
+  ['year', 365 * 86_400_000],
+  ['month', 30 * 86_400_000],
+  ['day', 86_400_000],
+  ['hour', 3_600_000],
+  ['minute', 60_000],
+];
+
+const GORELI = new Intl.RelativeTimeFormat('tr-TR', { numeric: 'auto' });
+
+/**
+ * "5 yıl önce", "6 gün önce".
+ *
+ * Mutlak tarihin YANINDA gösteriliyor, yerine değil: "23.03.2023" ne kadar
+ * eski olduğunu hemen söylemiyor, "3 yıl önce" hangi gün olduğunu
+ * söylemiyor. Moderasyonda ikisi de gerekiyor.
+ */
+export function gecenSure(v: string | Date | null | undefined): string {
+  if (!v) return '';
+  const d = typeof v === 'string' ? new Date(v) : v;
+  if (Number.isNaN(d.getTime())) return '';
+  const fark = d.getTime() - Date.now();
+  const mutlak = Math.abs(fark);
+  for (const [birim, ms] of BIRIMLER) {
+    if (mutlak >= ms) return GORELI.format(Math.round(fark / ms), birim);
+  }
+  return 'az önce';
+}
