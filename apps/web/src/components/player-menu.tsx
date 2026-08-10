@@ -148,7 +148,7 @@ export function PlayerMenu({
                 <button
                   type="button"
                   onClick={() => setEylem('kick')}
-                  className="rounded-sm px-2.5 py-1.5 text-left text-[13px] text-danger hover:bg-danger/15"
+                  className="rounded-sm px-2.5 py-1.5 text-left text-[13px] text-danger hover:bg-danger-weak"
                 >
                   Sunucudan at
                 </button>

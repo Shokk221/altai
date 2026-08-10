@@ -14,10 +14,10 @@ type Tone = 'neutral' | 'accent' | 'danger' | 'success' | 'info' | 'warn';
 const TONES: Record<Tone, string> = {
   neutral: 'bg-surface-2 text-fg-muted',
   accent: 'bg-accent-weak text-accent-2',
-  danger: 'bg-danger/15 text-danger',
-  success: 'bg-success/15 text-success',
-  info: 'bg-info/15 text-info',
-  warn: 'bg-warn/15 text-warn',
+  danger: 'bg-danger-weak text-danger',
+  success: 'bg-success-weak text-success',
+  info: 'bg-info-weak text-info',
+  warn: 'bg-warn-weak text-warn',
 };
 
 export function Badge({ tone = 'neutral', children }: { tone?: Tone; children: ReactNode }) {

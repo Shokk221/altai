@@ -56,7 +56,7 @@ export function AppNav({
   return (
     // Yapışkan ve saydam: Apple arayüzlerinde üst çubuk içerikle birlikte
     // kaymaz, içeriğin üstünde durur ve arkasını bulanıklaştırır.
-    <header className="sticky top-0 z-50 border-b border-border bg-bg/72 backdrop-blur-xl backdrop-saturate-150">
+    <header className="sticky top-0 z-50 border-b border-border bg-bg-blur backdrop-blur-xl backdrop-saturate-150">
       <div className="mx-auto flex h-12 w-full max-w-[110rem] items-center gap-1 px-5">
         <Link href="/" className="mr-4 text-[15px] font-semibold tracking-tight">
           Altai

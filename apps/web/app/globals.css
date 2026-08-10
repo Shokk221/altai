@@ -57,6 +57,22 @@
     --danger-fg: #2b0d0d;
     --info: #78acdd;
 
+    /* Saydam tonlar AYRI belirteç olarak duruyor.
+       Sebep: yukarıdaki renkler hex ve Tailwind hex bir CSS değişkenine
+       `/15` gibi bir opaklık ekleyemiyor — sınıf hiç üretilmiyor, hata da
+       vermiyor. `bg-danger/15` yazan dört rozet ve seçili oyuncu satırı
+       tam da bu yüzden aylarca renksiz durdu. Yeni bir saydam ton lazımsa
+       buraya belirteç eklenir; `/sayı` YAZILMAZ (derlemede kontrol var). */
+    /* Yapışkan üst çubuğun ardını bulanıklaştıran yarı saydam zemin.
+       `bg-bg/72` yazılmıştı ve hiç üretilmiyordu: çubuk aylardır tamamen
+       saydam duruyordu. */
+    --bg-blur: rgba(0, 0, 0, 0.72);
+    --danger-weak: rgba(255, 107, 107, 0.15);
+    --success-weak: rgba(48, 209, 88, 0.15);
+    --info-weak: rgba(120, 172, 221, 0.15);
+    --warn-weak: rgba(255, 212, 38, 0.15);
+    --warn-line: rgba(255, 212, 38, 0.4);
+
     /* Oyundaki karşılığıyla eşleşiyor; her ekranda aynı. */
     --team1: #e0868d;
     --team2: #78acdd;

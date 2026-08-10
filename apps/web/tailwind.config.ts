@@ -21,7 +21,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        bg: v('bg'),
+        bg: { DEFAULT: v('bg'), blur: v('bg-blur') },
         surface: v('surface'),
         'surface-2': v('surface-2'),
         'surface-sunken': v('surface-sunken'),
@@ -36,11 +36,13 @@ export default {
           2: v('accent-2'),
           fg: v('accent-fg'),
           weak: v('accent-weak'),
+          // Kenarlık/halka için: tam renk fazla sert, saydamı ayrı belirteç.
+          line: v('accent-ring'),
         },
-        danger: { DEFAULT: v('danger'), fg: v('danger-fg') },
-        success: v('success'),
-        warn: v('warn'),
-        info: v('info'),
+        danger: { DEFAULT: v('danger'), fg: v('danger-fg'), weak: v('danger-weak') },
+        success: { DEFAULT: v('success'), weak: v('success-weak') },
+        warn: { DEFAULT: v('warn'), weak: v('warn-weak'), line: v('warn-line') },
+        info: { DEFAULT: v('info'), weak: v('info-weak') },
         team1: v('team1'),
         team2: v('team2'),
         ring: v('accent-ring'),

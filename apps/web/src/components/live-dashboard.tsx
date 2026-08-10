@@ -367,7 +367,7 @@ export function LiveDashboard({
           <button
             type="button"
             onClick={secimiTemizle}
-            className="rounded-full border border-accent/50 px-2.5 py-1 text-[11px] font-semibold text-accent hover:bg-accent/10"
+            className="rounded-full border border-accent-line bg-accent-weak px-2.5 py-1 text-[11px] font-semibold text-accent hover:bg-surface-2"
             title="Seçimi bırak (Esc)"
           >
             {secili.size} seçili ×
@@ -757,7 +757,14 @@ function Manga({
             }}
             className={cn(
               'group flex items-baseline gap-1 rounded-sm px-1',
-              secili.has(p.steamId) ? 'bg-accent/15' : 'hover:bg-surface-2',
+              // Seçili işareti HALKA ile: kenarlık 1 piksel yer kaplar ve
+              // yoğun listede satırlar seçildikçe oynardı. `ring-inset`
+              // çizgiyi kutunun içine koyuyor, hiçbir şey kaymıyor.
+              // Zemin + halka + tam kontrastlı isim birlikte: tek başına
+              // zemin (rgba .14) bu kadar dar bir satırda fark edilmiyordu.
+              secili.has(p.steamId)
+                ? 'bg-accent-weak text-fg ring-1 ring-inset ring-accent'
+                : 'hover:bg-surface-2',
               takimYetkisi && 'cursor-grab active:cursor-grabbing',
             )}
             title={

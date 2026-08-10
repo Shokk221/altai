@@ -87,7 +87,7 @@ export function BekleyenTakim({
       <button
         type="button"
         onClick={() => setAcik((o) => !o)}
-        className="rounded-full border border-warn/40 px-2.5 py-1 text-[11px] font-semibold text-warn hover:bg-warn/10"
+        className="rounded-full border border-warn-line px-2.5 py-1 text-[11px] font-semibold text-warn hover:bg-warn-weak"
       >
         maç sonu: {liste.length}
       </button>
