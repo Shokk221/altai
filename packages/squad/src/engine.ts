@@ -158,6 +158,16 @@ export interface SquadJSEngine {
    * periyodik olarak listeyi isteyip aktif ban'ı olanları attırıyor.
    */
   getPlayers(): Promise<SquadJSOnlinePlayer[]>;
+  /**
+   * Bellekteki listeyi RCON'dan tazeler.
+   *
+   * `getPlayers()` SquadJS'in ÖNBELLEĞİNİ okuyor ve o önbellek 10 saniyede
+   * bir yenileniyor. Takım değiştirme gibi bir komutun hemen ardından
+   * listeyi okumak, komuttan ÖNCEKİ durumu geri getiriyordu — ekranda
+   * oyuncu karşıya geçip sonra eski takımına dönüyor gibi görünüyordu.
+   * Gerçek kurulumda böyle görüldü.
+   */
+  refreshPlayers(): Promise<void>;
   // api'den gelen komutlar için (Faz 2/3'te dolacak)
   rconExecute(command: string): Promise<string>;
 }

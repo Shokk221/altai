@@ -88,6 +88,8 @@ export function createDevFixtureEngine(serverSlug: string): SquadJSEngine {
         currentLayer: 'Narva_RAAS_v1',
       };
     },
+    // Sabit veri; tazelenecek bir kaynak yok.
+    async refreshPlayers() {},
     async getPlayers() {
       return [];
     },

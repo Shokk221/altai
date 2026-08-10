@@ -20,11 +20,23 @@ import { replacePlayers } from './server-state.js';
  */
 const ARALIK_MS = 20_000;
 
-/** Tek bir sunucunun listesini RCON'dan okuyup canlı duruma yazar. */
-export async function sunucuyuTazele(slug: string): Promise<boolean> {
+/**
+ * Tek bir sunucunun listesini okuyup canlı duruma yazar.
+ *
+ * `taze` = agent önce RCON'a gidip SquadJS'in önbelleğini yenilesin.
+ * Periyodik tazelemede gerekmiyor (önbellek zaten 10 sn'de bir yenileniyor)
+ * ama bir eylemin hemen ardından ŞART: yenilenmemiş önbellek eylemden
+ * önceki durumu döndürüp ekranı geri sarıyordu.
+ */
+export async function sunucuyuTazele(slug: string, taze = false): Promise<boolean> {
   if (!agentBagliMi(slug)) return false;
 
-  const cevap = await komutGonder(slug, 'listPlayers', {}, 'player-refresh');
+  const cevap = await komutGonder(
+    slug,
+    'listPlayers',
+    taze ? { taze: true } : {},
+    'player-refresh',
+  );
   if (cevap.durum !== 'ok') return false;
 
   const ayristirilmis = OnlinePlayers.safeParse(cevap.data);
@@ -66,14 +78,16 @@ export async function oyunculariTazele(db: Db) {
 /**
  * Bir eylemden hemen sonra listeyi doğrulatmak için.
  *
- * Gecikme var çünkü oyun komutu işlemesiyle ListPlayers'ın yeni durumu
- * göstermesi arasında kısa bir boşluk oluyor; hemen sorarsak eski cevabı
- * alıp iyimser güncellemeyi geri alırdık — ekran bir an doğru, sonra
- * yanlış görünürdü.
+ * `taze: true` ile: agent SquadJS'in önbelleğini RCON'dan yeniletiyor.
+ * Bu olmadan komuttan 2 saniye sonra okunan liste hâlâ eski takımı
+ * gösteriyordu ve iyimser güncellemeyi geri alıyordu — ekranda oyuncu
+ * karşıya geçip sonra geri dönüyor gibi görünüyordu.
+ *
+ * Gecikme yine de duruyor: oyunun komutu işlemesi anlık değil.
  */
 export function tazelemeyiPlanla(slug: string, gecikmeMs = 2_000) {
   setTimeout(() => {
-    void sunucuyuTazele(slug).catch((err) =>
+    void sunucuyuTazele(slug, true).catch((err) =>
       logger.error({ err, slug }, 'eylem sonrası tazeleme başarısız'),
     );
   }, gecikmeMs).unref?.();

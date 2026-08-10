@@ -74,6 +74,10 @@ export async function komutCalistir(
       // aktif ban'i olanlari attiriyor. RCON'a gitmez, SquadJS'in bellekteki
       // guncel listesini dondurur.
       case 'listPlayers': {
+        // `taze` istendiğinde önce RCON'dan yeniliyoruz. Bir eylemin
+        // (takım değiştirme gibi) hemen ardından okunan önbellek, eylemden
+        // ÖNCEKİ durumu döndürüyor ve paneli yanlış gösteriyordu.
+        if (p.taze === true) await engine.refreshPlayers();
         const oyuncular = await engine.getPlayers();
         return { ok: true, data: { players: oyuncular } };
       }

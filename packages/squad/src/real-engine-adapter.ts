@@ -25,6 +25,12 @@ export interface RealSquadServerLike {
   readonly playerCount: number;
   readonly publicQueue: number;
   readonly currentLayer?: { name?: string } | null;
+  /**
+   * SquadJS'in listeyi RCON'dan yenileme fonksiyonu. Kendi zamanlayıcısı
+   * 10 saniyede bir çağırıyor; biz bir komutun hemen ardından teyit için
+   * elle çağırıyoruz.
+   */
+  updatePlayerList?: () => Promise<void>;
   // SquadJS bu diziyi RCON ListPlayers ve log eventleriyle güncel tutuyor.
   readonly players?: {
     steamID?: string;
@@ -216,9 +222,18 @@ export function createSquadServerEngineAdapter(
       };
     },
 
+    async refreshPlayers(): Promise<void> {
+      // SquadJS'in kendi tazeleme fonksiyonu: RCON'a gidip listeyi yeniler
+      // ve kendi zamanlayıcısını yeniden kurar. Bizim ayrı bir RCON
+      // sorgusu açmamız SquadJS'in durumunu bizimkiyle ayrıştırırdı.
+      await real.updatePlayerList?.();
+    },
+
     async getPlayers(): Promise<SquadJSOnlinePlayer[]> {
-      // SquadJS listeyi zaten bellekte tutuyor; her çağrıda RCON'a gitmek
-      // 60 saniyede bir gereksiz yük olurdu.
+      // SquadJS listeyi bellekte tutuyor ve 10 saniyede bir yeniliyor;
+      // periyodik tazeleme için bu yeterli. Bir komutun hemen ardından
+      // okunacaksa ÖNCE refreshPlayers() çağrılmalı — yoksa komuttan
+      // önceki durum okunur.
       const sayiya = (v: unknown): number | null => {
         const n = typeof v === 'number' ? v : Number(v);
         return Number.isFinite(n) ? n : null;
