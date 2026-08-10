@@ -20,7 +20,10 @@ export type AuditAction =
   | 'flag.assign'
   | 'flag.remove'
   | 'role_mapping.upsert'
-  | 'role_mapping.delete';
+  | 'role_mapping.delete'
+  /** Canlı ekrandan yapılan, kalıcı kayıt bırakmayan eylemler. */
+  | 'player.kick'
+  | 'player.warn';
 
 export type AuditTargetType =
   | 'player'

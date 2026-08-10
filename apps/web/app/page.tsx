@@ -26,7 +26,17 @@ export default async function HomePage() {
   const me = await getMe();
   const apiUrl = publicApiUrl();
 
-  if (me) return <LiveDashboard wsUrl={wsAdresi()} />;
+  if (me) {
+    const yetki = (p: string) => me.permissions.includes(p) || me.systemRole === 'super_admin';
+    return (
+      <LiveDashboard
+        wsUrl={wsAdresi()}
+        apiUrl={apiUrl}
+        kickYetkisi={yetki('player.kick')}
+        warnYetkisi={yetki('player.warn')}
+      />
+    );
+  }
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center gap-6 px-5 py-12">

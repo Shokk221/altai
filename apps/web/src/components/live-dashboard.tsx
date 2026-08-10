@@ -1,5 +1,6 @@
 'use client';
 
+import { PlayerMenu } from '@/components/player-menu';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/cn';
 import Link from 'next/link';
@@ -88,7 +89,17 @@ function rolKisalt(role: string | null): string {
   return parcalar.length > 1 ? (parcalar[1] ?? role) : role;
 }
 
-export function LiveDashboard({ wsUrl }: { wsUrl: string }) {
+export function LiveDashboard({
+  wsUrl,
+  apiUrl,
+  kickYetkisi,
+  warnYetkisi,
+}: {
+  wsUrl: string;
+  apiUrl: string;
+  kickYetkisi: boolean;
+  warnYetkisi: boolean;
+}) {
   const [sunucular, setSunucular] = useState<Record<string, LiveServerState>>({});
   const [olaylar, setOlaylar] = useState<CanliOlay[]>([]);
   const [bagli, setBagli] = useState(false);
@@ -231,8 +242,18 @@ export function LiveDashboard({ wsUrl }: { wsUrl: string }) {
           toplam={tumOyuncular.length}
           arama={oyuncuArama}
           setArama={setOyuncuArama}
+          apiUrl={apiUrl}
+          kickYetkisi={kickYetkisi}
+          warnYetkisi={warnYetkisi}
         />
-        <TakimPaneli takim={2} oyuncular={gosterilenOyuncular} toplam={tumOyuncular.length} />
+        <TakimPaneli
+          takim={2}
+          oyuncular={gosterilenOyuncular}
+          toplam={tumOyuncular.length}
+          apiUrl={apiUrl}
+          kickYetkisi={kickYetkisi}
+          warnYetkisi={warnYetkisi}
+        />
 
         {/* ------------------------------------------------------ olay akışı */}
         <section className="flex min-h-0 flex-col rounded border border-border bg-surface">
@@ -336,12 +357,18 @@ function TakimPaneli({
   toplam,
   arama,
   setArama,
+  apiUrl,
+  kickYetkisi,
+  warnYetkisi,
 }: {
   takim: 1 | 2;
   oyuncular: (LivePlayer & { serverSlug: string })[];
   toplam: number;
   arama?: string;
   setArama?: (v: string) => void;
+  apiUrl: string;
+  kickYetkisi: boolean;
+  warnYetkisi: boolean;
 }) {
   const benimkiler = oyuncular.filter((p) => p.teamId === takim);
 
@@ -394,9 +421,21 @@ function TakimPaneli({
                 key={no}
                 baslik={`${no}. ${uyeler[0]?.squadName ?? 'Manga'}`}
                 uyeler={uyeler}
+                apiUrl={apiUrl}
+                kickYetkisi={kickYetkisi}
+                warnYetkisi={warnYetkisi}
               />
             ))}
-            {mangasiz.length > 0 ? <Manga baslik="Mangasız" uyeler={mangasiz} sonuk /> : null}
+            {mangasiz.length > 0 ? (
+              <Manga
+                baslik="Mangasız"
+                uyeler={mangasiz}
+                sonuk
+                apiUrl={apiUrl}
+                kickYetkisi={kickYetkisi}
+                warnYetkisi={warnYetkisi}
+              />
+            ) : null}
           </div>
         )}
       </div>
@@ -408,10 +447,16 @@ function Manga({
   baslik,
   uyeler,
   sonuk,
+  apiUrl,
+  kickYetkisi,
+  warnYetkisi,
 }: {
   baslik: string;
   uyeler: (LivePlayer & { serverSlug: string })[];
   sonuk?: boolean;
+  apiUrl: string;
+  kickYetkisi: boolean;
+  warnYetkisi: boolean;
 }) {
   // Manga lideri başta: skor tahtasında da öyle ve "kime yazayım" sorusunun
   // cevabı o.
@@ -433,10 +478,13 @@ function Manga({
       </div>
       <ul className="flex flex-col">
         {sirali.map((p) => (
-          <li key={`${p.serverSlug}:${p.steamId}`}>
+          <li
+            key={`${p.serverSlug}:${p.steamId}`}
+            className="group flex items-baseline gap-1 rounded-sm px-1 hover:bg-surface-2"
+          >
             <Link
               href={`/oyuncular?q=${p.steamId}`}
-              className="flex items-baseline justify-between gap-2 rounded-sm px-1 py-[3px] text-[13px] hover:bg-surface-2"
+              className="flex min-w-0 flex-1 items-baseline justify-between gap-2 py-[3px] text-[13px]"
             >
               <span className="min-w-0 truncate">
                 {p.isLeader ? (
@@ -451,6 +499,14 @@ function Manga({
                 <span className="ml-1.5 opacity-70">{suredir(p.joinedAt)}</span>
               </span>
             </Link>
+            <PlayerMenu
+              apiUrl={apiUrl}
+              slug={p.serverSlug}
+              steamId={p.steamId}
+              isim={p.name}
+              kickYetkisi={kickYetkisi}
+              warnYetkisi={warnYetkisi}
+            />
           </li>
         ))}
       </ul>
