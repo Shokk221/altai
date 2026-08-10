@@ -88,6 +88,10 @@ export function createDevFixtureEngine(serverSlug: string): SquadJSEngine {
         currentLayer: 'Narva_RAAS_v1',
       };
     },
+    async getPlayers() {
+      return [];
+    },
+
     async rconExecute(command: string): Promise<string> {
       return `[fixture] komut alındı ama gerçek RCON yok: ${command}`;
     },

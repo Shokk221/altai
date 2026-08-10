@@ -42,6 +42,13 @@ export interface SquadJSChatMessageRaw {
   time: Date;
 }
 
+/** SquadJS'in bellekteki oyuncu kaydından ihtiyacımız olan alanlar. */
+export interface SquadJSOnlinePlayer {
+  steamId: string | null;
+  eosId: string | null;
+  name: string;
+}
+
 export interface SquadJSServerStatusRaw {
   playerCount: number;
   publicQueue: number;
@@ -86,6 +93,11 @@ export interface SquadJSEngine {
   off<K extends keyof SquadJSEngineEvents>(event: K, listener: SquadJSEngineEvents[K]): void;
   // RCON ile anlık durum — snapshot için 60 sn'de bir çağrılır
   getStatus(): Promise<SquadJSServerStatusRaw>;
+  /**
+   * O an sunucuda olan oyuncular. Ban uygulaması buna dayanıyor: api
+   * periyodik olarak listeyi isteyip aktif ban'ı olanları attırıyor.
+   */
+  getPlayers(): Promise<SquadJSOnlinePlayer[]>;
   // api'den gelen komutlar için (Faz 2/3'te dolacak)
   rconExecute(command: string): Promise<string>;
 }

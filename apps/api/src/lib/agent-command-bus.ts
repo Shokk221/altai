@@ -57,7 +57,8 @@ export function komutSonucuGeldi(result: AgentCommandResult) {
 }
 
 export type KomutSonucu =
-  | { durum: 'ok' }
+  // `data` yalnızca veri döndüren komutlarda dolu (örn. listPlayers).
+  | { durum: 'ok'; data?: unknown }
   | { durum: 'agent_yok' }
   | { durum: 'zaman_asimi' }
   | { durum: 'hata'; mesaj: string };
@@ -90,7 +91,7 @@ export async function komutGonder(
     bekleyen.set(correlationId, {
       zamanlayici,
       cozumle: (result) => {
-        if (result.ok) resolve({ durum: 'ok' });
+        if (result.ok) resolve({ durum: 'ok', data: result.data });
         else resolve({ durum: 'hata', mesaj: result.error ?? 'bilinmeyen hata' });
       },
     });

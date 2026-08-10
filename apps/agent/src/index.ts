@@ -47,6 +47,7 @@ const uplink = createUplink({
         correlationId: command.correlationId,
         ok: sonuc.ok,
         ...(sonuc.error ? { error: sonuc.error } : {}),
+        ...(sonuc.data !== undefined ? { data: sonuc.data } : {}),
       });
     });
   },

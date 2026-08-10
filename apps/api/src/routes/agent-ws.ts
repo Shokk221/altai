@@ -5,6 +5,7 @@ import type { AppConfig } from '@altai/shared';
 import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
 import { agentBaglandi, agentKoptu, komutSonucuGeldi } from '../lib/agent-command-bus.js';
+import { girisAninda, taramayiBaslat } from '../lib/ban-enforcer.js';
 import {
   closeAllOpenSessions,
   createPersistenceWriter,
@@ -25,7 +26,11 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
   // sunucu bazında değil global tutulur, böylece iki sunucudan gelen eventler
   // tek insert'te gider.
   const writer = createPersistenceWriter(db);
+  // Periyodik ban taraması: giriş anındaki kontrolün kaçırdıklarını ve
+  // oyuncu içerideyken yenen banları yakalar.
+  const taramayiDurdur = taramayiBaslat(db);
   app.addHook('onClose', async () => {
+    taramayiDurdur();
     await writer.stop();
   });
 
@@ -50,9 +55,19 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
       writer.write(serverId, event);
 
       switch (event.type) {
-        case 'PLAYER_CONNECTED':
+        case 'PLAYER_CONNECTED': {
           applyPlayerConnected(serverSlug, event.steamId, event.name, event.timestamp);
+          // Ban uygulaması: girer girmez kontrol. Beklemiyoruz — kalıcı
+          // yazımı geciktirmesin; başarısız olursa periyodik tarama yakalar.
+          const sslug = serverSlug;
+          const sid = serverId;
+          if (sid) {
+            void girisAninda(db, sslug, sid, event.steamId, event.eosId ?? null).catch((err) =>
+              app.log.error({ err, steamId: event.steamId }, 'giriş anı ban kontrolü başarısız'),
+            );
+          }
           break;
+        }
         case 'PLAYER_DISCONNECTED':
           applyPlayerDisconnected(serverSlug, event.steamId);
           break;

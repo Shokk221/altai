@@ -19,6 +19,8 @@ import type { SquadJSEngine } from '@altai/squad';
 export interface KomutSonucu {
   ok: boolean;
   error?: string;
+  /** Komuta özel dönüş (listPlayers'ın oyuncu listesi gibi). */
+  data?: unknown;
 }
 
 /** RCON metin argümanlarında satır sonu komut enjeksiyonuna yol açabilir. */
@@ -66,6 +68,14 @@ export async function komutCalistir(
         if (!mesaj) return { ok: false, error: 'mesaj_bos' };
         await engine.rconExecute(`AdminWarn ${id} ${mesaj}`);
         return { ok: true };
+      }
+
+      // Ban uygulamasinin veri kaynagi: api bu listeyi periyodik isteyip
+      // aktif ban'i olanlari attiriyor. RCON'a gitmez, SquadJS'in bellekteki
+      // guncel listesini dondurur.
+      case 'listPlayers': {
+        const oyuncular = await engine.getPlayers();
+        return { ok: true, data: { players: oyuncular } };
       }
 
       case 'broadcast': {

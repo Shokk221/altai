@@ -3,6 +3,7 @@ import type {
   SquadJSEngine,
   SquadJSEngineEvents,
   SquadJSNewGameRaw,
+  SquadJSOnlinePlayer,
   SquadJSPlayerConnectedRaw,
   SquadJSPlayerDisconnectedRaw,
   SquadJSRoundEndedRaw,
@@ -22,6 +23,8 @@ export interface RealSquadServerLike {
   readonly playerCount: number;
   readonly publicQueue: number;
   readonly currentLayer?: { name?: string } | null;
+  // SquadJS bu diziyi RCON ListPlayers ve log eventleriyle güncel tutuyor.
+  readonly players?: { steamID?: string; eosID?: string; name?: string }[];
   rcon: {
     execute(command: string): Promise<string>;
   };
@@ -173,6 +176,16 @@ export function createSquadServerEngineAdapter(
         publicQueue: real.publicQueue ?? 0,
         currentLayer: real.currentLayer?.name,
       };
+    },
+
+    async getPlayers(): Promise<SquadJSOnlinePlayer[]> {
+      // SquadJS listeyi zaten bellekte tutuyor; her çağrıda RCON'a gitmek
+      // 60 saniyede bir gereksiz yük olurdu.
+      return (real.players ?? []).map((p) => ({
+        steamId: p.steamID ?? null,
+        eosId: p.eosID ?? null,
+        name: p.name ?? '',
+      }));
     },
 
     async rconExecute(command: string): Promise<string> {
