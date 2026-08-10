@@ -163,7 +163,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
   return (
     // h-screen + min-h-0 zinciri: paneller taşmak yerine kendi içlerinde
     // kaysın diye yükseklik yukarıdan aşağı aktarılıyor.
-    <main className="mx-auto flex h-screen w-full max-w-[104rem] flex-col gap-3 px-5 py-4">
+    <main className="mx-auto flex h-full w-full max-w-[104rem] flex-col gap-3 px-5 py-4">
       <Link
         href="/oyuncular"
         className="shrink-0 text-xs font-semibold text-fg-muted hover:text-fg"

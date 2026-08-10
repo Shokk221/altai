@@ -194,9 +194,8 @@ export function LiveDashboard({ wsUrl }: { wsUrl: string }) {
   const toplamKuyruk = sunucuListesi.reduce((a, s) => a + s.queueCount, 0);
 
   return (
-    <main className="mx-auto flex h-screen w-full max-w-[110rem] flex-col gap-3 px-5 py-4">
+    <main className="mx-auto flex h-full w-full max-w-[110rem] flex-col gap-3 px-5 py-4">
       <header className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2">
-        <h1 className="display text-2xl">Altai</h1>
         <span
           className={cn(
             'inline-flex items-center gap-1.5 text-xs font-semibold',
@@ -216,19 +215,12 @@ export function LiveDashboard({ wsUrl }: { wsUrl: string }) {
           ) : null}
         </span>
         {sunucuListesi.map((s) => (
-          <span key={s.serverSlug} className="text-xs text-fg-muted">
+          <span key={s.serverSlug} className="text-xs text-fg-muted last:mr-auto">
             <span className="font-semibold text-fg">{s.serverSlug}</span>
             {s.layer ? ` · ${s.layer}` : ''} · {s.playerCount}
           </span>
         ))}
-        <nav className="ml-auto flex gap-4 text-xs font-semibold text-fg-muted">
-          <Link href="/oyuncular" className="hover:text-fg">
-            Oyuncular
-          </Link>
-          <Link href="/yetkiler" className="hover:text-fg">
-            Yetkiler
-          </Link>
-        </nav>
+        {/* Bölüm bağlantıları üst çubukta; burada tekrarlamıyoruz. */}
       </header>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[1.25fr_1fr]">

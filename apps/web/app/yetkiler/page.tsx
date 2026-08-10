@@ -36,10 +36,7 @@ export default async function YetkilerPage() {
 
   return (
     <main className="mx-auto w-full max-w-4xl px-5 py-8">
-      <Link href="/oyuncular" className="text-xs font-semibold text-fg-muted hover:text-fg">
-        ← Oyuncular
-      </Link>
-      <header className="mt-4 mb-6">
+      <header className="mb-6">
         <h1 className="display text-3xl">Yetkiler</h1>
         <p className="mt-1 text-sm text-fg-muted">
           Discord rolü → panel izinleri ve oyun içi grup. Zincirin başlangıcı burası: bir rol buraya
