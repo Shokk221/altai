@@ -43,6 +43,10 @@ const uplink = createUplink({
       return;
     }
     void komutCalistir(engine, command).then((sonuc) => {
+      logger.info(
+        { action: command.action, ok: sonuc.ok, error: sonuc.error },
+        'komut sonucu gönderiliyor',
+      );
       uplink.sendCommandResult({
         correlationId: command.correlationId,
         ok: sonuc.ok,

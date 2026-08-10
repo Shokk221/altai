@@ -91,7 +91,20 @@ export function createUplink(opts: UplinkOptions): Uplink {
         return;
       }
       const result = ApiToAgentMessageSchema.safeParse(parsed);
-      if (!result.success) return;
+      if (!result.success) {
+        // ESKİDEN SESSİZCE ATILIYORDU. api komut gönderip cevap bekliyor,
+        // agent hiçbir şey söylemiyordu; tek belirti api tarafındaki zaman
+        // aşımıydı ve sebebi görünmüyordu. Doğrulamadan geçmeyen mesaj artık
+        // ne olduğuyla birlikte loglanıyor.
+        logger.error(
+          {
+            tip: (parsed as { type?: unknown } | null)?.type,
+            hata: result.error.issues.slice(0, 3),
+          },
+          'api mesajı doğrulanamadı — YOK SAYILDI',
+        );
+        return;
+      }
 
       const msg = result.data;
       if (msg.type === 'hello_ack') {
@@ -107,6 +120,10 @@ export function createUplink(opts: UplinkOptions): Uplink {
           'api uplink reddedildi — AGENT_SHARED_SECRET kontrol et',
         );
       } else if (msg.type === 'command') {
+        logger.info(
+          { action: msg.command.action, correlationId: msg.command.correlationId },
+          'komut alındı',
+        );
         opts.onCommand(msg);
       }
     });
