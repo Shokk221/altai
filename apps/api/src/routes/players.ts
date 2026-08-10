@@ -391,47 +391,33 @@ async function decorate(db: Db, rows: BaseRow[]) {
   /**
    * Oyuncu başına EN SON 5 isim.
    *
-   * Önceki hâli tek bir global `limit` kullanıyordu (ids.length * 6) ve bu
-   * yanlıştı: 99 ismi olan bir oyuncu bütün payı yiyip diğerlerinin isimlerini
-   * sonuçtan düşürebiliyordu. Pencere fonksiyonu limiti oyuncu başına
-   * uyguluyor.
+   * Pencere fonksiyonu ve ham SQL BİLEREK kullanılmıyor. Denendi ve iki ayrı
+   * tuzağa düşüldü: drizzle şablonunda JS dizisi kayıt (record) olarak
+   * açılıyor, ayrıca gömülen `inArray` sütunu tam adıyla nitelediği için alt
+   * sorgudaki takma adla çakışıyor. Arama ucu bu yüzden 500 döndü.
    *
-   * KİMLİK LİSTESİ `inArray` İLE GÖMÜLÜYOR, ham `${ids}` ile değil: drizzle
-   * şablonunda bir JS dizisi `(a, b, c)` kayıt (record) olarak açılıyor,
-   * dizi olarak değil — `= any(...)` ya da `::uuid[]` bu yüzden çalışmıyor.
-   * Aynı tuzağa aşağıdaki ban sorgusunda da düşülmüştü.
+   * Sorgu kurucuyla tüm isimler çekilip dilimleme JS'te yapılıyor: en fazla
+   * 25 oyuncu × isimleri, yani birkaç bin küçük satır — ölçülebilir bir
+   * maliyeti yok. Karşılığında bir sınıf hata tamamen ortadan kalkıyor.
+   *
+   * Önceki hâlindeki asıl kusur da düzeldi: tek bir GLOBAL limit vardı
+   * (ids.length * 6) ve 99 ismi olan bir oyuncu bütün payı yiyip
+   * diğerlerinin isimlerini sonuçtan düşürebiliyordu.
    */
-  const isimSatirlari = await db.execute<{
-    player_id: string;
-    name: string;
-    sira: number;
-    toplam: number;
-  }>(sql`
-    select player_id, name, sira, toplam
-      from (
-        -- Takma ad KULLANILMIYOR: inArray sutunu tam adiyla niteliyor
-        -- (player_names.player_id); alt sorguda takma ad olsaydi Postgres
-        -- "invalid reference to FROM-clause entry" verirdi.
-        select player_names.player_id,
-               player_names.name,
-               row_number() over (
-                 partition by player_names.player_id
-                 order by player_names.last_seen desc nulls last
-               ) as sira,
-               count(*) over (partition by player_names.player_id) as toplam
-          from player_names
-         where ${inArray(identitySchema.playerNames.playerId, ids)}
-      ) x
-     where sira <= 5
-  `);
+  const isimSatirlari = await db
+    .select({
+      playerId: identitySchema.playerNames.playerId,
+      name: identitySchema.playerNames.name,
+    })
+    .from(identitySchema.playerNames)
+    .where(inArray(identitySchema.playerNames.playerId, ids))
+    .orderBy(desc(identitySchema.playerNames.lastSeen));
 
   const isimler = new Map<string, string[]>();
-  const isimSayisi = new Map<string, number>();
-  for (const r of isimSatirlari as unknown as Record<string, unknown>[]) {
-    const pid = String(r.player_id);
-    if (!isimler.has(pid)) isimler.set(pid, []);
-    isimler.get(pid)?.push(String(r.name));
-    isimSayisi.set(pid, Number(r.toplam ?? 0));
+  for (const r of isimSatirlari) {
+    const liste = isimler.get(r.playerId);
+    if (liste) liste.push(r.name);
+    else isimler.set(r.playerId, [r.name]);
   }
 
   const now = new Date();
@@ -476,6 +462,7 @@ async function decorate(db: Db, rows: BaseRow[]) {
   return rows.map((r) => {
     const hepsi = isimler.get(r.id) ?? [];
     const guncel = hepsi[0] ?? r.matchedName ?? '(isim yok)';
+    // Gösterilen eski isim sayısı sınırlı ama SAYAÇ tam listeden geliyor.
     return {
       id: r.id,
       steamId: r.steamId,
@@ -483,8 +470,8 @@ async function decorate(db: Db, rows: BaseRow[]) {
       name: guncel,
       matchedName: r.matchedName ?? null,
       // Güncel isim hariç eskiler; eşleşen isim zaten ayrıca gösteriliyor.
-      eskiIsimler: hepsi.slice(1).filter((n) => n !== r.matchedName),
-      knownNames: isimSayisi.get(r.id) ?? hepsi.length,
+      eskiIsimler: hepsi.slice(1, 5).filter((n) => n !== r.matchedName),
+      knownNames: hepsi.length,
       flags: etiketler.get(r.id) ?? [],
       hasActiveBan: banned.has(r.id),
     };
