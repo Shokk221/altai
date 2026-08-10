@@ -4,7 +4,7 @@ import { logger } from '@altai/shared';
 import { and, eq, isNull } from 'drizzle-orm';
 import { kaydet } from './activity-log.js';
 import { komutGonder } from './agent-command-bus.js';
-import { tazelemeyiPlanla } from './player-refresh.js';
+import { sunucuyuTazele, tazelemeyiPlanla } from './player-refresh.js';
 import { applyTeamChange, getServerState } from './server-state.js';
 
 /**
@@ -274,6 +274,17 @@ export async function macSonuIsle(db: Db, slug: string, serverId: string): Promi
       ),
     );
   if (kuyruk.length === 0) return 0;
+
+  // Kararı BAYAT veriyle vermiyoruz. Canlı liste normalde 20 saniyede bir
+  // tazeleniyor ve altındaki SquadJS önbelleği 10 saniyede bir; ikisi
+  // üst üste binince maç sonunda elimizdeki takım bilgisi yarım dakika
+  // eski olabiliyor. "Oyuncu bu arada zaten karşıya geçti mi" kontrolünün
+  // bütün değeri güncel olmasında — eski veriyle bakarsak oyuncuyu tam
+  // tersi yöne atarız.
+  await sunucuyuTazele(slug, true).catch(() => {
+    // Tazeleme başarısızsa elimizdeki listeyle devam ediyoruz: kararı
+    // hiç uygulamamak, verilen sözü tutmamak olurdu.
+  });
 
   const durum = getServerState(slug);
   let uygulanan = 0;
