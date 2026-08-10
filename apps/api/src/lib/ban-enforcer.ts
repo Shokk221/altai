@@ -33,6 +33,16 @@ import { aktifBanKosulu } from './ban-active.js';
 
 const TARAMA_ARALIGI_MS = 60_000;
 
+/**
+ * Çalışma kipi. 'dry' gerçek oyuncuları atmadan neyin atılacağını gösterir;
+ * uygulama dondurulmuş bir BM arşivine dayandığı için bu güvenlik valfi
+ * gerekli. Kip süreç ömrü boyunca sabit — env'den okunur.
+ */
+let kip: 'on' | 'dry' | 'off' = 'on';
+export function kipiAyarla(yeni: 'on' | 'dry' | 'off') {
+  kip = yeni;
+}
+
 export interface BanliOyuncu {
   playerId: string;
   steamId: string | null;
@@ -109,6 +119,13 @@ async function aktifBanlar(db: Db, serverId: string): Promise<BanliOyuncu[]> {
 }
 
 async function at(slug: string, ban: BanliOyuncu) {
+  if (kip === 'dry') {
+    logger.warn(
+      { slug, playerId: ban.playerId, steamId: ban.steamId, reason: ban.reason },
+      'KURU KOŞU: banlı oyuncu atılacaktı (BAN_ENFORCEMENT=dry)',
+    );
+    return;
+  }
   const sonuc = await komutGonder(
     slug,
     'kick',
@@ -134,6 +151,7 @@ export async function girisAninda(
   steamId: string | null,
   eosId: string | null,
 ) {
+  if (kip === 'off') return;
   if (!steamId && !eosId) return;
   const kimlikKosulu = steamId
     ? eq(identitySchema.players.steamId, steamId)
@@ -171,6 +189,7 @@ export async function girisAninda(
  * Karşılaştırma kimlik üzerinden: oyuncu adı değişebilir, kimlik değişmez.
  */
 export async function taramaYap(db: Db) {
+  if (kip === 'off') return;
   const sunucular = await db
     .select({ id: presenceSchema.servers.id, slug: presenceSchema.servers.slug })
     .from(presenceSchema.servers);
@@ -206,6 +225,6 @@ export function taramayiBaslat(db: Db): () => void {
   }, TARAMA_ARALIGI_MS);
   // Node kapanışını bu zamanlayıcı engellemesin.
   zamanlayici.unref?.();
-  logger.info({ aralikMs: TARAMA_ARALIGI_MS }, 'ban taraması başladı');
+  logger.info({ aralikMs: TARAMA_ARALIGI_MS, kip }, 'ban taraması başladı');
   return () => clearInterval(zamanlayici);
 }

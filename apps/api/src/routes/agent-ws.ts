@@ -5,7 +5,7 @@ import type { AppConfig } from '@altai/shared';
 import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
 import { agentBaglandi, agentKoptu, komutSonucuGeldi } from '../lib/agent-command-bus.js';
-import { girisAninda, taramayiBaslat } from '../lib/ban-enforcer.js';
+import { girisAninda, kipiAyarla, taramayiBaslat } from '../lib/ban-enforcer.js';
 import {
   closeAllOpenSessions,
   createPersistenceWriter,
@@ -28,6 +28,7 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
   const writer = createPersistenceWriter(db);
   // Periyodik ban taraması: giriş anındaki kontrolün kaçırdıklarını ve
   // oyuncu içerideyken yenen banları yakalar.
+  kipiAyarla(config.BAN_ENFORCEMENT);
   const taramayiDurdur = taramayiBaslat(db);
   app.addHook('onClose', async () => {
     taramayiDurdur();

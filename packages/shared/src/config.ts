@@ -38,6 +38,19 @@ const envSchema = z.object({
   // Vekil arkasında çalıştırırken 'loopback' (Caddy aynı makinede) ya da
   // vekilin IP'si verilmeli.
   TRUST_PROXY: z.string().optional(),
+
+  /**
+   * Ban uygulamasının çalışma kipi (bkz. apps/api/src/lib/ban-enforcer.ts).
+   *
+   *   on   — banlı oyuncu atılır (varsayılan)
+   *   dry  — atılmaz, yalnızca "atılacaktı" diye loglanır
+   *   off  — hiç kontrol edilmez
+   *
+   * `dry` bilerek var: uygulama 25 binlik BattleMetrics arşivine dayanıyor
+   * ve o arşiv dondurulmuş bir kopya. Yanlış bir eşleşme gerçek oyuncuları
+   * oyundan atar; şüphe varsa önce `dry` ile bir akşam izlenir.
+   */
+  BAN_ENFORCEMENT: z.enum(['on', 'dry', 'off']).default('on'),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;
