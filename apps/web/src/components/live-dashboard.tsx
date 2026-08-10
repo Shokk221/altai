@@ -1,6 +1,8 @@
 'use client';
 
+import { BekleyenTakim } from '@/components/bekleyen-takim';
 import { PlayerMenu } from '@/components/player-menu';
+import { type Istek, TakimDegistirKutusu } from '@/components/takim-degistir';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/cn';
 import Link from 'next/link';
@@ -52,6 +54,21 @@ function tpsRengi(tps: number): string {
   if (tps >= 40) return 'text-success';
   if (tps >= 30) return 'text-warn';
   return 'text-danger';
+}
+
+/**
+ * Sürüklenen şeyin taşıdığı veri.
+ *
+ * dataTransfer'a JSON olarak konuyor: React state'i kullanmak cazipti ama
+ * sürükleme tarayıcının kendi olayları üzerinden yürüyor ve bırakma anında
+ * state güncel olmayabiliyor. Yük olayla birlikte taşınınca bu risk yok.
+ */
+const SURUKLE_TURU = 'application/x-altai-takim';
+
+interface SurukleYuku {
+  adaylar: { steamId: string; name: string }[];
+  kaynakTakim: 1 | 2;
+  baslik?: string;
 }
 
 type AdminIslem = 'warn' | 'kick' | 'ban' | 'broadcast' | 'cam_enter' | 'cam_exit';
@@ -131,17 +148,21 @@ export function LiveDashboard({
   apiUrl,
   kickYetkisi,
   warnYetkisi,
+  takimYetkisi,
 }: {
   wsUrl: string;
   apiUrl: string;
   kickYetkisi: boolean;
   warnYetkisi: boolean;
+  takimYetkisi: boolean;
 }) {
   const [sunucular, setSunucular] = useState<Record<string, LiveServerState>>({});
   const [olaylar, setOlaylar] = useState<CanliOlay[]>([]);
   const [bagli, setBagli] = useState(false);
   const [oyuncuArama, setOyuncuArama] = useState('');
   const [olaySuzgeci, setOlaySuzgeci] = useState<CanliOlay['tur'] | null>(null);
+  // Onay bekleyen takım değişimi. null = kutu kapalı.
+  const [takimIstegi, setTakimIstegi] = useState<Istek | null>(null);
 
   const akisKutusu = useRef<HTMLDivElement | null>(null);
   const altta = useRef(true);
@@ -241,8 +262,22 @@ export function LiveDashboard({
   const toplamOyuncu = sunucuListesi.reduce((a, s) => a + s.playerCount, 0);
   const toplamKuyruk = sunucuListesi.reduce((a, s) => a + s.queueCount, 0);
 
+  // Sürükleme ve menü aynı kutuyu açıyor; hangi sunucudan geldiği
+  // adaylardan değil canlı listeden çözülüyor (tek sunucu varsayımı yok).
+  const istekSlug =
+    takimIstegi &&
+    tumOyuncular.find((p) => p.steamId === takimIstegi.adaylar[0]?.steamId)?.serverSlug;
+
   return (
     <main className="mx-auto flex h-full w-full max-w-[110rem] flex-col gap-3 px-5 py-4">
+      {takimIstegi && istekSlug ? (
+        <TakimDegistirKutusu
+          apiUrl={apiUrl}
+          slug={istekSlug}
+          istek={takimIstegi}
+          kapat={() => setTakimIstegi(null)}
+        />
+      ) : null}
       <header className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2">
         <span
           className={cn(
@@ -277,6 +312,11 @@ export function LiveDashboard({
             ) : null}
           </span>
         ))}
+        <BekleyenTakim
+          apiUrl={apiUrl}
+          slug={sunucuListesi[0]?.serverSlug ?? null}
+          yetki={takimYetkisi}
+        />
         {/* Bölüm bağlantıları üst çubukta; burada tekrarlamıyoruz. */}
       </header>
 
@@ -291,6 +331,8 @@ export function LiveDashboard({
           apiUrl={apiUrl}
           kickYetkisi={kickYetkisi}
           warnYetkisi={warnYetkisi}
+          takimYetkisi={takimYetkisi}
+          takimaSurukle={setTakimIstegi}
         />
         <TakimPaneli
           takim={2}
@@ -299,6 +341,8 @@ export function LiveDashboard({
           apiUrl={apiUrl}
           kickYetkisi={kickYetkisi}
           warnYetkisi={warnYetkisi}
+          takimYetkisi={takimYetkisi}
+          takimaSurukle={setTakimIstegi}
         />
 
         {/* ------------------------------------------------------ olay akışı */}
@@ -414,6 +458,8 @@ function TakimPaneli({
   apiUrl,
   kickYetkisi,
   warnYetkisi,
+  takimYetkisi,
+  takimaSurukle,
 }: {
   takim: 1 | 2;
   oyuncular: (LivePlayer & { serverSlug: string })[];
@@ -423,8 +469,13 @@ function TakimPaneli({
   apiUrl: string;
   kickYetkisi: boolean;
   warnYetkisi: boolean;
+  takimYetkisi: boolean;
+  takimaSurukle: (istek: Istek) => void;
 }) {
   const benimkiler = oyuncular.filter((p) => p.teamId === takim);
+  // Üzerine sürüklenirken panelin kenarı yanıyor: bırakmanın nereye
+  // gideceği belirsiz kalmamalı.
+  const [uzerinde, setUzerinde] = useState(false);
 
   const mangalar = new Map<number, (LivePlayer & { serverSlug: string })[]>();
   const mangasiz: (LivePlayer & { serverSlug: string })[] = [];
@@ -440,8 +491,43 @@ function TakimPaneli({
   const sirali = [...mangalar.entries()].sort((a, b) => a[0] - b[0]);
   const renk = takim === 1 ? 'text-team1' : 'text-team2';
 
+  /**
+   * Bırakma yalnızca KARŞI takımın panelinde anlamlı: aynı takıma
+   * bırakmak hiçbir şey yapmaz ama komut gönderilseydi oyuncuyu karşıya
+   * atardı (komut hedef takım almıyor, sadece "diğer tarafa geçir" diyor).
+   */
+  function yukuOku(e: React.DragEvent): SurukleYuku | null {
+    try {
+      const ham = e.dataTransfer.getData(SURUKLE_TURU);
+      if (!ham) return null;
+      const yuk = JSON.parse(ham) as SurukleYuku;
+      return yuk.kaynakTakim === takim ? null : yuk;
+    } catch {
+      return null;
+    }
+  }
+
   return (
-    <section className="flex min-h-0 flex-col rounded border border-border bg-surface">
+    <section
+      onDragOver={(e) => {
+        if (!takimYetkisi) return;
+        // preventDefault ŞART: olmadan tarayıcı bırakmaya hiç izin vermiyor.
+        e.preventDefault();
+        setUzerinde(true);
+      }}
+      onDragLeave={() => setUzerinde(false)}
+      onDrop={(e) => {
+        setUzerinde(false);
+        if (!takimYetkisi) return;
+        e.preventDefault();
+        const yuk = yukuOku(e);
+        if (yuk) takimaSurukle(yuk);
+      }}
+      className={cn(
+        'flex min-h-0 flex-col rounded border bg-surface transition-colors',
+        uzerinde ? 'border-accent' : 'border-border',
+      )}
+    >
       <div className="shrink-0 px-4 pt-3.5 pb-2">
         <div className="mb-2 flex items-baseline justify-between">
           <h2 className={cn('text-sm font-semibold', renk)}>Takım {takim}</h2>
@@ -478,6 +564,9 @@ function TakimPaneli({
                 apiUrl={apiUrl}
                 kickYetkisi={kickYetkisi}
                 warnYetkisi={warnYetkisi}
+                takimYetkisi={takimYetkisi}
+                takim={takim}
+                takimaSurukle={takimaSurukle}
               />
             ))}
             {mangasiz.length > 0 ? (
@@ -488,6 +577,9 @@ function TakimPaneli({
                 apiUrl={apiUrl}
                 kickYetkisi={kickYetkisi}
                 warnYetkisi={warnYetkisi}
+                takimYetkisi={takimYetkisi}
+                takim={takim}
+                takimaSurukle={takimaSurukle}
               />
             ) : null}
           </div>
@@ -504,6 +596,9 @@ function Manga({
   apiUrl,
   kickYetkisi,
   warnYetkisi,
+  takimYetkisi,
+  takim,
+  takimaSurukle,
 }: {
   baslik: string;
   uyeler: (LivePlayer & { serverSlug: string })[];
@@ -511,15 +606,40 @@ function Manga({
   apiUrl: string;
   kickYetkisi: boolean;
   warnYetkisi: boolean;
+  takimYetkisi: boolean;
+  takim: 1 | 2;
+  takimaSurukle: (istek: Istek) => void;
 }) {
   // Manga lideri başta: skor tahtasında da öyle ve "kime yazayım" sorusunun
   // cevabı o.
   const sirali = [...uyeler].sort(
     (a, b) => Number(b.isLeader) - Number(a.isLeader) || a.name.localeCompare(b.name, 'tr'),
   );
+  /** Sürüklenen yükü olaya yazar; oyuncu ve manga aynı biçimi kullanıyor. */
+  function yukuYaz(e: React.DragEvent, yuk: SurukleYuku) {
+    e.dataTransfer.setData(SURUKLE_TURU, JSON.stringify(yuk));
+    e.dataTransfer.effectAllowed = 'move';
+  }
+
   return (
     <div>
-      <div className="mb-1 flex items-baseline justify-between gap-2 border-b border-border pb-1">
+      {/* Sürükleme tutamağı manga BAŞLIĞI: satırın kendisi sürüklenebilir
+          olsaydı tek oyuncu taşımak isteyen kişi kazara mangayı taşırdı. */}
+      <div
+        draggable={takimYetkisi}
+        onDragStart={(e) =>
+          yukuYaz(e, {
+            adaylar: uyeler.map((u) => ({ steamId: u.steamId, name: u.name })),
+            kaynakTakim: takim,
+            baslik,
+          })
+        }
+        className={cn(
+          'mb-1 flex items-baseline justify-between gap-2 border-b border-border pb-1',
+          takimYetkisi && 'cursor-grab active:cursor-grabbing',
+        )}
+        title={takimYetkisi ? 'Karşı takıma sürükle' : undefined}
+      >
         <span
           className={cn(
             'truncate text-[11px] font-semibold uppercase tracking-wide',
@@ -534,7 +654,20 @@ function Manga({
         {sirali.map((p) => (
           <li
             key={`${p.serverSlug}:${p.steamId}`}
-            className="group flex items-baseline gap-1 rounded-sm px-1 hover:bg-surface-2"
+            draggable={takimYetkisi}
+            onDragStart={(e) => {
+              // Yayılmayı durduruyoruz: satır manga kutusunun içinde ve
+              // olay yukarı çıkarsa manganın tamamı sürüklenmiş sayılırdı.
+              e.stopPropagation();
+              yukuYaz(e, {
+                adaylar: [{ steamId: p.steamId, name: p.name }],
+                kaynakTakim: takim,
+              });
+            }}
+            className={cn(
+              'group flex items-baseline gap-1 rounded-sm px-1 hover:bg-surface-2',
+              takimYetkisi && 'cursor-grab active:cursor-grabbing',
+            )}
           >
             <Link
               href={`/oyuncular?q=${p.steamId}`}
@@ -560,6 +693,13 @@ function Manga({
               isim={p.name}
               kickYetkisi={kickYetkisi}
               warnYetkisi={warnYetkisi}
+              takimYetkisi={takimYetkisi}
+              takimaAt={() =>
+                takimaSurukle({
+                  adaylar: [{ steamId: p.steamId, name: p.name }],
+                  kaynakTakim: takim,
+                })
+              }
             />
           </li>
         ))}

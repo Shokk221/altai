@@ -5,6 +5,9 @@ export const PERMISSIONS = [
   'player.ban',
   'player.warn',
   'player.kick',
+  // Zorla takim degistirme. kick'ten ayri: maci dogrudan etkiliyor ve
+  // kotu kullanildiginda dengeyi bozuyor.
+  'player.team_change',
   'player.note.write',
   'flag.manage',
   'admin_list.manage',

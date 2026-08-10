@@ -22,6 +22,7 @@ import {
   applyServerSnapshot,
   oyuncuAdi,
 } from '../lib/server-state.js';
+import { macSonuIsle } from '../lib/team-change.js';
 import { timingSafeCompare } from '../lib/timing-safe.js';
 
 export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig }) {
@@ -128,6 +129,20 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
             timestamp: event.timestamp,
           });
           break;
+        case 'ROUND_ENDED': {
+          // Maç sonuna ertelenmiş takım değişimlerinin tetikleyicisi.
+          // Beklemiyoruz: kalıcı yazımı geciktirmesin. Hata olursa
+          // kuyruk kaydı açık kalır ve bir sonraki maç sonunda tekrar
+          // denenir — söz verilen değişim kaybolmaz.
+          const sid = serverId;
+          const sslug = serverSlug;
+          if (sid) {
+            void macSonuIsle(db, sslug, sid).catch((err) =>
+              app.log.error({ err, serverSlug: sslug }, 'maç sonu takım değişimleri işlenemedi'),
+            );
+          }
+          break;
+        }
         case 'ADMIN_ACTION': {
           // Oyun içinden yapılan yetkili işlemleri. Akışta her zaman
           // görünüyor: panelden gönderilmiş olsa bile "komut oyuna ulaştı"

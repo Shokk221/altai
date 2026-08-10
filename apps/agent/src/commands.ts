@@ -85,6 +85,21 @@ export async function komutCalistir(
         return { ok: true };
       }
 
+      /**
+       * Takım değiştirme.
+       *
+       * AdminForceTeamChange HEDEF TAKIM ALMIYOR: oyuncuyu karşı tarafa
+       * geçiriyor, o kadar. Yani "1'e al" diye bir şey yok; oyuncu zaten
+       * 1'deyse komut onu 2'ye atar. Hedefi panelin doğrulaması gerekiyor.
+       */
+      case 'forceTeamChange': {
+        const id = oyuncuKimligi(p);
+        if (!id) return { ok: false, error: 'gecerli_kimlik_yok' };
+        const cevap = await engine.rconExecute(`AdminForceTeamChange ${id}`);
+        logger.info({ id, cevap: cevap.slice(0, 120) }, 'takım değiştirildi');
+        return { ok: true };
+      }
+
       // Sessizce başarılı dönmüyoruz: panelde "yapıldı" yazıp hiçbir şey
       // olmaması, hata döndürmekten daha kötü.
       case 'setLayer':

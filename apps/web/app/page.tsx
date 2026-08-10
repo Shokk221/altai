@@ -34,6 +34,7 @@ export default async function HomePage() {
         apiUrl={apiUrl}
         kickYetkisi={yetki('player.kick')}
         warnYetkisi={yetki('player.warn')}
+        takimYetkisi={yetki('player.team_change')}
       />
     );
   }

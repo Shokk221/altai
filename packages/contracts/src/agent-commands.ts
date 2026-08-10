@@ -17,6 +17,9 @@ export const AgentCommand = z.object({
     'warn',
     'broadcast',
     'listPlayers',
+    // Oyuncuyu karşı takıma alır (AdminForceTeamChange). Squad'da hedef
+    // takım SEÇİLEMİYOR — komut yalnızca "diğer tarafa geçir" diyor.
+    'forceTeamChange',
     'setLayer',
     'restart',
   ]),

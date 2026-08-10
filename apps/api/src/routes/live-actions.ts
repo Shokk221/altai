@@ -1,5 +1,5 @@
 import type { Db } from '@altai/db';
-import { identitySchema, moderationSchema } from '@altai/db';
+import { identitySchema, moderationSchema, presenceSchema } from '@altai/db';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -7,7 +7,14 @@ import { agentBagliMi, komutGonder } from '../lib/agent-command-bus.js';
 import { writeAudit } from '../lib/audit.js';
 import { requireSession } from '../lib/auth-guard.js';
 import { panelKomutuIsaretle } from '../lib/panel-komut-izi.js';
-import { oyuncuAdi } from '../lib/server-state.js';
+import { getServerState, oyuncuAdi } from '../lib/server-state.js';
+import {
+  type Hedef,
+  bekleyenler,
+  iptalEt,
+  macSonunaErtele,
+  simdiDegistir,
+} from '../lib/team-change.js';
 
 /**
  * Canlı ekrandan hızlı eylemler.
@@ -34,8 +41,28 @@ function ilkHata(err: z.ZodError): string {
   return i.path.length ? `${i.path.join('.')}: ${i.message}` : i.message;
 }
 
+const TakimGovdesi = z.object({
+  /** Bir oyuncu ya da bir manganın tamamı; ekran ikisini de gönderiyor. */
+  steamIds: z
+    .array(z.string().regex(/^7656119\d{10}$/))
+    .min(1)
+    .max(50),
+  zaman: z.enum(['simdi', 'mac_sonu']),
+  /** Yetkilinin eklediği açıklama; oyuncuya gösterilen uyarıya ekleniyor. */
+  mesaj: z.string().trim().max(200).optional(),
+});
+
 export async function liveActionRoutes(app: FastifyInstance, opts: { db: Db }) {
   const { db } = opts;
+
+  async function sunucuIdBul(slug: string) {
+    const [s] = await db
+      .select({ id: presenceSchema.servers.id })
+      .from(presenceSchema.servers)
+      .where(eq(presenceSchema.servers.slug, slug))
+      .limit(1);
+    return s?.id ?? null;
+  }
 
   async function oyuncuBul(steamId: string) {
     const [p] = await db
@@ -92,6 +119,89 @@ export async function liveActionRoutes(app: FastifyInstance, opts: { db: Db }) {
       if (sonuc.durum !== 'ok') {
         return reply.code(502).send({ error: 'komut_basarisiz', detay: sonuc.durum });
       }
+      return { ok: true };
+    },
+  );
+
+  /**
+   * Zorla takım değiştirme — tek oyuncu ya da manganın tamamı.
+   *
+   * Hedefler SteamID listesiyle geliyor; takım ve isim canlı durumdan
+   * okunuyor çünkü komutun doğruluğu oyuncunun O ANKİ takımına bağlı
+   * (bkz. lib/team-change.ts: komut hedef takım almıyor).
+   */
+  app.post<{ Params: { slug: string }; Body: unknown }>(
+    '/live/:slug/takim',
+    { preHandler: requireSession(db, 'player.team_change') },
+    async (req, reply) => {
+      const parsed = TakimGovdesi.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: 'gecersiz_girdi', detay: ilkHata(parsed.error) });
+      }
+      const slug = req.params.slug;
+      if (!agentBagliMi(slug)) return reply.code(503).send({ error: 'agent_bagli_degil' });
+
+      const durum = getServerState(slug);
+      const actor = req.authSession;
+      const aktor = { userId: actor?.id ?? null, name: actor?.discordUsername ?? null };
+
+      const hedefler: Hedef[] = [];
+      for (const steamId of parsed.data.steamIds) {
+        const canli = durum?.players.find((p) => p.steamId === steamId);
+        const oyuncu = await oyuncuBul(steamId);
+        hedefler.push({
+          steamId,
+          eosId: canli?.eosId ?? oyuncu?.eosId ?? null,
+          name: canli?.name ?? null,
+          teamId: canli?.teamId ?? null,
+          playerId: oyuncu?.id ?? null,
+        });
+      }
+
+      if (parsed.data.zaman === 'simdi') {
+        const sonuclar = await simdiDegistir(slug, hedefler, parsed.data.mesaj, aktor);
+        const basarisiz = sonuclar.filter((s) => s.durum === 'komut_basarisiz').length;
+        // Kısmi başarı gizlenmiyor: dokuz kişilik mangada ikisi geçmediyse
+        // yetkilinin bunu bilmesi gerekiyor.
+        return { ok: basarisiz === 0, sonuclar, basarisiz };
+      }
+
+      const serverId = await sunucuIdBul(slug);
+      if (!serverId) return reply.code(404).send({ error: 'sunucu_bulunamadi' });
+      const sonuclar = await macSonunaErtele(
+        db,
+        slug,
+        serverId,
+        hedefler,
+        parsed.data.mesaj,
+        aktor,
+      );
+      return { ok: true, sonuclar };
+    },
+  );
+
+  /** Maç sonuna ertelenmiş, henüz uygulanmamış değişimler. */
+  app.get<{ Params: { slug: string } }>(
+    '/live/:slug/takim/bekleyen',
+    { preHandler: requireSession(db, 'player.team_change') },
+    async (req, reply) => {
+      const serverId = await sunucuIdBul(req.params.slug);
+      if (!serverId) return reply.code(404).send({ error: 'sunucu_bulunamadi' });
+      return { bekleyenler: await bekleyenler(db, serverId) };
+    },
+  );
+
+  /** Bekleyen bir değişimi iptal et. */
+  app.post<{ Params: { slug: string; id: string } }>(
+    '/live/:slug/takim/:id/iptal',
+    { preHandler: requireSession(db, 'player.team_change') },
+    async (req, reply) => {
+      const actor = req.authSession;
+      const oldu = await iptalEt(db, req.params.id, {
+        userId: actor?.id ?? null,
+        name: actor?.discordUsername ?? null,
+      });
+      if (!oldu) return reply.code(404).send({ error: 'kayit_yok_ya_da_islenmis' });
       return { ok: true };
     },
   );

@@ -24,6 +24,8 @@ export function PlayerMenu({
   isim,
   kickYetkisi,
   warnYetkisi,
+  takimYetkisi,
+  takimaAt,
 }: {
   apiUrl: string;
   slug: string;
@@ -31,6 +33,9 @@ export function PlayerMenu({
   isim: string;
   kickYetkisi: boolean;
   warnYetkisi: boolean;
+  takimYetkisi?: boolean;
+  /** Takım değiştirme onay kutusunu açar; kutu panelin üstünde duruyor. */
+  takimaAt?: () => void;
 }) {
   const [acik, setAcik] = useState(false);
   const [eylem, setEylem] = useState<Eylem>(null);
@@ -87,7 +92,7 @@ export function PlayerMenu({
     }
   }
 
-  if (!kickYetkisi && !warnYetkisi) {
+  if (!kickYetkisi && !warnYetkisi && !takimYetkisi) {
     return null;
   }
 
@@ -125,6 +130,18 @@ export function PlayerMenu({
                   className="rounded-sm px-2.5 py-1.5 text-left text-[13px] text-fg-muted hover:bg-surface-2 hover:text-fg"
                 >
                   Uyar
+                </button>
+              ) : null}
+              {takimYetkisi && takimaAt ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAcik(false);
+                    takimaAt();
+                  }}
+                  className="rounded-sm px-2.5 py-1.5 text-left text-[13px] text-fg-muted hover:bg-surface-2 hover:text-fg"
+                >
+                  Karşı takıma at
                 </button>
               ) : null}
               {kickYetkisi ? (
