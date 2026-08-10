@@ -168,17 +168,32 @@ export function ChatPanel({
       ) : (
         <ul className="flex flex-col gap-1.5">
           {gosterilen.map((m) => (
-            <li key={m.id} className="text-[13px] leading-snug">
-              <span className="num mr-1.5 text-[11px] text-fg-faint">{saatDakika(m.sentAt)}</span>
-              <span
-                className={cn(
-                  'mr-1.5 text-[10px] font-semibold tracking-wide',
-                  KANAL_RENK[m.channel ?? ''] ?? 'text-fg-muted',
-                )}
-              >
-                {KANAL_ETIKET[m.channel ?? ''] ?? (m.channel ?? '?').toUpperCase()}
+            <li
+              key={m.id}
+              // Canlı akışla aynı ızgara: uzun mesaj sarınca zamanın altına
+              // kaymasın, içerik sütununda hizalı kalsın.
+              className="grid grid-cols-[4.2rem_1fr] gap-x-2 px-1.5 text-[13px] hover:bg-surface-2"
+            >
+              <span className="num pt-[7px] text-right text-[11px] text-fg-faint">
+                {saatDakika(m.sentAt)}
               </span>
-              <span className="break-words">{m.message}</span>
+              {/* Çizgi zaman sütunundan SONRA başlıyor (iOS tablo kalıbı):
+                  tam genişlikte olsaydı dar panelde okumayı bölerdi. */}
+              <span className="min-w-0 border-b border-border py-[6px] leading-[1.45]">
+                {/* Kanal renkli nokta; renk zaten ayırt ediyor, büyük harfli
+                    etiket yer kaplıyordu. Üstüne gelince adı çıkıyor. */}
+                <span
+                  className={cn(
+                    'mr-1.5 align-[0.09em] text-[9px]',
+                    KANAL_RENK[m.channel ?? ''] ?? 'text-fg-muted',
+                  )}
+                  title={KANAL_ETIKET[m.channel ?? ''] ?? m.channel ?? ''}
+                  aria-hidden
+                >
+                  ●
+                </span>
+                <span className="break-words">{m.message}</span>
+              </span>
             </li>
           ))}
         </ul>

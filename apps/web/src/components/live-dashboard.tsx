@@ -339,7 +339,9 @@ export function LiveDashboard({ wsUrl }: { wsUrl: string }) {
             {gosterilenOlaylar.length === 0 ? (
               <p className="py-8 text-center text-xs text-fg-muted">Henüz olay yok</p>
             ) : (
-              <ul className="flex flex-col">
+              // Son satırın altındaki çizgi kaldırılıyor: kaydırma alanının
+              // dibinde asılı kalan bir çizgi bitmemiş görünüyor.
+              <ul className="flex flex-col [&>li:last-child>span:last-child]:border-b-0">
                 {gosterilenOlaylar.map((o) => (
                   <li
                     key={o.id}
@@ -347,17 +349,20 @@ export function LiveDashboard({ wsUrl }: { wsUrl: string }) {
                     // sarınca zamanın altına kayıyor ve göz hizayı kaybediyor.
                     // Sabit zaman sütunu + içerik sütunu asılı girinti veriyor.
                     className={cn(
-                      'grid grid-cols-[2.6rem_1fr] gap-x-2 rounded-sm px-1.5 py-[3px]',
+                      'grid grid-cols-[2.6rem_1fr] gap-x-2 px-1.5',
                       'hover:bg-surface-2',
                       // Sistem olayları sohbetle yarışmamalı: sohbet okunmak
                       // için, giriş/çıkış göz ucuyla taranmak için.
                       o.tur === 'chat' ? 'text-[13px]' : 'text-[12px]',
                     )}
                   >
-                    <span className="num pt-px text-right text-[11px] text-fg-faint">
+                    <span className="num pt-[7px] text-right text-[11px] text-fg-faint">
                       {saat(o.timestamp)}
                     </span>
-                    <span className="min-w-0 leading-[1.45]">
+                    {/* Çizgi zaman sütunundan SONRA başlıyor (iOS tablo
+                        kalıbı): tam genişlikte olsaydı dar panelde her 20
+                        pikselde bir çizgi çıkıp okumayı bölerdi. */}
+                    <span className="min-w-0 border-b border-border py-[6px] leading-[1.45]">
                       <OlaySatiri olay={o} />
                     </span>
                   </li>
