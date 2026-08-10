@@ -6,7 +6,7 @@ import { type Istek, TakimDegistirKutusu } from '@/components/takim-degistir';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/cn';
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 /**
  * Ana ekran: o an sunucuda kim var, ne oluyor.
@@ -64,6 +64,13 @@ function tpsRengi(tps: number): string {
  * state güncel olmayabiliyor. Yük olayla birlikte taşınınca bu risk yok.
  */
 const SURUKLE_TURU = 'application/x-altai-takim';
+
+/** Ctrl ile seçilmiş bir oyuncu. */
+export interface SeciliKayit {
+  steamId: string;
+  name: string;
+  takim: 1 | 2;
+}
 
 interface SurukleYuku {
   adaylar: { steamId: string; name: string }[];
@@ -163,6 +170,14 @@ export function LiveDashboard({
   const [olaySuzgeci, setOlaySuzgeci] = useState<CanliOlay['tur'] | null>(null);
   // Onay bekleyen takım değişimi. null = kutu kapalı.
   const [takimIstegi, setTakimIstegi] = useState<Istek | null>(null);
+  /**
+   * Ctrl ile işaretlenen oyuncular.
+   *
+   * Map çünkü sürüklerken isim de lazım ve seçili oyuncu o sırada
+   * listeden düşmüş olabilir (çıkmış, takım değiştirmiş). Seçim anındaki
+   * adı taşımak, sonradan aramaktan güvenli.
+   */
+  const [secili, setSecili] = useState<Map<string, SeciliKayit>>(new Map());
 
   const akisKutusu = useRef<HTMLDivElement | null>(null);
   const altta = useRef(true);
@@ -262,6 +277,37 @@ export function LiveDashboard({
   const toplamOyuncu = sunucuListesi.reduce((a, s) => a + s.playerCount, 0);
   const toplamKuyruk = sunucuListesi.reduce((a, s) => a + s.queueCount, 0);
 
+  /**
+   * Ctrl+tıklama ile seçimi değiştirir.
+   *
+   * Seçim TEK TAKIMLA sınırlı: komut "karşı tarafa geçir" dediği için iki
+   * takımdan karışık seçim yapılsaydı herkes kendi karşısına giderdi, yani
+   * iki taraf birbirinin yerine geçerdi — kimsenin istediği bu değil.
+   * Diğer takımdan biri seçilince önceki seçim temizleniyor.
+   */
+  const seciliDegistir = useCallback((steamId: string, name: string, takim: 1 | 2) => {
+    setSecili((eski) => {
+      const yeni = new Map(eski);
+      const ilk = yeni.values().next().value as SeciliKayit | undefined;
+      if (ilk && ilk.takim !== takim) yeni.clear();
+      if (yeni.has(steamId)) yeni.delete(steamId);
+      else yeni.set(steamId, { steamId, name, takim });
+      return yeni;
+    });
+  }, []);
+
+  const secimiTemizle = useCallback(() => setSecili(new Map()), []);
+
+  // Escape seçimi bırakır: yanlış seçim yapan kişinin ilk refleksi.
+  useEffect(() => {
+    if (secili.size === 0) return;
+    const tus = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') secimiTemizle();
+    };
+    document.addEventListener('keydown', tus);
+    return () => document.removeEventListener('keydown', tus);
+  }, [secili.size, secimiTemizle]);
+
   // Sürükleme ve menü aynı kutuyu açıyor; hangi sunucudan geldiği
   // adaylardan değil canlı listeden çözülüyor (tek sunucu varsayımı yok).
   const istekSlug =
@@ -275,7 +321,12 @@ export function LiveDashboard({
           apiUrl={apiUrl}
           slug={istekSlug}
           istek={takimIstegi}
-          kapat={() => setTakimIstegi(null)}
+          kapat={() => {
+            setTakimIstegi(null);
+            // Seçim iş bitince duruyorsa bir sonraki sürüklemede sessizce
+            // fazladan oyuncu taşınırdı.
+            secimiTemizle();
+          }}
         />
       ) : null}
       <header className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2">
@@ -312,6 +363,16 @@ export function LiveDashboard({
             ) : null}
           </span>
         ))}
+        {secili.size > 0 ? (
+          <button
+            type="button"
+            onClick={secimiTemizle}
+            className="rounded-full border border-accent/50 px-2.5 py-1 text-[11px] font-semibold text-accent hover:bg-accent/10"
+            title="Seçimi bırak (Esc)"
+          >
+            {secili.size} seçili ×
+          </button>
+        ) : null}
         <BekleyenTakim
           apiUrl={apiUrl}
           slug={sunucuListesi[0]?.serverSlug ?? null}
@@ -333,6 +394,8 @@ export function LiveDashboard({
           warnYetkisi={warnYetkisi}
           takimYetkisi={takimYetkisi}
           takimaSurukle={setTakimIstegi}
+          secili={secili}
+          seciliDegistir={seciliDegistir}
         />
         <TakimPaneli
           takim={2}
@@ -343,6 +406,8 @@ export function LiveDashboard({
           warnYetkisi={warnYetkisi}
           takimYetkisi={takimYetkisi}
           takimaSurukle={setTakimIstegi}
+          secili={secili}
+          seciliDegistir={seciliDegistir}
         />
 
         {/* ------------------------------------------------------ olay akışı */}
@@ -460,6 +525,8 @@ function TakimPaneli({
   warnYetkisi,
   takimYetkisi,
   takimaSurukle,
+  secili,
+  seciliDegistir,
 }: {
   takim: 1 | 2;
   oyuncular: (LivePlayer & { serverSlug: string })[];
@@ -471,6 +538,8 @@ function TakimPaneli({
   warnYetkisi: boolean;
   takimYetkisi: boolean;
   takimaSurukle: (istek: Istek) => void;
+  secili: Map<string, SeciliKayit>;
+  seciliDegistir: (steamId: string, name: string, takim: 1 | 2) => void;
 }) {
   const benimkiler = oyuncular.filter((p) => p.teamId === takim);
   // Üzerine sürüklenirken panelin kenarı yanıyor: bırakmanın nereye
@@ -567,6 +636,8 @@ function TakimPaneli({
                 takimYetkisi={takimYetkisi}
                 takim={takim}
                 takimaSurukle={takimaSurukle}
+                secili={secili}
+                seciliDegistir={seciliDegistir}
               />
             ))}
             {mangasiz.length > 0 ? (
@@ -580,6 +651,8 @@ function TakimPaneli({
                 takimYetkisi={takimYetkisi}
                 takim={takim}
                 takimaSurukle={takimaSurukle}
+                secili={secili}
+                seciliDegistir={seciliDegistir}
               />
             ) : null}
           </div>
@@ -599,6 +672,8 @@ function Manga({
   takimYetkisi,
   takim,
   takimaSurukle,
+  secili,
+  seciliDegistir,
 }: {
   baslik: string;
   uyeler: (LivePlayer & { serverSlug: string })[];
@@ -609,6 +684,8 @@ function Manga({
   takimYetkisi: boolean;
   takim: 1 | 2;
   takimaSurukle: (istek: Istek) => void;
+  secili: Map<string, SeciliKayit>;
+  seciliDegistir: (steamId: string, name: string, takim: 1 | 2) => void;
 }) {
   // Manga lideri başta: skor tahtasında da öyle ve "kime yazayım" sorusunun
   // cevabı o.
@@ -664,18 +741,41 @@ function Manga({
               // Yayılmayı durduruyoruz: satır manga kutusunun içinde ve
               // olay yukarı çıkarsa manganın tamamı sürüklenmiş sayılırdı.
               e.stopPropagation();
+              // Sürüklenen oyuncu seçiliyse SEÇİMİN TAMAMI taşınıyor.
+              // Seçili olmayan biri sürüklendiğinde seçim yok sayılıyor:
+              // "şunu da alayım" diye sürükleyen kişi, farkında olmadığı
+              // eski bir seçimi de taşımış olmamalı.
+              const secim = [...secili.values()];
+              const cokluMu = secili.has(p.steamId) && secim.length > 1;
               yukuYaz(e, {
-                adaylar: [{ steamId: p.steamId, name: p.name }],
+                adaylar: cokluMu
+                  ? secim.map((x) => ({ steamId: x.steamId, name: x.name }))
+                  : [{ steamId: p.steamId, name: p.name }],
                 kaynakTakim: takim,
+                ...(cokluMu ? { baslik: `${secim.length} seçili oyuncu` } : {}),
               });
             }}
             className={cn(
-              'group flex items-baseline gap-1 rounded-sm px-1 hover:bg-surface-2',
+              'group flex items-baseline gap-1 rounded-sm px-1',
+              secili.has(p.steamId) ? 'bg-accent/15' : 'hover:bg-surface-2',
               takimYetkisi && 'cursor-grab active:cursor-grabbing',
             )}
+            title={
+              takimYetkisi
+                ? 'Sürükleyerek karşı takıma at · Ctrl+tık ile birden fazla seç'
+                : undefined
+            }
           >
             <Link
               href={`/oyuncular?q=${p.steamId}`}
+              onClick={(e) => {
+                // Ctrl/Cmd + tıklama seçim yapar, profile gitmez.
+                // Tarayıcının "yeni sekmede aç" davranışı da bu yüzden
+                // engelleniyor — burada tuşun anlamı seçmek.
+                if (!takimYetkisi || !(e.ctrlKey || e.metaKey)) return;
+                e.preventDefault();
+                seciliDegistir(p.steamId, p.name, takim);
+              }}
               className="flex min-w-0 flex-1 items-baseline justify-between gap-2 py-[3px] text-[13px]"
             >
               <span className="min-w-0 truncate">
@@ -699,12 +799,20 @@ function Manga({
               kickYetkisi={kickYetkisi}
               warnYetkisi={warnYetkisi}
               takimYetkisi={takimYetkisi}
-              takimaAt={() =>
+              takimaAt={() => {
+                // Sürüklemeyle aynı kural: bu oyuncu seçiliyse seçimin
+                // tamamı taşınıyor. İki giriş noktasının farklı davranması
+                // en kötüsü olurdu.
+                const secim = [...secili.values()];
+                const cokluMu = secili.has(p.steamId) && secim.length > 1;
                 takimaSurukle({
-                  adaylar: [{ steamId: p.steamId, name: p.name }],
+                  adaylar: cokluMu
+                    ? secim.map((x) => ({ steamId: x.steamId, name: x.name }))
+                    : [{ steamId: p.steamId, name: p.name }],
                   kaynakTakim: takim,
-                })
-              }
+                  ...(cokluMu ? { baslik: `${secim.length} seçili oyuncu` } : {}),
+                });
+              }}
             />
           </li>
         ))}
