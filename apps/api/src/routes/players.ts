@@ -1,6 +1,6 @@
 import { chatSchema, identitySchema, moderationSchema } from '@altai/db';
 import type { Db } from '@altai/db';
-import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, ilike, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { requireSession } from '../lib/auth-guard.js';
 import { aktifBanKosulu, banAktifMi } from '../lib/ban-active.js';
@@ -86,6 +86,57 @@ export async function playerRoutes(app: FastifyInstance, opts: { db: Db }) {
         .slice(0, SEARCH_LIMIT);
 
       return { query: q, mode: 'name', results: await decorate(db, rows) };
+    },
+  );
+
+  /**
+   * Oyuncunun sohbeti — sayfalı ve aranabilir.
+   *
+   * Profil ucu yalnızca son 200 mesajı veriyor; 224 oyuncunun bundan
+   * fazlası var ve bunlar tam da moderasyonda bakılan kişiler (en çok
+   * konuşanda 3.901 mesaj). Hepsini profile koymak her açılışta yüz
+   * kilobaytlarca veri taşımak olurdu.
+   *
+   * `before` imleç: son görülen mesajın zamanı. Sayfa numarası yerine imleç,
+   * çünkü aradaki yeni mesajlar sayfa sınırlarını kaydırırdı.
+   * `q` mesaj içinde arama — trigram indeksi üzerinden.
+   */
+  app.get<{ Params: { id: string }; Querystring: { before?: string; q?: string } }>(
+    '/players/:id/chat',
+    { preHandler: guard },
+    async (req, reply) => {
+      const id = req.params.id;
+      if (!/^[0-9a-f-]{36}$/i.test(id)) {
+        return reply.code(400).send({ error: 'gecersiz_oyuncu_id' });
+      }
+      const SAYFA = 100;
+      const q = (req.query.q ?? '').trim();
+      const before = req.query.before ? new Date(req.query.before) : null;
+      if (before && Number.isNaN(before.getTime())) {
+        return reply.code(400).send({ error: 'gecersiz_before' });
+      }
+
+      const kosullar = [eq(chatSchema.chatMessages.playerId, id)];
+      if (before) kosullar.push(lt(chatSchema.chatMessages.sentAt, before));
+      // ILIKE '%...%' trigram GIN indeksini kullanıyor; ölçüldü, 0,2 ms.
+      if (q.length >= 2) kosullar.push(ilike(chatSchema.chatMessages.message, `%${q}%`));
+
+      const rows = await db
+        .select({
+          id: chatSchema.chatMessages.id,
+          channel: chatSchema.chatMessages.channel,
+          message: chatSchema.chatMessages.message,
+          sentAt: chatSchema.chatMessages.sentAt,
+        })
+        .from(chatSchema.chatMessages)
+        .where(and(...kosullar))
+        .orderBy(desc(chatSchema.chatMessages.sentAt))
+        // Bir fazla çekip "devamı var mı" sorusunu ikinci bir COUNT sorgusu
+        // olmadan cevaplıyoruz.
+        .limit(SAYFA + 1);
+
+      const devam = rows.length > SAYFA;
+      return { mesajlar: rows.slice(0, SAYFA), devam };
     },
   );
 

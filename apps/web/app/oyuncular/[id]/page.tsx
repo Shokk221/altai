@@ -278,7 +278,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
         </Panel>
 
         <Panel baslik="Sohbet" sayac={profil.sohbet.length}>
-          <ChatPanel mesajlar={profil.sohbet} />
+          <ChatPanel apiUrl={apiUrl} playerId={player.id} ilkMesajlar={profil.sohbet} />
         </Panel>
 
         <Panel baslik="İsim geçmişi" sayac={profil.names.length}>
