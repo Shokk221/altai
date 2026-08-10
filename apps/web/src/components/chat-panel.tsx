@@ -30,8 +30,8 @@ const KANALLAR = ['All', 'Team', 'Squad', 'Admin'] as const;
 type Kanal = (typeof KANALLAR)[number];
 
 const KANAL_RENK: Record<string, string> = {
-  All: 'text-fg-muted',
-  Team: 'text-info',
+  All: 'text-fg-faint',
+  Team: 'text-team2',
   Squad: 'text-success',
   Admin: 'text-accent',
 };
@@ -169,12 +169,10 @@ export function ChatPanel({
         <ul className="flex flex-col gap-1.5">
           {gosterilen.map((m) => (
             <li key={m.id} className="text-[13px] leading-snug">
-              <span className="mr-1.5 text-[11px] tabular-nums text-fg-muted">
-                {saatDakika(m.sentAt)}
-              </span>
+              <span className="num mr-1.5 text-[11px] text-fg-faint">{saatDakika(m.sentAt)}</span>
               <span
                 className={cn(
-                  'mr-1.5 text-[10px] font-bold tracking-wide',
+                  'mr-1.5 text-[10px] font-semibold tracking-wide',
                   KANAL_RENK[m.channel ?? ''] ?? 'text-fg-muted',
                 )}
               >
@@ -191,7 +189,7 @@ export function ChatPanel({
           type="button"
           onClick={dahaEski}
           disabled={yukleniyor}
-          className="mt-3 w-full rounded-full bg-surface-2 py-2 text-xs font-semibold text-fg-muted transition-colors hover:text-fg disabled:opacity-40"
+          className="mt-3 w-full rounded-full bg-surface-2 py-2 text-xs font-medium text-fg-muted transition-colors hover:text-fg disabled:opacity-40"
         >
           {yukleniyor ? 'Yükleniyor…' : 'Daha eski mesajlar'}
         </button>
@@ -216,8 +214,8 @@ function Cip({
       type="button"
       onClick={onClick}
       className={cn(
-        'rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors',
-        etkin ? 'bg-surface-2 text-fg' : cn('hover:bg-surface-2', renk ?? 'text-fg-muted'),
+        'rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors',
+        etkin ? 'bg-accent-weak text-accent-2' : cn('hover:bg-surface-2', renk ?? 'text-fg-muted'),
       )}
     >
       {children}

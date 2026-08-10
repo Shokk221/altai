@@ -51,8 +51,8 @@ interface CanliOlay {
 }
 
 const KANAL_RENK: Record<string, string> = {
-  All: 'text-fg-muted',
-  Team: 'text-info',
+  All: 'text-fg-faint',
+  Team: 'text-team2',
   Squad: 'text-success',
   Admin: 'text-accent',
 };
@@ -233,13 +233,11 @@ export function LiveDashboard({ wsUrl }: { wsUrl: string }) {
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[1.25fr_1fr]">
         {/* ------------------------------------------------ oyuncu tablosu */}
-        <section className="flex min-h-0 flex-col rounded bg-surface">
+        <section className="flex min-h-0 flex-col rounded border border-border bg-surface">
           <div className="shrink-0 px-4 pt-3.5 pb-2">
             <div className="mb-2 flex items-baseline justify-between">
               <h2 className="text-sm font-semibold">Sunucudakiler</h2>
-              <span className="text-xs tabular-nums text-fg-muted">
-                {gosterilenOyuncular.length}
-              </span>
+              <span className="num text-xs text-fg-faint">{gosterilenOyuncular.length}</span>
             </div>
             <Input
               value={oyuncuArama}
@@ -256,7 +254,7 @@ export function LiveDashboard({ wsUrl }: { wsUrl: string }) {
               </p>
             ) : (
               <table className="w-full text-[13px]">
-                <thead className="sticky top-0 bg-surface text-left text-[10px] uppercase tracking-wide text-fg-muted">
+                <thead className="sticky top-0 bg-surface text-left text-[10.5px] font-semibold uppercase tracking-wider text-fg-faint">
                   <tr>
                     <th className="pb-1.5 font-bold">Oyuncu</th>
                     <th className="pb-1.5 font-bold">Tk</th>
@@ -272,22 +270,24 @@ export function LiveDashboard({ wsUrl }: { wsUrl: string }) {
                         <Link href={`/oyuncular?q=${p.steamId}`} className="block truncate">
                           <span className="font-medium">{p.name}</span>
                           {p.isLeader ? (
-                            <span className="ml-1.5 text-[10px] font-bold text-accent">SL</span>
+                            <span className="ml-1.5 text-[10px] font-semibold text-accent">SL</span>
                           ) : null}
-                          <span className="block truncate font-mono text-[10px] text-fg-muted">
+                          <span className="block truncate font-mono text-[10.5px] text-fg-faint">
                             {p.steamId}
                           </span>
                         </Link>
                       </td>
-                      <td className="py-1 pr-2 tabular-nums">
+                      <td className="num py-1 pr-2">
                         <span
                           className={cn(
                             'font-semibold',
+                            // Takım renkleri oyundaki karşılığıyla eşleşiyor
+                            // ve her ekranda aynı kalıyor.
                             p.teamId === 1
-                              ? 'text-info'
+                              ? 'text-team1'
                               : p.teamId === 2
-                                ? 'text-success'
-                                : 'text-fg-muted',
+                                ? 'text-team2'
+                                : 'text-fg-faint',
                           )}
                         >
                           {p.teamId ?? '—'}
@@ -299,7 +299,7 @@ export function LiveDashboard({ wsUrl }: { wsUrl: string }) {
                       <td className="max-w-[6rem] truncate py-1 pr-2 text-fg-muted">
                         {rolKisalt(p.role)}
                       </td>
-                      <td className="py-1 text-right tabular-nums text-[11px] text-fg-muted">
+                      <td className="num py-1 text-right text-[11px] text-fg-faint">
                         {suredir(p.joinedAt)}
                       </td>
                     </tr>
@@ -311,11 +311,11 @@ export function LiveDashboard({ wsUrl }: { wsUrl: string }) {
         </section>
 
         {/* ------------------------------------------------------ olay akışı */}
-        <section className="flex min-h-0 flex-col rounded bg-surface">
+        <section className="flex min-h-0 flex-col rounded border border-border bg-surface">
           <div className="shrink-0 px-4 pt-3.5 pb-2">
             <div className="mb-2 flex items-baseline justify-between">
               <h2 className="text-sm font-semibold">Akış</h2>
-              <span className="text-xs tabular-nums text-fg-muted">{olaylar.length}</span>
+              <span className="num text-xs text-fg-faint">{olaylar.length}</span>
             </div>
             <div className="flex flex-wrap gap-1">
               <Cip etkin={olaySuzgeci === null} onClick={() => setOlaySuzgeci(null)}>
@@ -350,7 +350,7 @@ export function LiveDashboard({ wsUrl }: { wsUrl: string }) {
               <ul className="flex flex-col gap-0.5">
                 {gosterilenOlaylar.map((o) => (
                   <li key={o.id} className="text-[13px] leading-snug">
-                    <span className="mr-1.5 tabular-nums text-[11px] text-fg-muted">
+                    <span className="num mr-1.5 text-[11px] text-fg-faint">
                       {saat(o.timestamp)}
                     </span>
                     <OlaySatiri olay={o} />
@@ -379,7 +379,7 @@ function OlaySatiri({ olay }: { olay: CanliOlay }) {
       <>
         <span
           className={cn(
-            'mr-1.5 text-[10px] font-bold tracking-wide',
+            'mr-1.5 text-[10px] font-semibold tracking-wide',
             KANAL_RENK[olay.channel ?? ''] ?? 'text-fg-muted',
           )}
         >
@@ -429,8 +429,8 @@ function Cip({
       type="button"
       onClick={onClick}
       className={cn(
-        'rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors',
-        etkin ? 'bg-surface-2 text-fg' : 'text-fg-muted hover:bg-surface-2',
+        'rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors',
+        etkin ? 'bg-accent-weak text-accent-2' : 'text-fg-muted hover:bg-surface-2',
       )}
     >
       {children}

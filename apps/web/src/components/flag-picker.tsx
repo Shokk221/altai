@@ -88,7 +88,7 @@ export function FlagPicker({
       <button
         type="button"
         onClick={() => setAcik(true)}
-        className="rounded-full bg-surface-2 px-2.5 py-1 text-[11px] font-bold text-fg-muted transition-colors hover:text-fg"
+        className="rounded-full bg-surface-2 px-2.5 py-1 text-[11px] font-medium text-fg-muted transition-colors hover:text-fg"
       >
         + etiket
       </button>
@@ -111,7 +111,7 @@ export function FlagPicker({
             onClick={() => ata(f.id)}
             disabled={bekleyen !== null}
             title={f.description ?? undefined}
-            className="rounded-full bg-surface-2 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-fg transition-colors hover:bg-info/20 hover:text-info disabled:opacity-40"
+            className="rounded-full bg-surface-2 px-2.5 py-1 text-[11px] font-medium text-fg transition-colors hover:bg-accent-weak hover:text-accent-2 disabled:opacity-40"
           >
             {bekleyen === f.id ? '…' : f.name}
           </button>

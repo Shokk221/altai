@@ -86,7 +86,7 @@ function Deger({ baslik, deger }: { baslik: string; deger: string }) {
   return (
     <div>
       <div className="display text-lg leading-tight">{deger}</div>
-      <div className="text-[11px] text-fg-muted">{baslik}</div>
+      <div className="text-[11px] text-fg-faint">{baslik}</div>
     </div>
   );
 }
@@ -106,12 +106,10 @@ function Panel({
   children: ReactNode;
 }) {
   return (
-    <section className="flex min-h-0 flex-col rounded bg-surface">
+    <section className="flex min-h-0 flex-col rounded border border-border bg-surface">
       <header className="flex shrink-0 items-baseline justify-between gap-2 px-4 pt-3.5 pb-2">
         <h2 className="text-sm font-semibold">{baslik}</h2>
-        {sayac === undefined ? null : (
-          <span className="text-xs tabular-nums text-fg-muted">{sayac}</span>
-        )}
+        {sayac === undefined ? null : <span className="num text-xs text-fg-faint">{sayac}</span>}
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">{children}</div>
     </section>
@@ -174,7 +172,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
       </Link>
 
       {/* künye: kimlik, durum, istatistik ve eylem tek blokta */}
-      <header className="shrink-0 rounded bg-surface px-5 py-4">
+      <header className="shrink-0 rounded border border-border bg-surface px-5 py-4">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <h1 className="display text-2xl sm:text-3xl">{player.name}</h1>
           {aktifBan ? <Badge tone="danger">Banlı</Badge> : null}
@@ -191,7 +189,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
               atanmisIdler={aktifEtiketler.map((f) => f.flagId)}
             />
           ) : null}
-          <span className="ml-auto font-mono text-[11px] text-fg-muted">
+          <span className="ml-auto font-mono text-[11px] text-fg-faint">
             {player.steamId ?? 'Steam yok'} · {player.eosId ?? 'EOS yok'}
           </span>
         </div>
@@ -203,7 +201,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
           <Deger baslik="K / D" deger={kd} />
           <Deger baslik="ban" deger={sayi(profil.bans.length)} />
           <Deger baslik="açık kayıt" deger={sayi(acikKayit)} />
-          <div className="ml-auto text-right text-[11px] leading-relaxed text-fg-muted">
+          <div className="ml-auto text-right text-[11px] leading-relaxed text-fg-faint">
             <div>ilk görülme {tarih(oyun.ilkGorulme)}</div>
             <div>son görülme {tarih(oyun.sonGorulme)}</div>
           </div>
@@ -229,7 +227,10 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
           ) : (
             <ul className="flex flex-col gap-2">
               {profil.bans.map((b) => (
-                <li key={b.id} className="rounded-sm bg-surface-2 px-3 py-2.5">
+                <li
+                  key={b.id}
+                  className="rounded-sm border border-border bg-surface-sunken px-3 py-2.5"
+                >
                   <div className="flex items-center gap-2">
                     {b.active ? (
                       <Badge tone="danger">aktif</Badge>
@@ -238,14 +239,14 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
                     ) : (
                       <Badge tone="neutral">doldu</Badge>
                     )}
-                    <span className="text-[11px] text-fg-muted">
+                    <span className="text-[11px] text-fg-faint">
                       {tarih(b.createdAt)} → {banBitis(b.expiresAt)}
                     </span>
                   </div>
                   <p className="mt-1.5 text-[13px] leading-snug">
                     {banSebebi(b.reason, b.expiresAt)}
                   </p>
-                  <p className="mt-1 text-[11px] text-fg-muted">
+                  <p className="mt-1 text-[11px] text-fg-faint">
                     {b.issuedByName ?? 'bilinmiyor'}
                     {b.source !== 'altai' ? ` · ${b.source}` : ''}
                   </p>
@@ -266,20 +267,23 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
           ) : (
             <ul className="flex flex-col gap-2">
               {profil.records.map((k) => (
-                <li key={k.id} className="rounded-sm bg-surface-2 px-3 py-2.5">
+                <li
+                  key={k.id}
+                  className="rounded-sm border border-border bg-surface-sunken px-3 py-2.5"
+                >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <Badge tone={k.kind === 'warning' ? 'accent' : 'neutral'}>
                         {KAYIT_ETIKET[k.kind]}
                       </Badge>
-                      <span className="text-[11px] text-fg-muted">{tarihSaat(k.createdAt)}</span>
+                      <span className="text-[11px] text-fg-faint">{tarihSaat(k.createdAt)}</span>
                     </div>
                     {!k.resolvedAt && notYazabilir ? (
                       <KaydiKapat apiUrl={apiUrl} recordId={k.id} />
                     ) : null}
                   </div>
                   <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-snug">{k.body}</p>
-                  <p className="mt-1 text-[11px] text-fg-muted">
+                  <p className="mt-1 text-[11px] text-fg-faint">
                     {k.authorName ?? 'bilinmiyor'}
                     {k.resolvedAt ? ' · kapatıldı' : ''}
                   </p>
@@ -311,7 +315,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
                     className="flex items-baseline justify-between gap-3 py-1.5 text-[13px]"
                   >
                     <span className="truncate">{n.name}</span>
-                    <span className="shrink-0 text-[11px] tabular-nums text-fg-muted">
+                    <span className="num shrink-0 text-[11px] text-fg-faint">
                       {tarih(n.lastSeen)}
                     </span>
                   </li>

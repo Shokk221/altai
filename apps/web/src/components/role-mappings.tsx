@@ -99,23 +99,23 @@ export function RoleMappings({ apiUrl, veri }: { apiUrl: string; veri: Veri }) {
       ) : null}
 
       {veri.mappings.length === 0 ? (
-        <p className="rounded bg-surface px-5 py-8 text-center text-sm text-fg-muted">
+        <p className="rounded border border-border bg-surface px-5 py-8 text-center text-sm text-fg-muted">
           Hiç eşleme yok. Eşleme olmadan Discord'la giren kimse yetki alamaz.
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
           {veri.mappings.map((m) => (
-            <li key={m.id} className="rounded bg-surface px-5 py-4">
+            <li key={m.id} className="rounded border border-border bg-surface px-5 py-4">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <span className="font-semibold">{ROL_ETIKET[m.systemRole] ?? m.systemRole}</span>
                 {m.squadGroup ? (
-                  <span className="rounded-full bg-accent px-2.5 py-0.5 text-[11px] font-bold text-accent-fg">
+                  <span className="rounded-full bg-accent-weak px-2.5 py-0.5 text-[11px] font-medium text-accent-2">
                     oyun: {m.squadGroup}
                   </span>
                 ) : (
-                  <span className="text-[11px] text-fg-muted">oyun içi yetki yok</span>
+                  <span className="text-[11px] text-fg-faint">oyun içi yetki yok</span>
                 )}
-                <span className="text-[11px] text-fg-muted">
+                <span className="text-[11px] text-fg-faint">
                   {m.panelPermissions.length} panel izni
                 </span>
                 <span
@@ -126,7 +126,7 @@ export function RoleMappings({ apiUrl, veri }: { apiUrl: string; veri: Veri }) {
                 >
                   {m.uyeSayisi} kişi taşıyor
                 </span>
-                <span className="ml-auto font-mono text-[11px] text-fg-muted">
+                <span className="ml-auto font-mono text-[11px] text-fg-faint">
                   {m.discordRoleId}
                 </span>
               </div>
@@ -198,7 +198,7 @@ function Form({
   }
 
   return (
-    <div className="rounded bg-surface-2 p-5">
+    <div className="rounded border border-border bg-surface p-5">
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="flex flex-col gap-1.5">
           <span className="text-xs font-semibold text-fg-muted">Discord rol kimliği</span>
@@ -216,7 +216,7 @@ function Form({
           <select
             value={systemRole}
             onChange={(e) => setSystemRole(e.target.value)}
-            className="min-h-11 rounded-full bg-surface px-5 text-sm font-medium text-fg"
+            className="min-h-11 rounded-sm border border-border-strong bg-surface-sunken px-3.5 text-sm text-fg"
           >
             {veri.systemRoles.map((r) => (
               <option key={r} value={r}>
@@ -233,7 +233,7 @@ function Form({
           <select
             value={squadGroup}
             onChange={(e) => setSquadGroup(e.target.value)}
-            className="min-h-11 rounded-full bg-surface px-5 text-sm font-medium text-fg"
+            className="min-h-11 rounded-sm border border-border-strong bg-surface-sunken px-3.5 text-sm text-fg"
           >
             <option value="">— yok —</option>
             {veri.squadGroups.map((g) => (
@@ -254,10 +254,10 @@ function Form({
               type="button"
               onClick={() => izinDegistir(p)}
               className={cn(
-                'rounded-full px-3 py-1.5 font-mono text-[11px] font-semibold transition-colors',
+                'rounded-full px-3 py-1.5 font-mono text-[11px] font-medium transition-colors',
                 izinler.includes(p)
-                  ? 'bg-accent text-accent-fg'
-                  : 'bg-surface text-fg-muted hover:text-fg',
+                  ? 'bg-accent-weak text-accent-2'
+                  : 'bg-surface-2 text-fg-muted hover:text-fg',
               )}
             >
               {p}

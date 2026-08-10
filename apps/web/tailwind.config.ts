@@ -1,54 +1,76 @@
 import type { Config } from 'tailwindcss';
 
 /**
- * Tasarım sistemi — plan Bölüm 8 ("UI birinci sınıf öncelik").
+ * Tasarım sistemi — Apple dili.
  *
- * Renkler globals.css'teki CSS değişkenlerinden okunuyor; burada sadece
- * Tailwind'e isim veriliyor. Böylece tema tek yerden değişiyor ve
- * `bg-surface`, `text-fg-muted` gibi anlamsal sınıflar kullanılabiliyor —
- * `bg-gray-800` gibi ham renkler kod tabanına dağılmıyor.
+ * Renkler globals.css'teki değişkenlerden okunuyor; burada yalnızca isim
+ * veriliyor. Böylece tema tek yerden değişiyor ve `bg-surface`,
+ * `text-fg-muted` gibi anlamsal sınıflar kullanılabiliyor — `bg-zinc-900`
+ * gibi ham renkler kod tabanına dağılmıyor.
+ *
+ * Değerler hex olduğu için `<alpha-value>` yerine `color-mix` gerekirdi;
+ * onun yerine saydamlığa ihtiyaç duyulan iki renk (accent-weak, accent-ring)
+ * ayrı belirteç olarak tanımlı.
  */
-const color = (name: string) => `hsl(var(--${name}) / <alpha-value>)`;
+const v = (name: string) => `var(--${name})`;
 
 export default {
   content: ['./app/**/*.{ts,tsx}', './src/**/*.{ts,tsx}'],
-  // Koyu varsayılan. Açık tema ileride bir tercih olarak eklenirse
-  // token'lar .light altında yeniden tanımlanır; bileşenler değişmez.
+  // Koyu tek yön: bu dil saf siyah üzerine kurulu, açık teması yok.
   darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        bg: color('bg'),
-        surface: color('surface'),
-        'surface-2': color('surface-2'),
-        border: color('border'),
-        fg: color('fg'),
-        'fg-muted': color('fg-muted'),
-        ink: { DEFAULT: color('ink'), fg: color('ink-fg') },
-        accent: { DEFAULT: color('accent'), fg: color('accent-fg') },
-        danger: { DEFAULT: color('danger'), fg: color('danger-fg') },
-        success: color('success'),
-        info: color('info'),
-        ring: color('ring'),
+        bg: v('bg'),
+        surface: v('surface'),
+        'surface-2': v('surface-2'),
+        'surface-sunken': v('surface-sunken'),
+        border: v('border'),
+        'border-strong': v('border-strong'),
+        fg: v('fg'),
+        'fg-muted': v('fg-muted'),
+        'fg-faint': v('fg-faint'),
+        ink: { DEFAULT: v('ink'), fg: v('ink-fg') },
+        accent: {
+          DEFAULT: v('accent'),
+          2: v('accent-2'),
+          fg: v('accent-fg'),
+          weak: v('accent-weak'),
+        },
+        danger: { DEFAULT: v('danger'), fg: v('danger-fg') },
+        success: v('success'),
+        warn: v('warn'),
+        info: v('info'),
+        team1: v('team1'),
+        team2: v('team2'),
+        ring: v('accent-ring'),
       },
       borderRadius: {
-        // Cömert yuvarlaklık bu dilin belirleyici özelliği; kartlar yumuşak,
-        // küçük öğeler tam hap.
         DEFAULT: 'var(--radius)',
         lg: 'calc(var(--radius) + 0.25rem)',
-        sm: 'calc(var(--radius) - 0.5rem)',
+        sm: 'calc(var(--radius) - 0.375rem)',
       },
       boxShadow: {
-        // Koyu zeminde gölge işe yaramıyor (siyah üstüne siyah). Ayrım
-        // yüzey farkıyla yapılıyor; gölge yalnızca yükseltilmiş öğelerde
-        // ve derin.
-        card: '0 2px 8px hsl(0 0% 0% / 0.30)',
-        lift: '0 8px 28px -8px hsl(0 0% 0% / 0.45)',
+        // Saf siyah zeminde gölge ancak yükseltilmiş yüzeyde okunuyor;
+        // kartların ayrımını kenarlık yapıyor.
+        card: '0 1px 3px rgba(0, 0, 0, .4)',
+        lift: '0 4px 24px rgba(0, 0, 0, .4), 0 30px 70px rgba(0, 0, 0, .55)',
       },
       fontFamily: {
-        // Sistem yazı tipi yığını: dış bağımlılık yok, ilk boyama hızlı.
-        sans: ['ui-sans-serif', 'system-ui', 'Segoe UI', 'Roboto', 'sans-serif'],
-        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+        // Apple'ın kendi sitelerinin yaptığı: sistem yığını. SF Pro webfont
+        // olarak dağıtılamıyor (lisans); macOS ve iOS'ta -apple-system
+        // gerçek SF Pro'ya, Windows'ta Segoe UI'ya düşüyor.
+        sans: [
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'SF Pro Display',
+          'SF Pro Text',
+          'Helvetica Neue',
+          'Segoe UI',
+          'system-ui',
+          'sans-serif',
+        ],
+        mono: ['ui-monospace', 'SF Mono', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       keyframes: {
         'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },

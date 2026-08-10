@@ -14,13 +14,13 @@ export function EmptyState({
   tone?: 'neutral' | 'danger';
 }) {
   return (
-    <div className="px-4 py-14 text-center">
+    <div className="px-4 py-12 text-center">
       <p className={tone === 'danger' ? 'text-danger' : 'text-fg-muted'}>{title}</p>
-      {hint ? <p className="mt-1 text-sm text-fg-muted/70">{hint}</p> : null}
+      {hint ? <p className="mt-1 text-sm text-fg-faint">{hint}</p> : null}
     </div>
   );
 }
 
 export function Skeleton({ className = 'h-4 w-full' }: { className?: string }) {
-  return <div className={`animate-pulse rounded bg-surface-2/70 ${className}`} />;
+  return <div className={`animate-pulse rounded-sm bg-surface-2 ${className}`} />;
 }

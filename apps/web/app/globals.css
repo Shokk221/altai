@@ -3,71 +3,88 @@
 @tailwind utilities;
 
 /**
- * Tasarım sistemi — plan Bölüm 8.
+ * Tasarım sistemi — Apple dili.
  *
- * Yön: KOYU varsayılan, ama soğuk-mavi değil sıcak kömür. Nötrler hafif
- * sarıya kaymış; vurgu rengiyle aynı sıcaklıkta olunca kompozisyon bütün
- * duruyor, mavi-gri bir zeminde sarı yapıştırılmış gibi görünüyordu.
+ * Saf siyah zemin, katmanlı yüzeyler, tek bir mavi vurgu. Önceki sıcak
+ * kömür paletinin yerini aldı; belirteçler doğrudan verildiği için HSL
+ * üçlüsü yerine hex kullanılıyor.
  *
- * Ağırlıklar DOLGUN. İnce yazı tipi ağırlıkları (300) koyu zeminde cılız
- * okunuyor ve arayüzü zayıflatıyor: başlıklar 600, büyük sayılar 700.
+ * ÜÇ KURAL:
  *
- * Sadelik yerleşimden geliyor: cömert köşe, geniş boşluk, kenarlık yerine
- * yüzey farkı. Çizgi ve kutu çoğaltarak değil.
+ *  1. Mavi yalnızca EYLEM. Tıklanabilir olana ayrılıyor; durum bilgisi
+ *     yeşil/sarı/kırmızıda, geri kalan gride. Vurgu her yere dağılınca
+ *     anlamını yitiriyor.
+ *
+ *  2. Kenarlık var ama zayıf. Saf siyahta yüzey farkı tek başına kartı
+ *     ayırmıyor — önceki sıcak kömür zeminde yetiyordu, burada 1 piksellik
+ *     kenarlık gerekiyor.
+ *
+ *  3. Rakamlar sabit genişlikte. Süre, sayı ve kimlik sütunları kayarken
+ *     zıplamasın diye.
  */
 @layer base {
   :root {
-    /* Zemin ve yüzeyler — sıcak kömür, üç kademe */
-    --bg: 36 9% 9%;
-    --surface: 36 8% 13%;
-    --surface-2: 36 7% 18%;
-    --border: 36 6% 24%;
+    --bg: #000000;
+    /* Kart yüzeyi. surface-2 daha AÇIK: kartın içindeki öğe (satır, form)
+       bir kademe yükseliyor. */
+    --surface: #1a1a1c;
+    --surface-2: #262628;
+    /* Çukur yüzey: kart içindeki girdi alanları zeminden daha koyu. */
+    --surface-sunken: #0f0f11;
 
-    /* Metin — sönük ton bilinçli olarak yüksek tutuldu; koyu zeminde
-       %45 gri okunmuyor. */
-    --fg: 40 12% 94%;
-    --fg-muted: 38 8% 66%;
+    --border: #262628;
+    --border-strong: #333336;
 
-    /* Kontrast elemanı: koyu zeminde AÇIK yüzey dikkat çeker.
-       Sayfada bir ya da iki kez kullanılır. */
-    --ink: 40 20% 93%;
-    --ink-fg: 36 10% 11%;
+    --fg: #f5f5f7;
+    --fg-muted: #a1a1a6;
+    --fg-faint: #6e6e73;
 
-    /* Vurgu: tereyağı sarısı — koyu zeminde en güçlü çıktığı yer.
-       Üstündeki metin koyu olmak zorunda. */
-    --accent: 45 92% 62%;
-    --accent-fg: 40 30% 10%;
+    /* `ink` birincil eylem. Önceki dilde koyu zeminde AÇIK bir yüzeydi;
+       Apple dilinde birincil eylem mavidir, o yüzden vurguyla aynı. */
+    --ink: #2997ff;
+    --ink-fg: #ffffff;
 
-    /* Durum renkleri — koyu zeminde okunacak kadar parlak, ama paletin
-       sıcaklığında. */
-    --danger: 6 72% 58%;
-    --danger-fg: 10 30% 98%;
-    --success: 150 45% 50%;
-    --info: 205 65% 62%;
+    --accent: #2997ff;
+    --accent-2: #4aa8ff;
+    --accent-fg: #ffffff;
+    --accent-weak: rgba(41, 151, 255, 0.14);
+    --accent-ring: rgba(41, 151, 255, 0.4);
 
-    --ring: 45 92% 62%;
-    --radius: 1.25rem;
+    --success: #30d158;
+    --warn: #ffd426;
+    --danger: #ff6b6b;
+    /* Kırmızı açık bir ton; üstündeki metin KOYU olmak zorunda. */
+    --danger-fg: #2b0d0d;
+    --info: #78acdd;
+
+    /* Oyundaki karşılığıyla eşleşiyor; her ekranda aynı. */
+    --team1: #e0868d;
+    --team2: #78acdd;
+
+    /* Apple kartları 20 piksellik yumuşaklıkta değil; 14 daha kesin. */
+    --radius: 0.875rem;
   }
 
   body {
     @apply bg-bg text-fg antialiased;
     /* Mobilde yatay taşma en sık görülen bozulma; kökten engelliyoruz. */
     overflow-x: hidden;
+    letter-spacing: -0.01em;
   }
 
-  /* Klavye ile gezinenler için görünür odak — erişilebilirlik. */
+  /* Klavye ile gezinenler için görünür odak. */
   :focus-visible {
-    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-bg;
+    outline: none;
+    box-shadow: 0 0 0 3.5px var(--accent-ring);
+    border-radius: 0.5rem;
   }
 
-  /* Kaydırma çubuğu.
-     Tarayıcı varsayılanı koyu zeminde açık gri, kalın ve gürültülü bir şerit
-     çiziyor; dört panelli bir ekranda dört tane birden görünüyor ve arayüzü
-     paramparça gösteriyor. İnce ve zeminle aynı sıcaklıkta, yalnızca üstüne
-     gelince belirginleşiyor. */
+  /* Kaydırma çubuğu: ince ve sessiz. Tarayıcı varsayılanı koyu zeminde
+     kalın açık gri bir şerit çiziyor ve çok panelli ekranda arayüzü
+     parçalıyor. */
   * {
     scrollbar-width: thin;
-    scrollbar-color: hsl(var(--border)) transparent;
+    scrollbar-color: var(--border-strong) transparent;
   }
   *::-webkit-scrollbar {
     width: 6px;
@@ -77,21 +94,26 @@
     background: transparent;
   }
   *::-webkit-scrollbar-thumb {
-    background: hsl(var(--border));
+    background: var(--border-strong);
     border-radius: 999px;
   }
   *::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--fg-muted) / 0.6);
+    background: var(--fg-faint);
   }
-  /* Köşedeki kare (yatay+dikey kesişimi) varsayılan olarak açık kalıyor. */
   *::-webkit-scrollbar-corner {
     background: transparent;
   }
 
-  /* Büyük sayılar: dolgun ve sıkı. Rakamlar sabit genişlikte, yoksa
-     sütun hâlinde dizildiklerinde zıplıyorlar. */
+  /* Büyük sayılar. Apple'da büyük tipografi SIKI harflenir; gevşek
+     bırakılırsa dağınık görünüyor. */
   .display {
-    @apply font-bold tracking-tight;
+    @apply font-semibold;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Veri sütunları: rakamlar aynı genişlikte. */
+  .num {
     font-variant-numeric: tabular-nums;
   }
 }

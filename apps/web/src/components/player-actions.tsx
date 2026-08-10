@@ -213,7 +213,7 @@ export function KaydiKapat({ apiUrl, recordId }: { apiUrl: string; recordId: str
         type="button"
         onClick={() => calistir(`/records/${recordId}/resolve`)}
         disabled={bekliyor}
-        className="text-[11px] font-semibold text-fg-muted transition-colors hover:text-fg disabled:opacity-40"
+        className="text-[11px] font-medium text-fg-muted transition-colors hover:text-fg disabled:opacity-40"
       >
         {bekliyor ? '…' : 'kapat'}
       </button>

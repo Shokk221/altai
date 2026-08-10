@@ -46,7 +46,7 @@ export function CoplayPanel({ apiUrl, playerId }: { apiUrl: string; playerId: st
         <button
           type="button"
           onClick={yukle}
-          className="rounded-full bg-surface-2 px-4 py-2 text-xs font-semibold text-fg-muted transition-colors hover:text-fg"
+          className="rounded-full bg-surface-2 px-4 py-2 text-xs font-medium text-fg-muted transition-colors hover:text-fg"
         >
           Birlikte oynadıklarını göster
         </button>
@@ -80,9 +80,7 @@ export function CoplayPanel({ apiUrl, playerId }: { apiUrl: string; playerId: st
             className="flex items-baseline justify-between gap-3 rounded-sm px-1 py-1.5 text-[13px] transition-colors hover:bg-surface-2"
           >
             <span className="truncate">{a.name}</span>
-            <span className="shrink-0 text-[11px] tabular-nums text-fg-muted">
-              {sure(a.birlikteSaniye)}
-            </span>
+            <span className="shrink-0 num text-[11px] text-fg-faint">{sure(a.birlikteSaniye)}</span>
           </Link>
         </li>
       ))}

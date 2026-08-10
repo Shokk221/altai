@@ -35,10 +35,10 @@ export default async function HomePage() {
         <p className="mt-2 text-sm text-fg-muted">Sunucu yönetim paneli</p>
       </div>
 
-      <div className="flex w-full flex-col items-center gap-4 rounded bg-surface px-6 py-7">
+      <div className="flex w-full flex-col items-center gap-4 rounded border border-border bg-surface px-6 py-7">
         <a
           href={`${apiUrl}/auth/discord`}
-          className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-ink px-5 text-sm font-semibold text-ink-fg transition-colors hover:bg-ink/90"
+          className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-ink px-5 text-sm font-medium text-ink-fg transition-colors hover:bg-accent-2"
         >
           Discord ile giriş yap
         </a>

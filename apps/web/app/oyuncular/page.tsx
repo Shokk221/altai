@@ -17,7 +17,7 @@ export default async function PlayersPage({
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:py-12">
       <header className="mb-7">
-        <Link href="/canli" className="text-xs font-semibold text-fg-muted hover:text-fg">
+        <Link href="/canli" className="text-xs font-medium text-fg-muted hover:text-fg">
           Canlı ekran →
         </Link>
         <h1 className="display text-4xl">Oyuncular</h1>
