@@ -388,21 +388,39 @@ async function decorate(db: Db, rows: BaseRow[]) {
   if (rows.length === 0) return [];
   const ids = rows.map((r) => r.id);
 
-  const names = await db
-    .select({
-      playerId: identitySchema.playerNames.playerId,
-      name: identitySchema.playerNames.name,
-    })
-    .from(identitySchema.playerNames)
-    .where(inArray(identitySchema.playerNames.playerId, ids))
-    .orderBy(desc(identitySchema.playerNames.lastSeen))
-    .limit(ids.length * 6);
+  /**
+   * Oyuncu başına EN SON 5 isim.
+   *
+   * Önceki hâli tek bir global `limit` kullanıyordu (ids.length * 6) ve bu
+   * yanlıştı: 99 ismi olan bir oyuncu bütün payı yiyip diğerlerinin isimlerini
+   * sonuçtan düşürebiliyordu. Pencere fonksiyonu limiti oyuncu başına
+   * uyguluyor.
+   */
+  const isimSatirlari = await db.execute<{
+    player_id: string;
+    name: string;
+    sira: number;
+    toplam: number;
+  }>(sql`
+    select player_id, name, sira, toplam
+      from (
+        select pn.player_id,
+               pn.name,
+               row_number() over (partition by pn.player_id order by pn.last_seen desc nulls last) as sira,
+               count(*) over (partition by pn.player_id) as toplam
+          from player_names pn
+         where pn.player_id = any(${ids}::uuid[])
+      ) x
+     where sira <= 5
+  `);
 
-  const latestName = new Map<string, string>();
-  const nameCount = new Map<string, number>();
-  for (const n of names) {
-    if (!latestName.has(n.playerId)) latestName.set(n.playerId, n.name);
-    nameCount.set(n.playerId, (nameCount.get(n.playerId) ?? 0) + 1);
+  const isimler = new Map<string, string[]>();
+  const isimSayisi = new Map<string, number>();
+  for (const r of isimSatirlari as unknown as Record<string, unknown>[]) {
+    const pid = String(r.player_id);
+    if (!isimler.has(pid)) isimler.set(pid, []);
+    isimler.get(pid)?.push(String(r.name));
+    isimSayisi.set(pid, Number(r.toplam ?? 0));
   }
 
   const now = new Date();
@@ -420,13 +438,45 @@ async function decorate(db: Db, rows: BaseRow[]) {
     );
   const banned = new Set(bans.map((b) => b.playerId));
 
-  return rows.map((r) => ({
-    id: r.id,
-    steamId: r.steamId,
-    eosId: r.eosId,
-    name: latestName.get(r.id) ?? r.matchedName ?? '(isim yok)',
-    matchedName: r.matchedName ?? null,
-    knownNames: nameCount.get(r.id) ?? 0,
-    hasActiveBan: banned.has(r.id),
-  }));
+  // Aktif etiketler. Kaldırılmış olanlar gelmiyor: arama listesinde geçmiş
+  // değil ŞU ANKİ durum okunuyor.
+  const etiketSatirlari = await db
+    .select({
+      playerId: moderationSchema.flagAssignments.playerId,
+      name: moderationSchema.flags.name,
+    })
+    .from(moderationSchema.flagAssignments)
+    .innerJoin(
+      moderationSchema.flags,
+      eq(moderationSchema.flags.id, moderationSchema.flagAssignments.flagId),
+    )
+    .where(
+      and(
+        inArray(moderationSchema.flagAssignments.playerId, ids),
+        isNull(moderationSchema.flagAssignments.removedAt),
+      ),
+    );
+  const etiketler = new Map<string, string[]>();
+  for (const f of etiketSatirlari) {
+    if (!etiketler.has(f.playerId)) etiketler.set(f.playerId, []);
+    etiketler.get(f.playerId)?.push(f.name);
+  }
+
+  return rows.map((r) => {
+    const hepsi = isimler.get(r.id) ?? [];
+    const guncel = hepsi[0] ?? r.matchedName ?? '(isim yok)';
+    return {
+      id: r.id,
+      steamId: r.steamId,
+      eosId: r.eosId,
+      name: guncel,
+      matchedName: r.matchedName ?? null,
+      // Güncel isim hariç eskiler; eşleşen isim zaten ayrıca gösteriliyor.
+      eskiIsimler: hepsi.slice(1).filter((n) => n !== r.matchedName),
+      knownNames: isimSayisi.get(r.id) ?? hepsi.length,
+      flags: etiketler.get(r.id) ?? [],
+      hasActiveBan: banned.has(r.id),
+    };
+  });
 }
+

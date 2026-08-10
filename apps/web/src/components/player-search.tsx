@@ -13,7 +13,10 @@ interface Result {
   eosId: string | null;
   name: string;
   matchedName: string | null;
+  /** Güncel isim hariç, en son kullanılan diğer isimler. */
+  eskiIsimler: string[];
   knownNames: number;
+  flags: string[];
   hasActiveBan: boolean;
 }
 
@@ -128,34 +131,37 @@ function PlayerRow({ result }: { result: Result }) {
       {/* Tüm kart tıklanabilir: moderasyonda hedef küçük olursa mobilde
           kullanılamıyor (plan Bölüm 8 — tek elle kullanım). */}
       <Link href={`/oyuncular/${result.id}`} className="block">
-        <Card className="transition-colors hover:bg-surface-2">
-          <div className="flex flex-col gap-2 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2.5">
-                <span className="truncate text-[15px] font-semibold">{result.name}</span>
-                {result.hasActiveBan ? <Badge tone="danger">BANLI</Badge> : null}
-              </div>
-
-              {/* Aranan isim güncel isimden farklıysa bunu göstermek şart:
-                admin neden bu sonucun çıktığını anlamalı. */}
-              {result.matchedName && result.matchedName !== result.name ? (
-                <p className="mt-1 truncate text-sm text-fg-muted">
-                  eşleşen eski isim:{' '}
-                  <span className="font-semibold text-fg">{result.matchedName}</span>
-                </p>
-              ) : null}
-
-              <p className="mt-1.5 truncate font-mono text-[11px] text-fg-muted">
-                {result.steamId ?? '— Steam yok'} · {result.eosId ?? '— EOS yok'}
-              </p>
-            </div>
-
+        <Card className="px-4 py-3 transition-colors hover:bg-surface-2">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+            <span className="truncate font-semibold">{result.name}</span>
+            {result.hasActiveBan ? <Badge tone="danger">banlı</Badge> : null}
+            {result.flags.map((f) => (
+              <Badge key={f} tone="info">
+                {f}
+              </Badge>
+            ))}
             {result.knownNames > 1 ? (
-              <div className="shrink-0">
-                <Badge>{result.knownNames} isim</Badge>
-              </div>
+              <span className="ml-auto text-[11px] text-fg-faint">{result.knownNames} isim</span>
             ) : null}
           </div>
+
+          {/* Aranan isim güncelden farklıysa bunu göstermek şart: admin
+              neden bu sonucun çıktığını anlamalı. */}
+          {result.matchedName && result.matchedName !== result.name ? (
+            <p className="mt-1.5 truncate text-[13px] text-fg-muted">
+              eşleşen isim: <span className="font-medium text-fg">{result.matchedName}</span>
+            </p>
+          ) : null}
+
+          {result.eskiIsimler.length > 0 ? (
+            <p className="mt-1 truncate text-[12px] text-fg-faint">
+              eski: {result.eskiIsimler.join(' · ')}
+            </p>
+          ) : null}
+
+          <p className="mt-1.5 truncate font-mono text-[11px] text-fg-faint">
+            {result.steamId ?? 'Steam yok'} · {result.eosId ?? 'EOS yok'}
+          </p>
         </Card>
       </Link>
     </li>
