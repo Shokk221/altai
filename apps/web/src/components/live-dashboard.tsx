@@ -43,13 +43,14 @@ interface LiveServerState {
 /**
  * TPS'in rengi.
  *
- * Sunucu 50 tick hedefliyor; oyuncular düşüşü 30'un altında hissetmeye
- * başlıyor, 20'nin altı "sunucu kasıyor" şikâyetinin geldiği bölge.
- * Sayının kendisini okumak yerine renge bakmak yeterli olsun diye.
+ * Squad sunucusu 50 tick hedefliyor ve sağlıklıyken oralarda geziyor
+ * (canlıda ölçüldü: 49,7). Oyuncular düşüşü 40'ın altında fark etmeye
+ * başlıyor, 30'un altı "sunucu kasıyor" şikâyetinin geldiği bölge.
+ * Sayıyı okumak yerine renge bakmak yeterli olsun diye.
  */
 function tpsRengi(tps: number): string {
-  if (tps >= 38) return 'text-success';
-  if (tps >= 25) return 'text-warn';
+  if (tps >= 40) return 'text-success';
+  if (tps >= 30) return 'text-warn';
   return 'text-danger';
 }
 
