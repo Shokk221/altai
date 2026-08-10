@@ -5,7 +5,7 @@ import type { AppConfig } from '@altai/shared';
 import { verifyPassword } from '@altai/shared';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
-import { kaydet } from '../lib/activity-log.js';
+import { kaydetIstek } from '../lib/activity-log.js';
 import { resolveRoles } from '../lib/roles.js';
 import { createSession, destroySession, verifySession } from '../lib/session.js';
 import { timingSafeCompare } from '../lib/timing-safe.js';
@@ -114,7 +114,7 @@ export async function authRoutes(app: FastifyInstance, opts: { db: Db; config: A
       { discordId: discordUser.id, systemRole: resolved.systemRole },
       'kullanıcı giriş yaptı',
     );
-    kaydet({
+    kaydetIstek(String(req.id), {
       actorType: 'user',
       actorUserId: user.id,
       actorLabel: discordUser.username,
@@ -159,7 +159,7 @@ export async function authRoutes(app: FastifyInstance, opts: { db: Db; config: A
         // Süper admin şifresine yapılan denemeler günlüğün en önemli
         // satırları: hangi IP'den kaç kez denendiği saldırıyı görmenin
         // tek yolu.
-        kaydet({
+        kaydetIstek(String(req.id), {
           actorType: 'anonymous',
           action: 'auth.break_glass_failed',
           category: 'oturum',
@@ -199,7 +199,7 @@ export async function authRoutes(app: FastifyInstance, opts: { db: Db; config: A
         { username: config.BREAK_GLASS_USER, ip: req.ip },
         'break-glass girişi kullanıldı',
       );
-      kaydet({
+      kaydetIstek(String(req.id), {
         actorType: 'user',
         actorUserId: user.id,
         actorLabel: config.BREAK_GLASS_USER,
@@ -229,7 +229,7 @@ export async function authRoutes(app: FastifyInstance, opts: { db: Db; config: A
       // çıkışın sahibi öğrenilemez.
       const session = await verifySession(db, token);
       if (session) {
-        kaydet({
+        kaydetIstek(String(req.id), {
           actorType: 'user',
           actorUserId: session.id,
           actorLabel: session.discordUsername,

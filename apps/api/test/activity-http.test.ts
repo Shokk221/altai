@@ -24,6 +24,18 @@ describe('kayitKarari', () => {
     const k = istek({ method: 'POST', route: '/api/moderation/bans', oturumVar: false });
     expect(k.kaydet).toBe(true);
     expect(k.actorType).toBe('anonymous');
+    expect(k.category).toBe('moderasyon');
+  });
+
+  it('giriş uçlarını moderasyona değil oturuma yazar', () => {
+    // Giriş denemesi moderasyon sekmesinde görünüyordu ve "bugün kim ban
+    // attı" sorusunun cevabını kirletiyordu.
+    const k = istek({ method: 'POST', route: '/api/auth/break-glass', oturumVar: false });
+    expect(k.category).toBe('oturum');
+  });
+
+  it('rol eşlemesi yazmalarını erişim kırılımına koyar', () => {
+    expect(istek({ method: 'POST', route: '/api/role-mappings' }).category).toBe('erisim');
   });
 
   it('oturumlu okumayı "okuma" kategorisine yazar', () => {

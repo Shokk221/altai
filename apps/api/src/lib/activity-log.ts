@@ -123,6 +123,18 @@ export function anlamliIsaretle(requestId: string) {
   anlamliKayitlar.add(requestId);
 }
 
+/**
+ * Bir HTTP isteğinin anlamlı karşılığını yazar VE genel satırını bastırır.
+ *
+ * Doğrudan `kaydet()` çağıran uçlar (giriş, çıkış) bunu kullanmadığında
+ * olay günlükte iki kez görünüyordu: bir kez "POST /api/auth/break-glass",
+ * bir kez "acil giriş kullandı".
+ */
+export function kaydetIstek(requestId: string, entry: ActivityEntry) {
+  anlamliIsaretle(requestId);
+  kaydet({ ...entry, requestId });
+}
+
 /** HTTP kancası çağırır; işareti okur ve tüketir. */
 export function anlamliTuket(requestId: string): boolean {
   return anlamliKayitlar.delete(requestId);

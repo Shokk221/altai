@@ -104,6 +104,21 @@ function gurultuMu(yol: string): boolean {
   return false;
 }
 
+/**
+ * Bir yazma isteğinin hangi kırılıma ait olduğu.
+ *
+ * Hepsini 'moderasyon' saymak yanlıştı: giriş denemesi moderasyon
+ * sekmesinde görünüyordu ve "bugün kim ban attı" sorusunun cevabını
+ * kirletiyordu. Anlamlı satır yazan uçlar kendi kategorisini zaten
+ * writeAudit üzerinden veriyor; burası yalnızca onun yazılmadığı
+ * durumlar (doğrulama hatası, tanınmayan uç) için.
+ */
+function yazmaKategorisi(yol: string): ActivityCategory {
+  if (yol.includes('/auth/')) return 'oturum';
+  if (yol.includes('/role-mappings') || yol.includes('/admin')) return 'erisim';
+  return 'moderasyon';
+}
+
 /** Token'ı yolda taşıyan, oyun sunucusunun çektiği listeler. */
 function makineListesiMi(yol: string): boolean {
   return yol.includes('/ban-list/') || yol.includes('/admin-list/');
@@ -151,7 +166,7 @@ export function kayitKarari(o: IstekOzeti): KayitKarari {
     return {
       kaydet: true,
       action: `http.${o.method.toLowerCase()}`,
-      category: 'moderasyon',
+      category: yazmaKategorisi(yol),
       actorType: aktor,
     };
   }
