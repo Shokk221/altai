@@ -96,8 +96,8 @@ export function PlayerSearch({ apiUrl, ilkSorgu = '' }: { apiUrl: string; ilkSor
 
       {state.kind === 'loading' ? (
         <div className="space-y-2" aria-busy="true">
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <Skeleton key={i} className="h-9 w-full" />
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-[74px] w-full" />
           ))}
         </div>
       ) : null}
@@ -112,78 +112,77 @@ export function PlayerSearch({ apiUrl, ilkSorgu = '' }: { apiUrl: string; ilkSor
       ) : null}
 
       {state.kind === 'done' && state.results.length > 0 ? (
-        // Kart yığını yerine TABLO: liste taranmak için, okunmak için değil.
-        // Kartlar dikeyde yer yiyip ekrana üç sonuç sığdırıyordu ve ekranın
-        // genişliğini hiç kullanmıyordu. Sütunlar aynı bilgiyi göz tek
-        // hizada tarayacak şekilde diziyor.
-        <div className="overflow-x-auto rounded border border-border">
-          <table className="w-full min-w-[54rem] text-[13px]">
-            <thead>
-              <tr className="border-b border-border text-left text-[10.5px] font-semibold uppercase tracking-wider text-fg-faint">
-                <th className="px-3 py-2">Oyuncu</th>
-                <th className="px-3 py-2">Eski isimler</th>
-                <th className="px-3 py-2">Steam</th>
-                <th className="px-3 py-2">EOS</th>
-                <th className="px-3 py-2 text-right">Son görülme</th>
-              </tr>
-            </thead>
-            <tbody className="[&>tr:last-child]:border-0">
-              {state.results.map((r) => (
-                <PlayerRow key={r.id} result={r} />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        // Sıkışık tablo DEĞİL: her sonuç kendi dolgulu satır bloğu.
+        // Başlık satırı yok — sütunsuz düzende anlamı kalmıyor ve
+        // elektronik tablo hissini o veriyordu.
+        <ul className="flex flex-col gap-2">
+          {state.results.map((r) => (
+            <PlayerRow key={r.id} result={r} />
+          ))}
+        </ul>
       ) : null}
     </div>
   );
 }
 
-/** Tablo satırı. Tüm satır tıklanabilir; hedef küçük olursa mobilde kullanılamıyor. */
+/**
+ * Tek sonuç satırı.
+ *
+ * Ferah ve dolgulu: önceki hâli 13 piksellik hücrelerden oluşan sıkışık bir
+ * tabloydu ve elektronik tablo gibi duruyordu. Bilgi aynı, nefes alanı
+ * farklı — moderasyon listesi taranıyor ama satırlar birbirine yapışınca
+ * göz hangi satırda olduğunu kaybediyor.
+ */
 function PlayerRow({ result }: { result: Result }) {
   return (
-    <tr className="border-b border-border hover:bg-surface-2">
-      <td className="max-w-0 px-3 py-2">
-        <Link href={`/oyuncular/${result.id}`} className="block">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="truncate font-semibold">{result.name}</span>
+    <li>
+      <Link
+        href={`/oyuncular/${result.id}`}
+        className="flex items-center justify-between gap-4 rounded border border-border bg-surface px-4 py-3 transition-colors hover:border-border-strong hover:bg-surface-2"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="truncate text-[15px] font-semibold">{result.name}</span>
             {result.hasActiveBan ? <Badge tone="danger">banlı</Badge> : null}
-            {result.flags.slice(0, 3).map((f) => (
+            {result.flags.slice(0, 4).map((f) => (
               <Badge key={f} tone="info">
                 {f}
               </Badge>
             ))}
-            {result.flags.length > 3 ? (
-              <span className="text-[11px] text-fg-faint">+{result.flags.length - 3}</span>
+            {result.flags.length > 4 ? (
+              <span className="text-[11px] text-fg-faint">+{result.flags.length - 4}</span>
             ) : null}
-          </div>
+          </span>
+
+          <span className="mt-1.5 block truncate font-mono text-[11.5px] text-fg-faint">
+            {result.steamId ?? 'Steam yok'} · {result.eosId ?? 'EOS yok'}
+          </span>
+
           {/* Aranan isim güncelden farklıysa göstermek şart: admin bu
               sonucun neden çıktığını anlamalı. */}
           {result.matchedName && result.matchedName !== result.name ? (
-            <span className="mt-0.5 block truncate text-[11.5px] text-fg-muted">
+            <span className="mt-1 block truncate text-[12.5px] text-fg-muted">
               eşleşen: <span className="font-medium text-fg">{result.matchedName}</span>
             </span>
           ) : null}
-        </Link>
-      </td>
 
-      <td className="max-w-0 px-3 py-2 text-fg-muted">
-        <span className="block truncate">
-          {result.eskiIsimler.length > 0 ? result.eskiIsimler.join(' · ') : '—'}
+          {result.eskiIsimler.length > 0 ? (
+            <span className="mt-1 block truncate text-[12.5px] text-fg-faint">
+              eski: {result.eskiIsimler.join(' · ')}
+            </span>
+          ) : null}
         </span>
-        {result.knownNames > 1 ? (
-          <span className="text-[11px] text-fg-faint">{result.knownNames} isim</span>
-        ) : null}
-      </td>
 
-      <td className="px-3 py-2 font-mono text-[11px] text-fg-muted">{result.steamId ?? '—'}</td>
-      <td className="px-3 py-2 font-mono text-[11px] text-fg-faint">{result.eosId ?? '—'}</td>
-      <td className="whitespace-nowrap px-3 py-2 text-right">
-        <span className="num block text-[11.5px] text-fg-muted">{tarih(result.sonGorulme)}</span>
-        {/* Mutlak tarih hangi gün olduğunu, göreli ne kadar eski olduğunu
-            söylüyor; moderasyonda ikisi de gerekiyor. */}
-        <span className="block text-[10.5px] text-fg-faint">{gecenSure(result.sonGorulme)}</span>
-      </td>
-    </tr>
+        <span className="shrink-0 text-right">
+          <span className="num block text-[12.5px] text-fg-muted">{tarih(result.sonGorulme)}</span>
+          {/* Mutlak tarih hangi gün olduğunu, göreli ne kadar eski olduğunu
+              söylüyor; ikisi de gerekiyor. */}
+          <span className="block text-[11px] text-fg-faint">{gecenSure(result.sonGorulme)}</span>
+          {result.knownNames > 1 ? (
+            <span className="mt-1 block text-[11px] text-fg-faint">{result.knownNames} isim</span>
+          ) : null}
+        </span>
+      </Link>
+    </li>
   );
 }

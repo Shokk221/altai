@@ -15,7 +15,7 @@ export default async function PlayersPage({
   const { q } = await searchParams;
 
   return (
-    <main className="mx-auto w-full max-w-[104rem] px-5 py-6">
+    <main className="mx-auto w-full max-w-5xl px-5 py-6">
       <header className="mb-5">
         <h1 className="display text-3xl">Oyuncular</h1>
         <p className="mt-1 text-sm text-fg-muted">
