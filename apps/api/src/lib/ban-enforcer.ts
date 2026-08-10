@@ -38,9 +38,24 @@ const TARAMA_ARALIGI_MS = 60_000;
  * uygulama dondurulmuş bir BM arşivine dayandığı için bu güvenlik valfi
  * gerekli. Kip süreç ömrü boyunca sabit — env'den okunur.
  */
-let kip: 'on' | 'dry' | 'off' = 'on';
-export function kipiAyarla(yeni: 'on' | 'dry' | 'off') {
+type Kip = 'on' | 'altai' | 'dry' | 'off';
+let kip: Kip = 'on';
+export function kipiAyarla(yeni: Kip) {
   kip = yeni;
+}
+
+/**
+ * `altai` kipinde yalnızca bu panelden atılan banlar uygulanıyor.
+ *
+ * Geçiş dönemi kararı: veritabanındaki 21.796 aktif banın neredeyse tamamı
+ * BattleMetrics'ten aktarılmış dondurulmuş bir kopya ve oyun sunucusu hâlâ
+ * ESKİ sistemin ban listesini çekiyor. Eski banları biz de uygulamaya
+ * kalkarsak, o kopyadan sonra affedilmiş birini haksız yere atma riski
+ * alırız; oysa o banları eski sistem zaten uyguluyor. Panelden atılan
+ * banları ise hiç kimse uygulamıyor — asıl boşluk orada.
+ */
+function kaynakKosulu() {
+  return kip === 'altai' ? eq(moderationSchema.bans.source, 'altai') : undefined;
 }
 
 export interface BanliOyuncu {
@@ -114,6 +129,7 @@ async function aktifBanlar(db: Db, serverId: string): Promise<BanliOyuncu[]> {
       and(
         aktifBanKosulu(new Date()),
         or(isNull(moderationSchema.bans.serverId), eq(moderationSchema.bans.serverId, serverId)),
+        kaynakKosulu(),
       ),
     );
 }
@@ -174,6 +190,7 @@ export async function girisAninda(
         kimlikKosulu,
         aktifBanKosulu(new Date()),
         or(isNull(moderationSchema.bans.serverId), eq(moderationSchema.bans.serverId, serverId)),
+        kaynakKosulu(),
       ),
     )
     .limit(1);

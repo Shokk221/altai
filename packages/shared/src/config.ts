@@ -42,15 +42,20 @@ const envSchema = z.object({
   /**
    * Ban uygulamasının çalışma kipi (bkz. apps/api/src/lib/ban-enforcer.ts).
    *
-   *   on   — banlı oyuncu atılır (varsayılan)
-   *   dry  — atılmaz, yalnızca "atılacaktı" diye loglanır
-   *   off  — hiç kontrol edilmez
+   *   on    — TÜM aktif banlar uygulanır
+   *   altai — yalnızca BU PANELDEN atılan banlar uygulanır
+   *   dry   — hiçbiri atılmaz, yalnızca "atılacaktı" diye loglanır
+   *   off   — hiç kontrol edilmez
    *
-   * `dry` bilerek var: uygulama 25 binlik BattleMetrics arşivine dayanıyor
-   * ve o arşiv dondurulmuş bir kopya. Yanlış bir eşleşme gerçek oyuncuları
-   * oyundan atar; şüphe varsa önce `dry` ile bir akşam izlenir.
+   * `altai` geçiş dönemi için: veritabanındaki banların çok büyük kısmı
+   * BattleMetrics'ten aktarılmış dondurulmuş bir kopya ve oyun sunucusu
+   * hâlâ ESKİ sistemin ban listesini çekiyor. Bu kipte eski banları eski
+   * sistem uygulamaya devam eder, panelden atılan yeni banlar ise anında
+   * geçerli olur — iki sistem çakışmadan yan yana çalışır.
+   *
+   * `dry` ise şüphe hâlinde: neyin atılacağını atmadan gösterir.
    */
-  BAN_ENFORCEMENT: z.enum(['on', 'dry', 'off']).default('on'),
+  BAN_ENFORCEMENT: z.enum(['on', 'altai', 'dry', 'off']).default('on'),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;
