@@ -25,6 +25,15 @@ import { applyTeamChange, getServerState } from './server-state.js';
 
 export type Zaman = 'simdi' | 'mac_sonu';
 
+/**
+ * Maç sonunda kuyruğu işlemeden önce beklenen süre.
+ *
+ * Sunucudaki eski switch-plugin de ROUND_ENDED'da kendi kuyruğunu
+ * işliyor; önce onun bitmesini bekliyoruz ki çakışan oyuncuyu iki kez
+ * çevirip başladığı yere döndürmeyelim.
+ */
+const DIGER_SISTEMI_BEKLEME_MS = 8_000;
+
 export interface Hedef {
   steamId: string;
   eosId?: string | null;
@@ -306,6 +315,21 @@ export async function macSonuIsle(db: Db, slug: string, serverId: string): Promi
       ),
     );
   if (kuyruk.length === 0) return 0;
+
+  // Sunucuda BAŞKA bir sistem de maç sonunda takım değiştiriyor: eski
+  // panelin switch-plugin'i kendi `endMatchQueue`'sunu yine ROUND_ENDED'da
+  // işliyor ve aynı RCON'a `AdminForceTeamChange` gönderiyor. İkisi aynı
+  // anda çalışırsa aynı oyuncu iki kez çevrilip başladığı yere döner ve
+  // iki sistem de "başarılı" der.
+  //
+  // Onu bekliyoruz. Sonra taze liste okunduğunda, o zaten çevirdiyse
+  // oyuncu 'zaten_karsida' görünür ve biz dokunmayız — yani ikinci
+  // çevirme hiç olmaz. Tersini (bizden sonra onun çevirmesi) buradan
+  // engelleyemiyoruz; o eklenti kapatılmadıkça çakışma tek yönlü çözülür.
+  //
+  // 8 saniye: maç sonu skor ekranı 30 saniyeden uzun sürüyor, yeni harita
+  // yüklenmeden fazlasıyla önce bitiyoruz.
+  await new Promise((r) => setTimeout(r, DIGER_SISTEMI_BEKLEME_MS));
 
   // Kararı BAYAT veriyle vermiyoruz. Canlı liste normalde 20 saniyede bir
   // tazeleniyor ve altındaki SquadJS önbelleği 10 saniyede bir; ikisi
