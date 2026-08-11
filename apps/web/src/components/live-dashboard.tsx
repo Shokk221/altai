@@ -234,7 +234,7 @@ export function LiveDashboard({
     if (!altta.current) return;
     const el = akisKutusu.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [olaylar]);
+  }, []);
 
   const sunucuListesi = useMemo(
     () => Object.values(sunucular).sort((a, b) => a.serverSlug.localeCompare(b.serverSlug)),

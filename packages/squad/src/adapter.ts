@@ -6,8 +6,10 @@ import type {
   SquadJSNewGameRaw,
   SquadJSPlayerConnectedRaw,
   SquadJSPlayerDisconnectedRaw,
+  SquadJSPlayerStateChangeRaw,
   SquadJSRoundEndedRaw,
   SquadJSSquadCreatedRaw,
+  SquadJSTeamkillRaw,
   SquadJSTickRateRaw,
 } from './engine.js';
 
@@ -186,6 +188,62 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
       squadId,
       squadName: raw.squadName ?? `Squad ${squadId}`,
       ...(raw.teamName ? { teamName: raw.teamName } : {}),
+      // RCON satırı yalnızca takım ADINI veriyor; sayısal kimlik çözümlenmiş
+      // oyuncu kaydından geliyor. Manga dağıtan plugin'lerin tek kaynağı bu.
+      ...(typeof raw.player?.teamID === 'number' ? { teamId: raw.player.teamID } : {}),
+      timestamp: zaman.toISOString(),
+    });
+  };
+
+  /**
+   * Oyuncu durumu diff'leri (rol / manga / liderlik).
+   *
+   * Dördü de aynı şekle sahip olduğu için tek üretici; hangi değişiklik
+   * olduğu `change` ile ayrışıyor.
+   */
+  const durumDegisimi =
+    (change: 'role' | 'squad' | 'became_leader' | 'lost_leader') =>
+    (raw: SquadJSPlayerStateChangeRaw) => {
+      const p = raw.player;
+      // Kimliksiz bir diff'in hiçbir plugin için değeri yok.
+      if (!p || (!p.steamID && !p.eosID)) return;
+      const zaman = raw.time instanceof Date ? raw.time : new Date();
+      onEvent({
+        type: 'PLAYER_STATE_CHANGE',
+        serverSlug,
+        change,
+        ...(p.steamID ? { steamId: p.steamID } : {}),
+        ...(p.eosID ? { eosId: p.eosID } : {}),
+        playerName: p.name,
+        ...(typeof p.teamID === 'number' ? { teamId: p.teamID } : {}),
+        ...(typeof p.squadID === 'number' ? { squadId: p.squadID } : {}),
+        isLeader: p.isLeader === true,
+        ...(p.role ? { role: p.role } : {}),
+        ...(raw.oldRole ? { oldRole: raw.oldRole } : {}),
+        ...(typeof raw.oldSquadID === 'number' ? { oldSquadId: raw.oldSquadID } : {}),
+        timestamp: zaman.toISOString(),
+      });
+    };
+
+  const handleRoleChange = durumDegisimi('role');
+  const handleSquadChange = durumDegisimi('squad');
+  const handleBecameLeader = durumDegisimi('became_leader');
+  const handleLostLeader = durumDegisimi('lost_leader');
+
+  const handleTeamkill = (raw: SquadJSTeamkillRaw) => {
+    // Kurban ve saldırganın ikisi de yoksa olay hiçbir şey anlatmıyor.
+    if (!raw.victim && !raw.attacker) return;
+    const zaman = raw.time instanceof Date ? raw.time : new Date();
+    onEvent({
+      type: 'TEAMKILL',
+      serverSlug,
+      ...(raw.attacker?.name ? { attackerName: raw.attacker.name } : {}),
+      ...(raw.attacker?.steamID ? { attackerSteamId: raw.attacker.steamID } : {}),
+      ...(raw.attacker?.eosID ? { attackerEosId: raw.attacker.eosID } : {}),
+      ...(raw.victim?.name ? { victimName: raw.victim.name } : {}),
+      ...(raw.victim?.steamID ? { victimSteamId: raw.victim.steamID } : {}),
+      ...(raw.victim?.eosID ? { victimEosId: raw.victim.eosID } : {}),
+      ...(raw.weapon ? { weapon: raw.weapon } : {}),
       timestamp: zaman.toISOString(),
     });
   };
@@ -227,6 +285,11 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
       engine.on('ADMIN_BROADCAST', handleBroadcast);
       engine.on('POSSESSED_ADMIN_CAMERA', handleCamEnter);
       engine.on('UNPOSSESSED_ADMIN_CAMERA', handleCamExit);
+      engine.on('PLAYER_ROLE_CHANGE', handleRoleChange);
+      engine.on('PLAYER_SQUAD_CHANGE', handleSquadChange);
+      engine.on('PLAYER_NOW_IS_LEADER', handleBecameLeader);
+      engine.on('PLAYER_NOW_IS_NOT_LEADER', handleLostLeader);
+      engine.on('TEAMKILL', handleTeamkill);
       snapshotTimer = setInterval(takeSnapshot, snapshotIntervalMs);
       void takeSnapshot();
     },
@@ -244,6 +307,11 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
       engine.off('ADMIN_BROADCAST', handleBroadcast);
       engine.off('POSSESSED_ADMIN_CAMERA', handleCamEnter);
       engine.off('UNPOSSESSED_ADMIN_CAMERA', handleCamExit);
+      engine.off('PLAYER_ROLE_CHANGE', handleRoleChange);
+      engine.off('PLAYER_SQUAD_CHANGE', handleSquadChange);
+      engine.off('PLAYER_NOW_IS_LEADER', handleBecameLeader);
+      engine.off('PLAYER_NOW_IS_NOT_LEADER', handleLostLeader);
+      engine.off('TEAMKILL', handleTeamkill);
       if (snapshotTimer) clearInterval(snapshotTimer);
     },
   };

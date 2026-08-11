@@ -11,6 +11,13 @@ export interface UplinkOptions {
   /** Bağlantı yokken eventlerin biriktiği disk kuyruğu. */
   spool: Spool;
   onCommand: (message: Extract<ApiToAgentMessage, { type: 'command' }>) => void;
+  /**
+   * Plugin ayarları geldi (bağlanışta bir kez, sonra her değişiklikte).
+   * Agent'ın Postgres erişimi olmadığı için ayarların tek geliş yolu bu.
+   */
+  onPluginConfigs?: (configs: Extract<ApiToAgentMessage, { type: 'plugin_configs' }>) => void;
+  /** Oyun içi yetki listesi — plugin muafiyetlerinin tek kaynağı. */
+  onAdminList?: (msg: Extract<ApiToAgentMessage, { type: 'admin_list' }>) => void;
 }
 
 export interface Uplink {
@@ -125,6 +132,15 @@ export function createUplink(opts: UplinkOptions): Uplink {
           'komut alındı',
         );
         opts.onCommand(msg);
+      } else if (msg.type === 'plugin_configs') {
+        logger.info(
+          { adet: msg.configs.length, acik: msg.configs.filter((c) => c.enabled).length },
+          'plugin ayarları alındı',
+        );
+        opts.onPluginConfigs?.(msg);
+      } else if (msg.type === 'admin_list') {
+        logger.info({ adet: msg.admins.length }, 'oyun içi yetki listesi alındı');
+        opts.onAdminList?.(msg);
       }
     });
 

@@ -35,10 +35,58 @@ export const AgentToApiMessage = z.union([
 ]);
 export type AgentToApiMessage = z.infer<typeof AgentToApiMessage>;
 
+/**
+ * Plugin ayarları — plan Bölüm 6 ("Config Postgres'te, panelden düzenlenir,
+ * WS ile hot-reload").
+ *
+ * Agent'ın Postgres'e erişimi YOK (Bölüm 3), o yüzden ayarlar bu kanaldan
+ * geliyor: bağlanınca hello_ack'in ardından bir kez, sonra panelden her
+ * değişiklikte yeniden.
+ *
+ * Gönderilen liste TAM: agent bunu olduğu gibi uyguluyor ve listede olmayan
+ * plugin'i kapatıyor. Artımlı gönderim, kaçan tek bir mesajın agent'ı
+ * panelden farklı bir durumda bırakmasına yol açardı ve fark hiçbir yerde
+ * görünmezdi.
+ */
+export const PluginConfigRow = z.object({
+  pluginName: z.string().min(1),
+  enabled: z.boolean(),
+  config: z.record(z.unknown()),
+});
+export type PluginConfigRow = z.infer<typeof PluginConfigRow>;
+
+/**
+ * Oyun içi yetki listesi — plugin'lerin "admini muaf tut" kontrolü için.
+ *
+ * Vendored SquadJS'in `loadAdminsFromDB`'si Mongo bağımlılığı kaldırılırken
+ * boş liste dönen bir stub'a çevrilmişti. Sonuç: `server.admins` her zaman
+ * boş, yani eski plugin'lerin admin muafiyeti HER ZAMAN "admin değil"
+ * diyordu. Adminler kendi yetkilerinin görünmediği plugin'ler tarafından
+ * cezalandırılırdı.
+ *
+ * Liste, Admins.cfg'yi üreten sorgunun ta kendisinden geliyor (api'de
+ * `adminKayitlari`) — oyun içi yetki ile plugin muafiyeti aynı kaynaktan
+ * beslendiği için ayrışamazlar.
+ *
+ * `permissions` Squad'ın kendi yazımı: virgülle ayrılmış erişim seviyeleri
+ * ("changemap,cameraman,kick"). Ham hâlde taşınıyor çünkü "gerçek admin mi"
+ * kararı plugin'e göre değişiyor — yalnızca `reserve` yetkisi olan biri
+ * whitelist üyesidir, admin değil.
+ */
+export const AdminIdentity = z.object({
+  steamId: z.string().nullish(),
+  eosId: z.string().nullish(),
+  groupName: z.string(),
+  permissions: z.string(),
+});
+export type AdminIdentity = z.infer<typeof AdminIdentity>;
+
 // api -> agent yönünde giden zarf
 export const ApiToAgentMessage = z.union([
   z.object({ type: z.literal('hello_ack'), serverId: z.string() }),
   z.object({ type: z.literal('hello_reject'), reason: z.string() }),
   z.object({ type: z.literal('command'), command: AgentCommand }),
+  z.object({ type: z.literal('plugin_configs'), configs: z.array(PluginConfigRow) }),
+  z.object({ type: z.literal('admin_list'), admins: z.array(AdminIdentity) }),
 ]);
 export type ApiToAgentMessage = z.infer<typeof ApiToAgentMessage>;

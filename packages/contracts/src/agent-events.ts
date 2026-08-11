@@ -121,6 +121,60 @@ export const SquadCreatedEvent = z.object({
   squadId: z.string(),
   squadName: z.string(),
   teamName: z.string().nullish(),
+  /**
+   * Mangayı kuranın takımı.
+   *
+   * RCON satırında yalnızca takım ADI var; sayısal kimlik, çözümlenmiş
+   * oyuncu kaydından (`data.player.teamID`) geliyor. Ada değil kimliğe
+   * ihtiyaç var çünkü `AdminDisbandSquad <teamID> <squadID>` bunu istiyor —
+   * bu alan olmadan manga dağıtan hiçbir plugin çalışamıyordu.
+   */
+  teamId: z.number().int().nullish(),
+  timestamp: z.string().datetime(),
+});
+
+/**
+ * Oyuncunun rol / manga / liderlik durumu değişti.
+ *
+ * Tek olay tipinde toplanıyorlar çünkü üçü de aynı kaynaktan (RCON oyuncu
+ * listesi diff'i) ve aynı şekille geliyor; ayrı tipler yazmak üç kez aynı
+ * alanları tekrarlamak olurdu. Hangi değişiklik olduğu `change` alanında.
+ *
+ * DİKKAT: bunlar log satırı değil, periyodik liste karşılaştırmasının
+ * sonucu — gecikme oyuncu listesi tazeleme aralığı kadardır (~10 sn).
+ */
+export const PlayerStateChangeEvent = z.object({
+  type: z.literal('PLAYER_STATE_CHANGE'),
+  serverSlug: z.string(),
+  change: z.enum(['role', 'squad', 'became_leader', 'lost_leader']),
+  steamId: z.string().nullish(),
+  eosId: z.string().nullish(),
+  playerName: z.string(),
+  teamId: z.number().int().nullish(),
+  squadId: z.number().int().nullish(),
+  isLeader: z.boolean(),
+  role: z.string().nullish(),
+  oldRole: z.string().nullish(),
+  oldSquadId: z.number().int().nullish(),
+  timestamp: z.string().datetime(),
+});
+
+/**
+ * Takım arkadaşını öldürme.
+ *
+ * Motor bunu yalnızca gerçekten TK olduğunda yayınlıyor; olayın varlığı
+ * TK'nın kendisidir, ayrıca bir bayrak kontrolü gerekmez.
+ */
+export const TeamkillEvent = z.object({
+  type: z.literal('TEAMKILL'),
+  serverSlug: z.string(),
+  attackerName: z.string().nullish(),
+  attackerSteamId: z.string().nullish(),
+  attackerEosId: z.string().nullish(),
+  victimName: z.string().nullish(),
+  victimSteamId: z.string().nullish(),
+  victimEosId: z.string().nullish(),
+  weapon: z.string().nullish(),
   timestamp: z.string().datetime(),
 });
 
@@ -133,6 +187,8 @@ export const AgentEvent = z.discriminatedUnion('type', [
   RoundEndedEvent,
   SquadCreatedEvent,
   AdminActionEvent,
+  PlayerStateChangeEvent,
+  TeamkillEvent,
 ]);
 
 export type AgentEvent = z.infer<typeof AgentEvent>;

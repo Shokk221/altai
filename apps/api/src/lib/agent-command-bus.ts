@@ -43,6 +43,30 @@ export function agentBagliMi(serverSlug: string): boolean {
   return agentlar.has(serverSlug);
 }
 
+/** Bağlı agent'ların slug listesi — ayar itişi kime gideceğini bundan bulur. */
+export function bagliAgentlar(): string[] {
+  return [...agentlar.keys()];
+}
+
+/**
+ * Cevap beklemeden mesaj gönderir.
+ *
+ * Plugin ayarları için: `komutGonder` correlationId ile cevap bekliyor ve
+ * zaman aşımı tutuyor, ayar itişinde ikisi de gereksiz. Agent kopuksa da
+ * sorun değil — bağlandığında ayarları hello_ack'in ardından zaten alıyor.
+ */
+export function agentaGonder(serverSlug: string, message: unknown): boolean {
+  const agent = agentlar.get(serverSlug);
+  if (!agent) return false;
+  try {
+    agent.send(JSON.stringify(message));
+    return true;
+  } catch (err) {
+    logger.error({ err, serverSlug }, 'agenta mesaj gönderilemedi');
+    return false;
+  }
+}
+
 /** agent-ws, command_result geldiğinde bunu çağırır. */
 export function komutSonucuGeldi(result: AgentCommandResult) {
   const kayit = bekleyen.get(result.correlationId);
