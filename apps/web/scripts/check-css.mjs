@@ -38,8 +38,7 @@ for (const dosya of dosyalar) {
   toplam += icerik.length;
   if (icerik.includes('@tailwind') || icerik.includes('@apply')) {
     hata(
-      `${dosya} içinde işlenmemiş direktif var — postcss.config.mjs eksik ya da bozuk. ` +
-        'Tailwind çalışmamış, arayüz stilsiz görünecek.',
+      `${dosya} içinde işlenmemiş direktif var — postcss.config.mjs eksik ya da bozuk. Tailwind çalışmamış, arayüz stilsiz görünecek.`,
     );
   }
 }

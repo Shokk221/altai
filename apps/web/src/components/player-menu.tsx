@@ -181,7 +181,6 @@ export function PlayerMenu({
                 {eylem === 'kick' ? 'Atma sebebi' : 'Uyarı metni'} — {isim}
               </p>
               <input
-                autoFocus
                 value={metin}
                 onChange={(e) => setMetin(e.target.value)}
                 onKeyDown={(e) => {

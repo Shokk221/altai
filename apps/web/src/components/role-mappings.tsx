@@ -200,9 +200,10 @@ function Form({
   return (
     <div className="rounded border border-border bg-surface p-5">
       <div className="grid gap-4 sm:grid-cols-2">
-        <label className="flex flex-col gap-1.5">
+        <label htmlFor="role-id" className="flex flex-col gap-1.5">
           <span className="text-xs font-semibold text-fg-muted">Discord rol kimliği</span>
           <Input
+            id="role-id"
             value={roleId}
             onChange={(e) => setRoleId(e.target.value.replace(/\D/g, ''))}
             placeholder="1223818310739693568"

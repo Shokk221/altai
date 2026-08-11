@@ -18,6 +18,15 @@ const envSchema = z.object({
   // RealSquadServerLike instance'ı ya da onu üreten bir async factory
   // fonksiyonu (`() => Promise<RealSquadServerLike>`) veren modülün yolu.
   SQUADJS_VENDOR_ENTRY: z.string().optional(),
+  /**
+   * Steam Web API anahtarı — oyuncu saatini soran plugin'ler kullanıyor.
+   *
+   * Plugin AYARINA değil .env'e konuyor (plan Bölüm 8: "sırlar sadece host
+   * başına .env dosyasında"). plugin_configs JSONB'si panelden okunabiliyor
+   * ve denetim kaydına öncesi/sonrasıyla yazılıyor; bir API anahtarının
+   * oraya düşmesi onu sızdırmak olurdu.
+   */
+  STEAM_API_KEY: z.string().optional(),
   RCON_HOST: z.string().optional(),
   RCON_PORT: z.coerce.number().optional(),
   RCON_PASSWORD: z.string().optional(),

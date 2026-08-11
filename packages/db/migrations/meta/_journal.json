@@ -113,6 +113,20 @@
       "when": 1786384382606,
       "tag": "0015_target_team",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1786428216337,
+      "tag": "0016_parallel_star_brand",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1786428268967,
+      "tag": "0017_aberrant_maelstrom",
+      "breakpoints": true
     }
   ]
 }

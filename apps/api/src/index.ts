@@ -21,6 +21,7 @@ import { healthRoutes } from './routes/health.js';
 import { liveActionRoutes } from './routes/live-actions.js';
 import { moderationRoutes } from './routes/moderation.js';
 import { playerRoutes } from './routes/players.js';
+import { pluginConfigRoutes } from './routes/plugin-configs.js';
 import { serverStatusRoutes } from './routes/server-status.js';
 
 const config = loadConfig();
@@ -109,6 +110,7 @@ await app.register(
     await api.register(adminListRoutes, { db, config });
     await api.register(serverStatusRoutes, { db });
     await api.register(playerRoutes, { db });
+    await api.register(pluginConfigRoutes, { db });
     await api.register(moderationRoutes, { db });
     await api.register(agentRoutes, { db });
     await api.register(accessAdminRoutes, { db });

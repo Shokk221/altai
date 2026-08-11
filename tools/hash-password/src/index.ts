@@ -20,8 +20,7 @@ if (!plain) {
 const MIN_LENGTH = 12;
 if (plain.length < MIN_LENGTH) {
   console.error(
-    `Şifre en az ${MIN_LENGTH} karakter olmalı (verilen: ${plain.length}).\n` +
-      'Bu, Discord kesintisinde tüm yetkilere açılan acil giriş — kısa şifre kabul edilmiyor.',
+    `Şifre en az ${MIN_LENGTH} karakter olmalı (verilen: ${plain.length}).\nBu, Discord kesintisinde tüm yetkilere açılan acil giriş — kısa şifre kabul edilmiyor.`,
   );
   process.exit(1);
 }

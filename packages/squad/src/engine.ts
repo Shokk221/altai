@@ -56,7 +56,14 @@ export interface SquadJSOnlinePlayer {
 
 /** SquadJS'in SQUAD_CREATED olayi. */
 export interface SquadJSSquadCreatedRaw {
-  player?: { name?: string; steamID?: string; eosID?: string } | null | undefined;
+  // `teamID` fork'ta ÇÖZÜMLENMİŞ oyuncu kaydından geliyor (index.js:231
+  // `data.player = await this.getPlayerByEOSID(...)`); RCON satırının
+  // kendisinde yalnızca takım adı var. `AdminDisbandSquad` sayısal kimlik
+  // istediği için tek kaynak burası.
+  player?:
+    | { name?: string; steamID?: string; eosID?: string; teamID?: number | null }
+    | null
+    | undefined;
   squadID?: string | number | undefined;
   squadName?: string | undefined;
   teamName?: string | undefined;
@@ -130,6 +137,40 @@ export interface SquadJSAdminActionRaw {
   time?: Date | string | undefined;
 }
 
+/**
+ * Oyuncunun manga/rol/liderlik durumu değişti.
+ *
+ * Vendored fork bunları RCON oyuncu listesini her tazelediğinde eski liste
+ * ile karşılaştırıp üretiyor (squad-server/index.js:576-612). Yani bunlar
+ * log satırı değil, DİFF sonucu — dolayısıyla gecikme oyuncu listesi
+ * tazeleme aralığı kadar (~10 sn).
+ *
+ * `PLAYER_ROLE_CHANGE` eski sistemde SL kit denetiminin, `PLAYER_NOW_IS_LEADER`
+ * ise SL ban denetiminin tetikleyicisiydi.
+ */
+export interface SquadJSPlayerStateChangeRaw {
+  player: SquadJSPlayer;
+  oldRole?: string | undefined;
+  newRole?: string | undefined;
+  oldSquadID?: number | null | undefined;
+  newSquadID?: number | null | undefined;
+  time?: Date | string | undefined;
+}
+
+/**
+ * Takım arkadaşını öldürme.
+ *
+ * Fork yalnızca `data.teamkill === true` olduğunda yayınlıyor
+ * (squad-server/index.js:379), yani bu olay geldiyse TK kesindir; ayrıca
+ * kontrol etmeye gerek yok.
+ */
+export interface SquadJSTeamkillRaw {
+  victim?: SquadJSPlayer | null | undefined;
+  attacker?: SquadJSPlayer | null | undefined;
+  weapon?: string | undefined;
+  time?: Date | string | undefined;
+}
+
 // SquadJS'in ürettiği ham event isimleri — upstream'de bunlar sabit.
 export interface SquadJSEngineEvents {
   PLAYER_CONNECTED: (raw: SquadJSPlayerConnectedRaw) => void;
@@ -145,6 +186,13 @@ export interface SquadJSEngineEvents {
   ADMIN_BROADCAST: (raw: SquadJSAdminActionRaw) => void;
   POSSESSED_ADMIN_CAMERA: (raw: SquadJSAdminActionRaw) => void;
   UNPOSSESSED_ADMIN_CAMERA: (raw: SquadJSAdminActionRaw) => void;
+  // Oyuncu durumu diff'leri — plugin'lerin (SL kit denetimi, SL ban,
+  // mangasız atma) tetikleyicileri.
+  PLAYER_ROLE_CHANGE: (raw: SquadJSPlayerStateChangeRaw) => void;
+  PLAYER_SQUAD_CHANGE: (raw: SquadJSPlayerStateChangeRaw) => void;
+  PLAYER_NOW_IS_LEADER: (raw: SquadJSPlayerStateChangeRaw) => void;
+  PLAYER_NOW_IS_NOT_LEADER: (raw: SquadJSPlayerStateChangeRaw) => void;
+  TEAMKILL: (raw: SquadJSTeamkillRaw) => void;
 }
 
 export interface SquadJSEngine {

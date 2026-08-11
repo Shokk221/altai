@@ -302,8 +302,7 @@ export async function analyzeArchive(dir: string): Promise<AnalysisReport> {
   }
   if (bansUnknownPlayer > 0) {
     say(
-      `  ! oyuncusu arşivde yok   ${fmt(bansUnknownPlayer)} — ETL bunları ban'daki ` +
-        'kimliklerden oluşturur (ban kaydı SteamID/EOS taşıyor)',
+      `  ! oyuncusu arşivde yok   ${fmt(bansUnknownPlayer)} — ETL bunları ban'daki kimliklerden oluşturur (ban kaydı SteamID/EOS taşıyor)`,
     );
   }
   say();
@@ -349,8 +348,7 @@ export async function analyzeArchive(dir: string): Promise<AnalysisReport> {
   say(`  atama (tekil)            ${fmt(assignmentRows)}`);
   if (duplicateAssignments > 0) {
     say(
-      `  arşivdeki kopya satır    ${fmt(duplicateAssignments)} — zararsız, ETL tekilleştirir ` +
-        '(bans/flags unique index)',
+      `  arşivdeki kopya satır    ${fmt(duplicateAssignments)} — zararsız, ETL tekilleştirir (bans/flags unique index)`,
     );
   }
   say(`    hâlâ takılı            ${fmt(activeAssignments)}`);

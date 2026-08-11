@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS "plugin_configs_name_global_idx" ON "plugin_configs" USING btree ("plugin_name") WHERE "plugin_configs"."server_id" is null;

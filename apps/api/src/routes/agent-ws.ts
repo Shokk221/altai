@@ -16,6 +16,7 @@ import {
   reconcileStaleSessions,
 } from '../lib/persistence-writer.js';
 import { tazelemeyiBaslat } from '../lib/player-refresh.js';
+import { adminListesiniIt, ayarlariIt } from '../lib/plugin-configs.js';
 import { resolveServerId } from '../lib/server-registry.js';
 import {
   applyPlayerConnected,
@@ -255,6 +256,16 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
             // secret'ı bilmeyen bir bağlantı komut alabilirdi.
             agentBaglandi(msg.serverSlug, { send: (d) => socket.send(d) });
             socket.send(JSON.stringify({ type: 'hello_ack', serverId: id }));
+
+            // Plugin ayarları hemen gidiyor: agent'ın Postgres erişimi yok,
+            // ayarların tek geliş yolu bu. Gönderilmezse agent bütün
+            // plugin'ler kapalı çalışır ve sebebi hiçbir yerde görünmez.
+            await ayarlariIt(db, id, msg.serverSlug);
+            // Oyun içi yetki listesi: plugin'lerin "admini muaf tut"
+            // kontrolünün tek kaynağı. Gitmezse adminler kendi
+            // yetkilerinin görünmediği plugin'lerce cezalandırılır.
+            await adminListesiniIt(db, id, msg.serverSlug);
+
             for (const queued of pending.splice(0)) persist(queued);
           } catch (err) {
             app.log.error({ err, serverSlug }, 'agent hello işlenemedi');
