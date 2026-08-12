@@ -1,4 +1,10 @@
-import type { AgentCommandResult, AgentEvent, ApiToAgentMessage } from '@altai/contracts';
+import { randomUUID } from 'node:crypto';
+import type {
+  AgentCommandResult,
+  AgentEvent,
+  AgentQuery,
+  ApiToAgentMessage,
+} from '@altai/contracts';
 import { ApiToAgentMessage as ApiToAgentMessageSchema } from '@altai/contracts';
 import { logger } from '@altai/shared';
 import WebSocket from 'ws';
@@ -30,6 +36,15 @@ export interface Uplink {
    * Eventlerden farkı bu — event kaybolmamalı, komut cevabı kısa ömürlü.
    */
   sendCommandResult(result: AgentCommandResult): void;
+  /**
+   * api'ye veri sorar ve cevabı bekler.
+   *
+   * Plugin'lerin veritabanı erişimi yok; "bu oyuncunun etiketi var mı"
+   * sorusunun tek yolu bu. Hiçbir durumda throw ETMEZ: bağlantı kopuksa ya
+   * da cevap gecikirse `null` döner, çağıran plugin buna göre karar verir.
+   * Bir dış sorgunun başarısız olması oyun mantığını durdurmamalı.
+   */
+  sorgu(query: AgentQuery): Promise<unknown | null>;
   /** Düzgün kapanış: api'ye shutdown bildirir, açık session'lar kapatılsın. */
   shutdown(): Promise<void>;
 }
@@ -50,6 +65,18 @@ export function createUplink(opts: UplinkOptions): Uplink {
   let draining = false;
 
   const canSend = () => ws?.readyState === WebSocket.OPEN && acked;
+
+  /**
+   * Cevabı beklenen sorgular.
+   *
+   * Zaman aşımı ŞART: api yanıt vermezse plugin'in sözü sonsuza kadar
+   * asılı kalır ve o plugin bir daha hiçbir olayı işleyemez.
+   */
+  const SORGU_ZAMAN_ASIMI_MS = 10_000;
+  const bekleyenSorgular = new Map<
+    string,
+    { cozumle: (v: unknown | null) => void; zamanlayici: ReturnType<typeof setTimeout> }
+  >();
 
   const sendNow = (event: AgentEvent): boolean => {
     if (!canSend()) return false;
@@ -141,11 +168,27 @@ export function createUplink(opts: UplinkOptions): Uplink {
       } else if (msg.type === 'admin_list') {
         logger.info({ adet: msg.admins.length }, 'oyun içi yetki listesi alındı');
         opts.onAdminList?.(msg);
+      } else if (msg.type === 'query_result') {
+        const kayit = bekleyenSorgular.get(msg.result.correlationId);
+        if (!kayit) {
+          // Zaman aşımına uğramış bir sorgunun geç gelen cevabı olabilir.
+          return;
+        }
+        clearTimeout(kayit.zamanlayici);
+        bekleyenSorgular.delete(msg.result.correlationId);
+        kayit.cozumle(msg.result.ok ? (msg.result.data ?? null) : null);
       }
     });
 
     ws.on('close', () => {
       acked = false;
+      // Bekleyen sorgular hemen çözülüyor: bağlantı gittiyse cevap
+      // gelmeyecek ve plugin'i zaman aşımına kadar bekletmenin anlamı yok.
+      for (const [id, kayit] of bekleyenSorgular) {
+        clearTimeout(kayit.zamanlayici);
+        kayit.cozumle(null);
+        bekleyenSorgular.delete(id);
+      }
       if (closed) return;
       logger.warn({ delayMs: reconnectDelay }, 'api uplink koptu, yeniden bağlanılacak');
       reconnectTimer = setTimeout(connect, reconnectDelay);
@@ -169,6 +212,30 @@ export function createUplink(opts: UplinkOptions): Uplink {
         return;
       }
       ws.send(JSON.stringify({ type: 'command_result', result }));
+    },
+
+    sorgu(query) {
+      if (!canSend()) return Promise.resolve(null);
+
+      const correlationId = randomUUID();
+      return new Promise<unknown | null>((resolve) => {
+        const zamanlayici = setTimeout(() => {
+          bekleyenSorgular.delete(correlationId);
+          logger.warn({ kind: query.kind }, 'api sorgusu zaman aşımına uğradı');
+          resolve(null);
+        }, SORGU_ZAMAN_ASIMI_MS);
+
+        bekleyenSorgular.set(correlationId, { cozumle: resolve, zamanlayici });
+
+        try {
+          ws?.send(JSON.stringify({ type: 'query', request: { correlationId, query } }));
+        } catch (err) {
+          clearTimeout(zamanlayici);
+          bekleyenSorgular.delete(correlationId);
+          logger.error({ err, kind: query.kind }, 'sorgu gönderilemedi');
+          resolve(null);
+        }
+      });
     },
 
     send(event) {

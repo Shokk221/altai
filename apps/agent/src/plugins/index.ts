@@ -4,6 +4,7 @@ import { autoTkWarn } from './auto-tk-warn.js';
 import { broadcasts } from './broadcasts.js';
 import { nameEnforcer } from './name-enforcer.js';
 import { playtimeSquadGuard } from './playtime-squad-guard.js';
+import { slBanEnforcer } from './sl-ban-enforcer.js';
 import { slKitEnforcer } from './sl-kit-enforcer.js';
 import { welcomeWarn } from './welcome-warn.js';
 
@@ -20,6 +21,7 @@ export const PLUGINS: AnyPlugin[] = [
   welcomeWarn,
   nameEnforcer,
   slKitEnforcer,
+  slBanEnforcer,
   autoTkWarn,
   playtimeSquadGuard,
 ];
@@ -30,6 +32,7 @@ export {
   welcomeWarn,
   nameEnforcer,
   slKitEnforcer,
+  slBanEnforcer,
   autoTkWarn,
   playtimeSquadGuard,
 };

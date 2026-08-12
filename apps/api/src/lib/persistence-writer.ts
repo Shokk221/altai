@@ -50,6 +50,24 @@ export async function closeAllOpenSessions(db: Db, serverId: string) {
 
 const RECONCILER_MAX_SESSION_MS = 4 * 60 * 60 * 1000; // 4 saat (eski backfill kuralı)
 
+/**
+ * Açık kalmış bir session'ın kapanış zamanı.
+ *
+ * Üst sınır, agent çökmüş ve oyuncu günlerce "içeride" görünüyorsa süreyi
+ * şişirmemek için var. Ama sınırın KENDİSİ tek başına uygulanınca ters
+ * etki yapıyordu: 30 dakika önce başlamış bir session, reconciler
+ * çalıştığında joined_at + 4 saat ile kapanıyor, yani GELECEKTE bir
+ * zamanla. Sonuç hem 3.5 saatlik uydurma oynama süresi hem de `now()`
+ * sonrası bir `left_at`.
+ *
+ * Doğrusu ikisinin küçüğü: session ya sınıra takılır ya da şu ana kadar
+ * sürmüş sayılır.
+ */
+export function reconcilerKapanisZamani(joinedAt: Date, simdi: Date = new Date()): Date {
+  const sinir = new Date(joinedAt.getTime() + RECONCILER_MAX_SESSION_MS);
+  return sinir < simdi ? sinir : simdi;
+}
+
 // Agent başlangıcında çağrılır: bir önceki çalıştırmadan crash nedeniyle
 // açık kalmış session'ları (DISCONNECT eventi hiç gelmemiş) 4 saatlik üst
 // sınırla kapatır. Bkz. plan Bölüm 5.5-B.
@@ -65,7 +83,7 @@ export async function reconcileStaleSessions(db: Db, serverId: string) {
     );
 
   for (const session of openSessions) {
-    const cappedLeftAt = new Date(session.joinedAt.getTime() + RECONCILER_MAX_SESSION_MS);
+    const cappedLeftAt = reconcilerKapanisZamani(session.joinedAt);
     await db
       .update(presenceSchema.gameSessions)
       .set({ leftAt: cappedLeftAt, closedByReconciler: true })

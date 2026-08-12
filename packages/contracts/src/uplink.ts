@@ -26,12 +26,59 @@ export const AgentShutdown = z.object({
 });
 export type AgentShutdown = z.infer<typeof AgentShutdown>;
 
+/**
+ * Agent -> api SORGUSU.
+ *
+ * Protokol şimdiye kadar tek yönlüydü: olay yukarı, komut aşağı. Oysa
+ * plugin'lerin bir kısmı VERİ OKUMAK istiyor — "bu oyuncunun etiketi var
+ * mı", "kaç saat oynamış", "notu var mı". Agent'ın Postgres'e dokunmaması
+ * doğru bir karar (plan Bölüm 3); eksik olan, aynı WS üzerinden soru
+ * sorabilmekti.
+ *
+ * `komutGonder`'in (api -> agent) simetriği: correlationId ile eşleşen
+ * istek/yanıt, zaman aşımlı. Yanıt gelmezse plugin bekleyip kalmıyor.
+ *
+ * Sorgu türleri BİLEREK dar tutuluyor. Genel bir "SQL çalıştır" ucu,
+ * agent'a veritabanı erişimi vermemenin bütün anlamını ortadan kaldırırdı.
+ */
+export const AgentQuery = z.discriminatedUnion('kind', [
+  /** Oyuncunun AKTİF etiketleri (kaldırılmamış olanlar). */
+  z.object({
+    kind: z.literal('player_flags'),
+    steamId: z.string().nullish(),
+    eosId: z.string().nullish(),
+  }),
+  /** Oyuncunun toplam oynama süresi ve oturum sayısı. */
+  z.object({
+    kind: z.literal('player_playtime'),
+    steamId: z.string().nullish(),
+    eosId: z.string().nullish(),
+  }),
+]);
+export type AgentQuery = z.infer<typeof AgentQuery>;
+
+export const AgentQueryRequest = z.object({
+  correlationId: z.string().uuid(),
+  query: AgentQuery,
+});
+export type AgentQueryRequest = z.infer<typeof AgentQueryRequest>;
+
+export const AgentQueryResult = z.object({
+  correlationId: z.string().uuid(),
+  ok: z.boolean(),
+  /** Sorgu türüne göre değişen yük; şekli sorguyu açan taraf bilir. */
+  data: z.unknown().optional(),
+  error: z.string().optional(),
+});
+export type AgentQueryResult = z.infer<typeof AgentQueryResult>;
+
 // agent -> api yönünde giden zarf
 export const AgentToApiMessage = z.union([
   AgentHello,
   AgentShutdown,
   z.object({ type: z.literal('event'), event: AgentEvent }),
   z.object({ type: z.literal('command_result'), result: AgentCommandResult }),
+  z.object({ type: z.literal('query'), request: AgentQueryRequest }),
 ]);
 export type AgentToApiMessage = z.infer<typeof AgentToApiMessage>;
 
@@ -88,5 +135,6 @@ export const ApiToAgentMessage = z.union([
   z.object({ type: z.literal('command'), command: AgentCommand }),
   z.object({ type: z.literal('plugin_configs'), configs: z.array(PluginConfigRow) }),
   z.object({ type: z.literal('admin_list'), admins: z.array(AdminIdentity) }),
+  z.object({ type: z.literal('query_result'), result: AgentQueryResult }),
 ]);
 export type ApiToAgentMessage = z.infer<typeof ApiToAgentMessage>;

@@ -1,4 +1,4 @@
-import type { AdminIdentity, AgentEvent } from '@altai/contracts';
+import type { AdminIdentity, AgentEvent, AgentQuery } from '@altai/contracts';
 import type { SquadJSEngine, SquadJSOnlinePlayer } from '@altai/squad';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PluginHost } from '../src/plugin-host.js';
@@ -6,6 +6,7 @@ import {
   autoTkWarn,
   nameEnforcer,
   playtimeSquadGuard,
+  slBanEnforcer,
   slKitEnforcer,
   welcomeWarn,
 } from '../src/plugins/index.js';
@@ -28,30 +29,42 @@ interface SahteEngine extends SquadJSEngine {
 function sahteEngine(): SahteEngine {
   const komutlar: string[] = [];
   const oyuncular: SquadJSOnlinePlayer[] = [];
-  const e: SahteEngine = {
+  const e = {
     serverSlug: 'squad-01',
     komutlar,
     oyuncular,
     layer: 'Yehorivka_RAAS_v1',
     on: () => undefined,
     off: () => undefined,
-    getStatus: async () => ({
-      playerCount: oyuncular.length,
-      publicQueue: 0,
-      ...(e.layer ? { currentLayer: e.layer } : {}),
-    }),
     getPlayers: async () => oyuncular,
     refreshPlayers: async () => undefined,
     rconExecute: async (cmd: string) => {
       komutlar.push(cmd);
       return 'ok';
     },
-  };
+  } as unknown as SahteEngine;
+
+  // Define getStatus after e exists to avoid referencing the variable before initialization
+  e.getStatus = async () => ({
+    playerCount: oyuncular.length,
+    publicQueue: 0,
+    ...(e.layer ? { currentLayer: e.layer } : {}),
+  });
+
   return e;
 }
 
-function host(engine: SquadJSEngine, admins: AdminIdentity[] = []) {
-  const h = new PluginHost({ serverSlug: 'squad-01', engine, emit: () => undefined });
+function host(
+  engine: SquadJSEngine,
+  admins: AdminIdentity[] = [],
+  sorgu?: (query: AgentQuery) => Promise<unknown | null>,
+) {
+  const h = new PluginHost({
+    serverSlug: 'squad-01',
+    engine,
+    emit: () => undefined,
+    ...(sorgu ? { sorgu } : {}),
+  });
   if (admins.length > 0) h.adminListesiniGuncelle(admins);
   return h;
 }
@@ -599,5 +612,221 @@ describe('playtime-squad-guard', () => {
     const h = await kur(e, { rookieEnabled: true, rookieMinHours: 80 });
     await h.handleEvent(mangaKuruldu({ squadName: 'ACEMI SL' }));
     expect(e.komutlar).toEqual([]);
+  });
+});
+
+describe('sl-ban-enforcer', () => {
+  /** Sorgu cevabını sabitleyen sahte kanal; kaç kez sorulduğunu da sayar. */
+  function sahteSorgu(cevap: unknown | null) {
+    const sorulan: AgentQuery[] = [];
+    return {
+      sorulan,
+      fn: async (q: AgentQuery) => {
+        sorulan.push(q);
+        return cevap;
+      },
+    };
+  }
+
+  async function kur(e: SahteEngine, cevap: unknown | null, config: Record<string, unknown> = {}) {
+    const s = sahteSorgu(cevap);
+    // squadCreateDelayMs varsayılanı 1 sn; testlerin çoğunda beklemeye
+    // gerek yok, gecikmeyi ayrı bir test kilitliyor.
+    const h = host(e, [], s.fn);
+    h.register(slBanEnforcer);
+    await h.applyConfigs([
+      {
+        pluginName: 'sl-ban-enforcer',
+        enabled: true,
+        config: { squadCreateDelayMs: 0, sweepIntervalSeconds: 0, ...config },
+      },
+    ]);
+    return { h, s };
+  }
+
+  const lider = (change: 'became_leader' | 'role', role?: string): AgentEvent => ({
+    type: 'PLAYER_STATE_CHANGE',
+    serverSlug: 'squad-01',
+    change,
+    steamId: '76561190000000001',
+    playerName: 'Ali',
+    isLeader: true,
+    squadId: 1,
+    teamId: 1,
+    ...(role ? { role } : {}),
+    timestamp: new Date().toISOString(),
+  });
+
+  const mangaKuruldu = (): AgentEvent => ({
+    type: 'SQUAD_CREATED',
+    serverSlug: 'squad-01',
+    playerName: 'Ali',
+    steamId: '76561190000000001',
+    squadId: '1',
+    squadName: 'ALPHA',
+    teamId: 1,
+    timestamp: new Date().toISOString(),
+  });
+
+  it('etiketi olan lideri uyarır ve mangadan ÇIKARIR (atmaz)', async () => {
+    // Sunucudan atmak bambaşka ağırlıkta bir ceza; eski plugin de
+    // AdminRemovePlayerFromSquad kullanıyordu.
+    const e = sahteEngine();
+    const { h } = await kur(e, { bulundu: true, flags: ['SL BAN'] });
+    await h.handleEvent(lider('became_leader'));
+
+    expect(e.komutlar).toEqual([
+      'AdminWarn 76561190000000001 SL yasağın bulunuyor. Manga liderliğinden çıkarıldın.',
+      'AdminRemovePlayerFromSquad "76561190000000001"',
+    ]);
+  });
+
+  it('etiketi olmayan lidere dokunmaz', async () => {
+    const e = sahteEngine();
+    const { h } = await kur(e, { bulundu: true, flags: ['WATCHLIST'] });
+    await h.handleEvent(lider('became_leader'));
+    expect(e.komutlar).toEqual([]);
+  });
+
+  it('veritabanında hiç olmayan oyuncuya dokunmaz', async () => {
+    // `bulundu: false` bir CEVAP: yeni oyuncunun etiketi olamaz.
+    const e = sahteEngine();
+    const { h } = await kur(e, { bulundu: false, flags: [] });
+    await h.handleEvent(lider('became_leader'));
+    expect(e.komutlar).toEqual([]);
+  });
+
+  it('sorgu cevapsız kalırsa (null) kimseye yaptırım uygulanmaz', async () => {
+    // BURASI KRİTİK: "etiketi yok" ile "bilmiyoruz" ayrı şeyler. Bağlantı
+    // koptuğu için birini mangadan çıkarmak, olmayan bir yasağı uygulamak
+    // demek olurdu.
+    const e = sahteEngine();
+    const { h } = await kur(e, null);
+    await h.handleEvent(lider('became_leader'));
+    expect(e.komutlar).toEqual([]);
+  });
+
+  it('manga kuran yasaklıyı gecikmeden SONRA çıkarır', async () => {
+    const e = sahteEngine();
+    const { h } = await kur(e, { bulundu: true, flags: ['SL BAN'] }, { squadCreateDelayMs: 1_000 });
+
+    const is = h.handleEvent(mangaKuruldu());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(e.komutlar).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await is;
+    expect(e.komutlar).toEqual([
+      'AdminWarn 76561190000000001 SL yasağın bulunuyor. Manga liderliğinden çıkarıldın.',
+      'AdminRemovePlayerFromSquad "76561190000000001"',
+    ]);
+  });
+
+  it('gecikme sırasında plugin kapatılırsa komut GİTMEZ', async () => {
+    // Kapalı bir plugin'in RCON komutu göndermesi hot-reload'ı anlamsız kılar.
+    const e = sahteEngine();
+    const { h } = await kur(e, { bulundu: true, flags: ['SL BAN'] }, { squadCreateDelayMs: 1_000 });
+
+    const is = h.handleEvent(mangaKuruldu());
+    await vi.advanceTimersByTimeAsync(0);
+    await h.applyConfigs([]);
+    await vi.advanceTimersByTimeAsync(5_000);
+    await is;
+    expect(e.komutlar).toEqual([]);
+  });
+
+  it('bekleme süresi içinde ikinci kez uyarmaz', async () => {
+    // Mangadan çıkarma birden fazla olay tetikliyor; bu olmadan tek bir
+    // çıkarma için üst üste uyarı gidiyordu.
+    const e = sahteEngine();
+    const { h } = await kur(e, { bulundu: true, flags: ['SL BAN'] }, { cooldownSeconds: 15 });
+
+    await h.handleEvent(lider('became_leader'));
+    expect(e.komutlar).toHaveLength(2);
+
+    await h.handleEvent(lider('role', 'Squad Leader'));
+    expect(e.komutlar).toHaveLength(2);
+
+    await vi.advanceTimersByTimeAsync(16_000);
+    await h.handleEvent(lider('became_leader'));
+    expect(e.komutlar).toHaveLength(4);
+  });
+
+  it('liderlik BIRAKMAYI denetlemez', async () => {
+    // Yaptırımın hedeflediği duruma oyuncu kendisi son vermiş.
+    const e = sahteEngine();
+    const { h, s } = await kur(e, { bulundu: true, flags: ['SL BAN'] });
+    await h.handleEvent({
+      ...(lider('became_leader') as object),
+      change: 'lost_leader',
+    } as AgentEvent);
+    expect(s.sorulan).toEqual([]);
+    expect(e.komutlar).toEqual([]);
+  });
+
+  it('lider olmayan rol değişimi sorgu bile açmaz', async () => {
+    // Her rol değişiminde veritabanına gitmek, kalabalık sunucuda dakikada
+    // yüzlerce sorgu demek.
+    const e = sahteEngine();
+    const { h, s } = await kur(e, { bulundu: true, flags: ['SL BAN'] });
+    await h.handleEvent({
+      ...(lider('role', 'Rifleman') as object),
+      isLeader: false,
+    } as AgentEvent);
+    expect(s.sorulan).toEqual([]);
+  });
+
+  it('etiket adı karşılaştırması harf duyarsız', async () => {
+    const e = sahteEngine();
+    const { h } = await kur(e, { bulundu: true, flags: ['sl ban'] });
+    await h.handleEvent(lider('became_leader'));
+    expect(e.komutlar).toHaveLength(2);
+  });
+
+  it('periyodik tarama olay kaçsa bile yakalar', async () => {
+    // Eski sistemde tarama YOKTU (her sorgu BM'ye gidiyordu). Kendi
+    // veritabanımızı sormak ucuz; cevapsız kalan sorgu bir sonraki turda
+    // tekrar deneniyor.
+    const e = sahteEngine();
+    e.oyuncular.push({
+      steamId: '76561190000000001',
+      eosId: null,
+      name: 'Ali',
+      teamId: 1,
+      squadId: 1,
+      isLeader: true,
+      role: 'USA_SL_01',
+    } as SquadJSOnlinePlayer);
+
+    const { h } = await kur(e, { bulundu: true, flags: ['SL BAN'] }, { sweepIntervalSeconds: 60 });
+    expect(e.komutlar).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(e.komutlar).toEqual([
+      'AdminWarn 76561190000000001 SL yasağın bulunuyor. Manga liderliğinden çıkarıldın.',
+      'AdminRemovePlayerFromSquad "76561190000000001"',
+    ]);
+  });
+
+  it('taramada mangasız oyuncu sorgulanmaz', async () => {
+    const e = sahteEngine();
+    e.oyuncular.push({
+      steamId: '76561190000000001',
+      eosId: null,
+      name: 'Ali',
+      teamId: 1,
+      squadId: null,
+      isLeader: false,
+      role: 'USA_SL_01',
+    } as SquadJSOnlinePlayer);
+
+    const { h, s } = await kur(
+      e,
+      { bulundu: true, flags: ['SL BAN'] },
+      { sweepIntervalSeconds: 60 },
+    );
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(s.sorulan).toEqual([]);
+    expect(h.acikPluginler()).toEqual(['sl-ban-enforcer']);
   });
 });

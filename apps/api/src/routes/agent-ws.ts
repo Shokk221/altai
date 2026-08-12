@@ -6,6 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
 import { kaydet } from '../lib/activity-log.js';
 import { agentBaglandi, agentKoptu, komutSonucuGeldi } from '../lib/agent-command-bus.js';
+import { sorguyuCoz } from '../lib/agent-queries.js';
 import { girisAninda, kipiAyarla, taramayiBaslat } from '../lib/ban-enforcer.js';
 import { olayYayinla } from '../lib/live-feed.js';
 import { otomatikMi } from '../lib/otomatik-mesaj.js';
@@ -318,6 +319,30 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
       if (msg.type === 'command_result') {
         // Bekleyen komutun promise'ini çözer (lib/agent-command-bus.ts).
         komutSonucuGeldi(msg.result);
+      }
+
+      if (msg.type === 'query') {
+        // Agent veri soruyor (plugin'ler için). Cevap beklemeden devam
+        // ediyoruz: sorgu yavaşsa olay akışı tıkanmamalı.
+        const { correlationId, query } = msg.request;
+        // Cevap sorgu çözülene kadar geçen sürede bağlantı kopmuş olabilir;
+        // kapalı sokete yazmak throw eder ve bu bir yakalanmayan reddedilme
+        // olarak süreci düşürürdü.
+        const cevapla = (result: Record<string, unknown>) => {
+          try {
+            socket.send(JSON.stringify({ type: 'query_result', result }));
+          } catch (err) {
+            app.log.warn({ err, correlationId }, 'sorgu cevabı gönderilemedi (bağlantı kapalı)');
+          }
+        };
+        void sorguyuCoz(db, query)
+          .then((data) => cevapla({ correlationId, ok: true, data }))
+          .catch((err) => {
+            app.log.error({ err, kind: query.kind }, 'agent sorgusu çözülemedi');
+            // Hata da CEVAPTIR: agent tarafındaki bekleyen söz zaman
+            // aşımına kadar asılı kalmasın.
+            cevapla({ correlationId, ok: false, error: 'sorgu_basarisiz' });
+          });
       }
     });
 

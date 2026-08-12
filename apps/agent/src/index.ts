@@ -120,6 +120,7 @@ pluginHost = new PluginHost({
   engine,
   emit: (event) => uplink.send(event),
   secrets: { ...(config.STEAM_API_KEY ? { steamApiKey: config.STEAM_API_KEY } : {}) },
+  sorgu: (query) => uplink.sorgu(query),
 });
 pluginHost.register(...PLUGINS);
 logger.info({ plugin: pluginHost.katalog().map((p) => p.name) }, 'plugin kataloğu yüklendi');

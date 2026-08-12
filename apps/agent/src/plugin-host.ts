@@ -1,4 +1,4 @@
-import type { AgentEvent } from '@altai/contracts';
+import type { AgentEvent, AgentQuery } from '@altai/contracts';
 import { logger } from '@altai/shared';
 import type {
   AnyPlugin,
@@ -47,6 +47,11 @@ export interface PluginHostOptions {
   emit(event: AgentEvent): void;
   /** .env'den gelen sırlar — plugin ayarında taşınmamalı olanlar. */
   secrets?: { steamApiKey?: string | undefined };
+  /**
+   * api'ye veri sorar. Verilmezse plugin'ler her sorguda null alır —
+   * testlerde ve bağlantısız çalışmada beklenen davranış.
+   */
+  sorgu?: (query: AgentQuery) => Promise<unknown | null>;
 }
 
 export class PluginHost {
@@ -241,6 +246,22 @@ export class PluginHost {
       status: () => engine.getStatus(),
       gercekAdminMi: (steamId, eosId) => this.adminler.gercekAdminMi(steamId, eosId),
       adminYetkileri: (steamId, eosId) => this.adminler.adminYetkileri(steamId, eosId),
+      // `?? null` şart: sorgu kanalı bağlı değilse `sorgu?.()` undefined
+      // döner ve plugin'ler `=== null` ile "bilmiyoruz" durumunu kontrol
+      // ediyor. undefined oradan sessizce sızsa "etiketi yok" gibi okunurdu.
+      oyuncuEtiketleri: async (steamId, eosId) =>
+        ((await this.opts.sorgu?.({
+          kind: 'player_flags',
+          ...(steamId ? { steamId } : {}),
+          ...(eosId ? { eosId } : {}),
+        })) as { bulundu: boolean; flags: string[] } | null | undefined) ?? null,
+      oyuncuSuresi: async (steamId, eosId) =>
+        ((await this.opts.sorgu?.({
+          kind: 'player_playtime',
+          ...(steamId ? { steamId } : {}),
+          ...(eosId ? { eosId } : {}),
+        })) as { bulundu: boolean; toplamSaniye: number; oturum: number } | null | undefined) ??
+        null,
       refreshPlayers: () => engine.refreshPlayers(),
       every: (ms, fn) => {
         const z = setInterval(() => {

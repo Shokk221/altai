@@ -75,6 +75,25 @@ export interface PluginContext {
   adminYetkileri(steamId?: string | null, eosId?: string | null): string | null;
 
   /**
+   * Oyuncunun AKTİF etiketleri (kaldırılmamış olanlar).
+   *
+   * Veri api'de; agent Postgres'e dokunmuyor. Bağlantı kopuksa ya da sorgu
+   * zaman aşımına uğrarsa `null` döner — "etiketi yok" ile "bilmiyoruz"
+   * farklı şeyler ve plugin ikisine farklı davranmalı. Eski SL ban
+   * denetimi bunu karıştırıp BM'ye ulaşılamadığında herkesi temiz sayıyordu.
+   */
+  oyuncuEtiketleri(
+    steamId?: string | null,
+    eosId?: string | null,
+  ): Promise<{ bulundu: boolean; flags: string[] } | null>;
+
+  /** Oyuncunun toplam oynama süresi. Bilinmiyorsa null. */
+  oyuncuSuresi(
+    steamId?: string | null,
+    eosId?: string | null,
+  ): Promise<{ bulundu: boolean; toplamSaniye: number; oturum: number } | null>;
+
+  /**
    * Periyodik iş kaydeder.
    *
    * Zamanlayıcıyı plugin DEĞİL host tutuyor: plugin kapatıldığında hepsi
