@@ -178,6 +178,20 @@ export const TeamkillEvent = z.object({
   timestamp: z.string().datetime(),
 });
 
+export const SeedSessionEvent = z.object({
+  type: z.literal('SEED_SESSION'),
+  serverSlug: z.string(),
+  playerName: z.string(),
+  steamId: z.string().optional(),
+  eosId: z.string().optional(),
+  startedAt: z.string().datetime(),
+  endedAt: z.string().datetime(),
+  durationSeconds: z.number().int().nonnegative(),
+  seedReason: z.enum(['gamemode', 'player_count']),
+  wasAdmin: z.boolean(),
+  timestamp: z.string().datetime(),
+});
+
 export const AgentEvent = z.discriminatedUnion('type', [
   PlayerConnectedEvent,
   PlayerDisconnectedEvent,
@@ -189,6 +203,7 @@ export const AgentEvent = z.discriminatedUnion('type', [
   AdminActionEvent,
   PlayerStateChangeEvent,
   TeamkillEvent,
+  SeedSessionEvent,
 ]);
 
 export type AgentEvent = z.infer<typeof AgentEvent>;

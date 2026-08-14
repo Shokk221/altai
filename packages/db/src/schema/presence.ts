@@ -100,3 +100,25 @@ export const rawEvents = pgTable(
   },
   (table) => [index('raw_events_server_type_idx').on(table.serverId, table.eventType)],
 );
+
+export const seedSessions = pgTable(
+  'seed_sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    serverId: uuid('server_id')
+      .notNull()
+      .references(() => servers.id),
+    playerId: uuid('player_id')
+      .notNull()
+      .references(() => players.id),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    durationSeconds: integer('duration_seconds').notNull(),
+    seedReason: text('seed_reason').notNull(),
+    wasAdmin: boolean('was_admin').notNull().default(false),
+  },
+  (table) => [
+    index('seed_sessions_player_idx').on(table.playerId),
+    index('seed_sessions_server_idx').on(table.serverId),
+  ],
+);
