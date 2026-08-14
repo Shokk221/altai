@@ -5,13 +5,19 @@ import { PluginHost } from '../src/plugin-host.js';
 import {
   autoSeedScheduler,
   autoTkWarn,
+  cblInfo,
+  chatCommands,
+  eliteCommander,
+  fogOfWar,
   nameEnforcer,
   playtimeSquadGuard,
   seedTracker,
   seedingMode,
   slBanEnforcer,
   slKitEnforcer,
+  squadJoinRequest,
   steamLevel,
+  teamRandomizer,
   welcomeWarn,
 } from '../src/plugins/index.js';
 
@@ -1439,5 +1445,573 @@ describe('steam-level — gizlilik tahmin edilmiyor', () => {
 
     expect(seviyeOlaylari(olaylar)[0]?.level).toBe(0);
     expect(istekler.some((u) => u.includes('GetPlayerSummaries'))).toBe(false);
+  });
+});
+
+const komutMesaji = (
+  message: string,
+  channel: 'All' | 'Team' | 'Squad' | 'Admin' = 'All',
+  steamId = '76561190000000001',
+): AgentEvent => ({
+  type: 'CHAT_MESSAGE',
+  serverSlug: 'squad-01',
+  steamId,
+  channel,
+  message,
+  timestamp: new Date().toISOString(),
+});
+
+describe('chat-commands', () => {
+  const kur = async (e: SahteEngine, commands: unknown[], admins: AdminIdentity[] = []) => {
+    const h = host(e, admins);
+    h.register(chatCommands);
+    await h.applyConfigs([{ pluginName: 'chat-commands', enabled: true, config: { commands } }]);
+    return h;
+  };
+
+  it('warn tipi komut yalnızca çağırana gider', async () => {
+    const e = sahteEngine();
+    const h = await kur(e, [{ command: 'discord', type: 'warn', response: 'discord.gg/altai' }]);
+    await h.handleEvent(komutMesaji('!discord'));
+    expect(e.komutlar).toEqual(['AdminWarn 76561190000000001 discord.gg/altai']);
+  });
+
+  it('broadcast tipi komut herkese gider', async () => {
+    const e = sahteEngine();
+    const h = await kur(e, [{ command: 'kural', type: 'broadcast', response: 'Kurallar geçerli' }]);
+    await h.handleEvent(komutMesaji('!kural'));
+    expect(e.komutlar).toEqual(['AdminBroadcast Kurallar geçerli']);
+  });
+
+  it('tanımsız komut hiçbir şey yapmaz', async () => {
+    const e = sahteEngine();
+    const h = await kur(e, [{ command: 'discord', type: 'warn', response: 'x' }]);
+    await h.handleEvent(komutMesaji('!baskabirsey'));
+    expect(e.komutlar).toEqual([]);
+  });
+
+  it('kanal kısıtı uygulanır', async () => {
+    const e = sahteEngine();
+    const h = await kur(e, [
+      { command: 'gizli', type: 'warn', response: 'x', channels: ['Admin'] },
+    ]);
+    await h.handleEvent(komutMesaji('!gizli', 'All'));
+    expect(e.komutlar).toEqual([]);
+
+    await h.handleEvent(komutMesaji('!gizli', 'Admin'));
+    expect(e.komutlar).toHaveLength(1);
+  });
+
+  it('adminOnly komutu yetkisiz oyuncuda çalışmaz', async () => {
+    // Kanal yetki değildir; ikisi ayrı kontrol.
+    const e = sahteEngine();
+    const h = await kur(e, [{ command: 'yonetim', type: 'warn', response: 'x', adminOnly: true }]);
+    await h.handleEvent(komutMesaji('!yonetim'));
+    expect(e.komutlar).toEqual([]);
+  });
+
+  it('adminOnly komutu gerçek adminde çalışır', async () => {
+    const e = sahteEngine();
+    const h = await kur(
+      e,
+      [{ command: 'yonetim', type: 'warn', response: 'x', adminOnly: true }],
+      [{ steamId: '76561190000000001', groupName: 'Admin', permissions: 'kick,ban' }],
+    );
+    await h.handleEvent(komutMesaji('!yonetim'));
+    expect(e.komutlar).toHaveLength(1);
+  });
+});
+
+describe('team-randomizer', () => {
+  const admin: AdminIdentity[] = [
+    { steamId: '76561190000000001', groupName: 'Admin', permissions: 'kick,ban,forceteamchange' },
+  ];
+
+  function oyuncular(e: SahteEngine, adet: number, lider = 0) {
+    for (let i = 0; i < adet; i++) {
+      e.oyuncular.push({
+        steamId: `7656119000000${String(i).padStart(4, '0')}`,
+        eosId: null,
+        name: `O${i}`,
+        teamId: 1,
+        squadId: 1,
+        isLeader: i < lider,
+        role: 'USA_Rifleman_01',
+      } as SquadJSOnlinePlayer);
+    }
+  }
+
+  const kur = async (e: SahteEngine, config: Record<string, unknown> = {}, admins = admin) => {
+    const h = host(e, admins);
+    h.register(teamRandomizer);
+    await h.applyConfigs([
+      {
+        pluginName: 'team-randomizer',
+        enabled: true,
+        config: { commandDelayMs: 0, announceMessage: 'Karıştırıldı', ...config },
+      },
+    ]);
+    return h;
+  };
+
+  it('admin komutu takımları dağıtır', async () => {
+    const e = sahteEngine();
+    oyuncular(e, 6);
+    const h = await kur(e);
+    await h.handleEvent(komutMesaji('!randomize', 'Admin'));
+
+    // Hepsi teamId=1'de; yarısı 2'ye geçmeli.
+    const gecisler = e.komutlar.filter((c) => c.startsWith('AdminForceTeamChange'));
+    expect(gecisler).toHaveLength(3);
+    expect(e.komutlar.at(-1)).toBe('AdminBroadcast Karıştırıldı');
+  });
+
+  it('YETKİSİZ oyuncu admin kanalından yazsa bile çalışmaz', async () => {
+    // Eski plugin'in tek kontrolü kanaldı: admin sohbetini görebilen ama
+    // yetkisi olmayan biri bütün sunucunun takımını değiştirebiliyordu.
+    const e = sahteEngine();
+    oyuncular(e, 6);
+    const h = await kur(e, {}, []);
+    await h.handleEvent(komutMesaji('!randomize', 'Admin'));
+    expect(e.komutlar).toEqual([]);
+  });
+
+  it('manga liderleri varsayılan olarak KORUNUR', async () => {
+    // Eski plugin liderleri de karıştırıyor, mangalar maç başında
+    // dağılıyordu.
+    const e = sahteEngine();
+    oyuncular(e, 6, 2); // ilk ikisi lider
+    const h = await kur(e);
+    await h.handleEvent(komutMesaji('!randomize', 'Admin'));
+
+    const gecisler = e.komutlar.filter((c) => c.startsWith('AdminForceTeamChange'));
+    expect(gecisler).toHaveLength(2); // 4 oyuncudan 2'si
+    expect(gecisler.some((c) => c.includes('0000000000'))).toBe(false);
+  });
+
+  it('az oyuncu varken çalışmaz', async () => {
+    const e = sahteEngine();
+    oyuncular(e, 2);
+    const h = await kur(e, { minPlayers: 4 });
+    await h.handleEvent(komutMesaji('!randomize', 'Admin'));
+    expect(e.komutlar).toEqual([]);
+  });
+
+  it('izin verilmeyen kanaldan çalışmaz', async () => {
+    const e = sahteEngine();
+    oyuncular(e, 6);
+    const h = await kur(e);
+    await h.handleEvent(komutMesaji('!randomize', 'All'));
+    expect(e.komutlar).toEqual([]);
+  });
+});
+
+describe('squad-join-request', () => {
+  function sahne(e: SahteEngine) {
+    e.oyuncular.push(
+      {
+        steamId: '76561190000000001',
+        eosId: null,
+        name: 'Isteyen',
+        teamId: 1,
+        squadId: null,
+        isLeader: false,
+        role: 'r',
+      } as SquadJSOnlinePlayer,
+      {
+        steamId: '76561190000000002',
+        eosId: 'aaaaaaaa1234567890abcdef01234567',
+        name: 'Lider',
+        teamId: 1,
+        squadId: 3,
+        isLeader: true,
+        role: 'sl',
+      } as SquadJSOnlinePlayer,
+      {
+        steamId: '76561190000000003',
+        eosId: null,
+        name: 'KarsiLider',
+        teamId: 2,
+        squadId: 3,
+        isLeader: true,
+        role: 'sl',
+      } as SquadJSOnlinePlayer,
+    );
+  }
+
+  const kur = async (e: SahteEngine, config: Record<string, unknown> = {}) => {
+    const h = host(e);
+    h.register(squadJoinRequest);
+    await h.applyConfigs([
+      {
+        pluginName: 'squad-join-request',
+        enabled: true,
+        config: { cooldownSeconds: 0, ...config },
+      },
+    ]);
+    return h;
+  };
+
+  it('istek lidere ve isteyene bildirilir', async () => {
+    const e = sahteEngine();
+    sahne(e);
+    const h = await kur(e);
+    await h.handleEvent(komutMesaji('!katıl 3'));
+
+    expect(e.komutlar).toEqual([
+      'AdminWarn aaaaaaaa1234567890abcdef01234567 Isteyen manganıza katılmak istiyor.',
+      'AdminWarn 76561190000000001 İstek manga 3 liderine iletildi.',
+    ]);
+  });
+
+  it('KARŞI takımın mangasına istek gitmez', async () => {
+    // Aynı numaralı manga her iki takımda da var; takım kontrolü olmadan
+    // istek rakip takımın liderine giderdi.
+    const e = sahteEngine();
+    sahne(e);
+    const lider = e.oyuncular[1];
+    if (lider) lider.teamId = 2; // aynı takımda lider kalmasın
+    const h = await kur(e);
+    await h.handleEvent(komutMesaji('!katıl 3'));
+
+    expect(e.komutlar).toEqual([
+      'AdminWarn 76561190000000001 Manga 3 bulunamadı ya da lideri yok.',
+    ]);
+  });
+
+  it('tek mesajdaki manga sayısı SINIRLI', async () => {
+    // Sınırsızken tek mesajla sunucudaki her lidere uyarı gönderilebiliyordu.
+    const e = sahteEngine();
+    sahne(e);
+    const h = await kur(e, { maxSquadsPerRequest: 2 });
+    await h.handleEvent(komutMesaji('!katıl 1,2,3,4,5,6,7,8'));
+
+    // 2 mangaya bakıldı, ikisi de bulunamadı (yalnızca 3 numaralı var).
+    expect(e.komutlar).toHaveLength(2);
+  });
+
+  it('tekrarlanan numara bir kez sayılır', async () => {
+    const e = sahteEngine();
+    sahne(e);
+    const h = await kur(e);
+    await h.handleEvent(komutMesaji('!katıl 3,3,3'));
+    expect(e.komutlar).toHaveLength(2); // lidere 1 + isteyene 1
+  });
+
+  it('bekleme süresi içinde ikinci istek reddedilir', async () => {
+    const e = sahteEngine();
+    sahne(e);
+    const h = await kur(e, { cooldownSeconds: 30 });
+    await h.handleEvent(komutMesaji('!katıl 3'));
+    e.komutlar.length = 0;
+
+    await h.handleEvent(komutMesaji('!katıl 3'));
+    expect(e.komutlar).toHaveLength(1);
+    expect(e.komutlar[0]).toContain('Çok sık istek');
+  });
+
+  it('geçersiz argüman kullanım mesajı döndürür', async () => {
+    const e = sahteEngine();
+    sahne(e);
+    const h = await kur(e);
+    await h.handleEvent(komutMesaji('!katıl abc'));
+    expect(e.komutlar[0]).toContain('Kullanım:');
+  });
+});
+
+describe('fog-of-war', () => {
+  const kidemli: AdminIdentity[] = [
+    { steamId: '76561190000000001', groupName: 'SuperAdmin', permissions: 'kick,ban,changemap' },
+  ];
+  const siradan: AdminIdentity[] = [
+    { steamId: '76561190000000001', groupName: 'Admin', permissions: 'kick,ban' },
+  ];
+
+  const kur = async (e: SahteEngine, admins: AdminIdentity[]) => {
+    const h = host(e, admins);
+    h.register(fogOfWar);
+    await h.applyConfigs([{ pluginName: 'fog-of-war', enabled: true, config: {} }]);
+    return h;
+  };
+
+  it('kıdemli admin açıp kapatabilir', async () => {
+    const e = sahteEngine();
+    const h = await kur(e, kidemli);
+
+    await h.handleEvent(komutMesaji('!fow', 'Admin'));
+    expect(e.komutlar).toEqual(['AdminSetFogOfWar 1', 'AdminBroadcast Sis savaşı açıldı!']);
+
+    e.komutlar.length = 0;
+    await h.handleEvent(komutMesaji('!fow', 'Admin'));
+    expect(e.komutlar).toEqual(['AdminSetFogOfWar 0', 'AdminBroadcast Sis savaşı kapatıldı!']);
+  });
+
+  it('SIRADAN admin kullanamaz', async () => {
+    // `kick` yetkisi olan herkesin haritayı karartabilmesi istenmiyor.
+    const e = sahteEngine();
+    const h = await kur(e, siradan);
+    await h.handleEvent(komutMesaji('!fow', 'Admin'));
+
+    expect(e.komutlar.some((c) => c.startsWith('AdminSetFogOfWar'))).toBe(false);
+    expect(e.komutlar[0]).toContain('yetkin yok');
+  });
+
+  it('yetki listesi hiç gelmediyse reddedilir', async () => {
+    const e = sahteEngine();
+    const h = await kur(e, []);
+    await h.handleEvent(komutMesaji('!fow', 'Admin'));
+    expect(e.komutlar.some((c) => c.startsWith('AdminSetFogOfWar'))).toBe(false);
+  });
+
+  it('yeni maçta RCON komutu GÖNDERİLMEZ, sadece yön sıfırlanır', async () => {
+    // Sunucu sis savaşını maç başında kendi sıfırlıyor; plugin'in ayrıca
+    // komut göndermesi, kimsenin istemediği bir anda ayarı değiştirirdi.
+    const e = sahteEngine();
+    const h = await kur(e, kidemli);
+    await h.handleEvent(komutMesaji('!fow', 'Admin')); // açıldı
+    e.komutlar.length = 0;
+
+    await h.handleEvent({
+      type: 'ROUND_STARTED',
+      serverSlug: 'squad-01',
+      timestamp: new Date().toISOString(),
+    });
+    expect(e.komutlar).toEqual([]);
+
+    // Yön sıfırlandığı için bir sonraki komut yine AÇMALI.
+    await h.handleEvent(komutMesaji('!fow', 'Admin'));
+    expect(e.komutlar[0]).toBe('AdminSetFogOfWar 1');
+  });
+});
+
+describe('cbl-info', () => {
+  const yanit = (body: unknown, ok = true) => ({
+    ok,
+    status: ok ? 200 : 500,
+    json: async () => body,
+  });
+
+  const cblCevabi = (over: Record<string, unknown> = {}) =>
+    yanit({
+      data: {
+        steamUser: {
+          name: 'Sorunlu',
+          avatarFull: 'https://x/y.png',
+          reputationPoints: 12,
+          riskRating: 7,
+          reputationRank: 42,
+          activeBans: { edges: [{ node: { id: '1' } }, { node: { id: '2' } }] },
+          expiredBans: { edges: [{ node: { id: '3' } }] },
+          ...over,
+        },
+      },
+    });
+
+  function kur(fetchCevabi: unknown) {
+    const e = sahteEngine();
+    const olaylar: AgentEvent[] = [];
+    const h = new PluginHost({ serverSlug: 'squad-01', engine: e, emit: (ev) => olaylar.push(ev) });
+    h.register(cblInfo);
+    vi.stubGlobal('fetch', async () => fetchCevabi);
+    return { h, e, olaylar };
+  }
+
+  const cfg = (config: Record<string, unknown> = {}) => ({
+    pluginName: 'cbl-info',
+    enabled: true,
+    config: { delaySeconds: 0, ...config },
+  });
+
+  const uyarilar = (o: AgentEvent[]) =>
+    o.filter((x) => x.type === 'CBL_ALERT') as Extract<AgentEvent, { type: 'CBL_ALERT' }>[];
+
+  it('eşiği aşan oyuncu için uyarı üretir', async () => {
+    const { h, olaylar } = kur(cblCevabi());
+    await h.applyConfigs([cfg({ threshold: 6 })]);
+    await h.handleEvent(baglandi('Sorunlu'));
+
+    const u = uyarilar(olaylar);
+    expect(u).toHaveLength(1);
+    expect(u[0]?.reputationPoints).toBe(12);
+    expect(u[0]?.activeBans).toBe(2);
+    expect(u[0]?.expiredBans).toBe(1);
+    expect(u[0]?.riskRating).toBe(7);
+  });
+
+  it('eşiğin ALTINDA uyarı üretilmez', async () => {
+    const { h, olaylar } = kur(cblCevabi({ reputationPoints: 3 }));
+    await h.applyConfigs([cfg({ threshold: 6 })]);
+    await h.handleEvent(baglandi('Temiz'));
+    expect(uyarilar(olaylar)).toEqual([]);
+  });
+
+  it('CBL listesinde olmayan oyuncu için uyarı yok', async () => {
+    const { h, olaylar } = kur(yanit({ data: { steamUser: null } }));
+    await h.applyConfigs([cfg()]);
+    await h.handleEvent(baglandi('Bilinmeyen'));
+    expect(uyarilar(olaylar)).toEqual([]);
+  });
+
+  it('CBL ulaşılamazsa uyarı üretilmez ve plugin ayakta kalır', async () => {
+    const { h, olaylar } = kur(yanit({}, false));
+    await h.applyConfigs([cfg()]);
+    await h.handleEvent(baglandi('X'));
+    expect(uyarilar(olaylar)).toEqual([]);
+    expect(h.acikPluginler()).toEqual(['cbl-info']);
+  });
+
+  it('ağ hatası plugin’i düşürmez', async () => {
+    const e = sahteEngine();
+    const olaylar: AgentEvent[] = [];
+    const h = new PluginHost({ serverSlug: 'squad-01', engine: e, emit: (ev) => olaylar.push(ev) });
+    h.register(cblInfo);
+    vi.stubGlobal('fetch', async () => {
+      throw new Error('ağ');
+    });
+    await h.applyConfigs([cfg()]);
+    await h.handleEvent(baglandi('X'));
+    expect(uyarilar(olaylar)).toEqual([]);
+    expect(h.acikPluginler()).toEqual(['cbl-info']);
+  });
+
+  it('HİÇBİR yaptırım uygulanmaz — yalnızca uyarı', async () => {
+    // Başka bir topluluğun kararına dayanarak oyuncu atmak, o kararı
+    // incelemeden devralmak olurdu. Eski plugin de kimseyi atmıyordu.
+    const { h, e } = kur(cblCevabi());
+    await h.applyConfigs([cfg()]);
+    await h.handleEvent(baglandi('Sorunlu'));
+    expect(e.komutlar).toEqual([]);
+  });
+});
+
+describe('elite-commander', () => {
+  const oyuncu = (over: Partial<SquadJSOnlinePlayer> = {}): SquadJSOnlinePlayer =>
+    ({
+      steamId: '76561190000000001',
+      eosId: null,
+      name: 'Komutan',
+      teamId: 1,
+      squadId: 1,
+      squadName: 'Command Squad',
+      isLeader: true,
+      role: 'r',
+      ...over,
+    }) as SquadJSOnlinePlayer;
+
+  /**
+   * `etiketler` yalnızca `seckinId`'ye verilir. Herkese aynı cevabı vermek
+   * gerçekçi değil: komutan mangasındaki ikinci bir lider de seçkin
+   * sayılıp ayrı bir duyuru üretirdi.
+   */
+  function kur(e: SahteEngine, etiketler: string[] | null, seckinId = '76561190000000001') {
+    const h = new PluginHost({
+      serverSlug: 'squad-01',
+      engine: e,
+      emit: () => undefined,
+      sorgu: async (q) => {
+        if (etiketler === null) return null;
+        const id = (q as { steamId?: string }).steamId;
+        return { bulundu: true, flags: id === seckinId ? etiketler : [] };
+      },
+    });
+    h.register(eliteCommander);
+    return h;
+  }
+
+  const cfg = {
+    pluginName: 'elite-commander',
+    enabled: true,
+    config: { checkIntervalSeconds: 10 },
+  };
+
+  it('seçkin komutan göreve gelince duyurulur', async () => {
+    const e = sahteEngine();
+    e.oyuncular.push(oyuncu());
+    const h = kur(e, ['Elite Commander']);
+    await h.applyConfigs([cfg]);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(e.komutlar.some((c) => c.startsWith('AdminBroadcast'))).toBe(true);
+  });
+
+  it('etiketi olmayan komutan duyurulmaz', async () => {
+    const e = sahteEngine();
+    e.oyuncular.push(oyuncu());
+    const h = kur(e, ['Baska Etiket']);
+    await h.applyConfigs([cfg]);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(e.komutlar).toEqual([]);
+  });
+
+  it('komutan mangasında OLMAYAN lider duyurulmaz', async () => {
+    // `isLeader` tek başına yetmez: her manga liderinin komutan sayılması
+    // her turda yanlış duyuru demek olurdu.
+    const e = sahteEngine();
+    e.oyuncular.push(oyuncu({ squadName: 'ALPHA' }));
+    const h = kur(e, ['Elite Commander']);
+    await h.applyConfigs([cfg]);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(e.komutlar).toEqual([]);
+  });
+
+  it('aynı komutan her turda TEKRAR duyurulmaz', async () => {
+    const e = sahteEngine();
+    e.oyuncular.push(oyuncu());
+    const h = kur(e, ['Elite Commander']);
+    await h.applyConfigs([cfg]);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    const ilk = e.komutlar.length;
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(e.komutlar).toHaveLength(ilk);
+  });
+
+  it('sorgu cevapsızsa duyuru yapılmaz', async () => {
+    // Olmayan bir unvanı ilan etmek, eksik bir duyurudan kötü.
+    const e = sahteEngine();
+    e.oyuncular.push(oyuncu());
+    const h = kur(e, null);
+    await h.applyConfigs([cfg]);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(e.komutlar).toEqual([]);
+  });
+
+  it('aynı takımın manga liderleri uyarılır, komutan ve cmd squad hariç', async () => {
+    const e = sahteEngine();
+    e.oyuncular.push(
+      oyuncu(),
+      oyuncu({ steamId: '76561190000000002', name: 'SL1', squadName: 'ALPHA', squadId: 2 }),
+      oyuncu({ steamId: '76561190000000003', name: 'CmdYardimci', squadName: 'Command Squad' }),
+      oyuncu({ steamId: '76561190000000004', name: 'KarsiSL', teamId: 2, squadName: 'BRAVO' }),
+      oyuncu({ steamId: '76561190000000005', name: 'Er', squadName: 'ALPHA', isLeader: false }),
+    );
+    const h = kur(e, ['Elite Commander']);
+    await h.applyConfigs([cfg]);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    const warnler = e.komutlar.filter((c) => c.startsWith('AdminWarn'));
+    expect(warnler).toHaveLength(1);
+    expect(warnler[0]).toContain('76561190000000002');
+  });
+
+  it('yeni maçta durum sıfırlanır ve tekrar duyurulur', async () => {
+    const e = sahteEngine();
+    e.oyuncular.push(oyuncu());
+    const h = kur(e, ['Elite Commander']);
+    await h.applyConfigs([cfg]);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    const ilk = e.komutlar.length;
+
+    await h.handleEvent({
+      type: 'ROUND_STARTED',
+      serverSlug: 'squad-01',
+      timestamp: new Date().toISOString(),
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(e.komutlar.length).toBeGreaterThan(ilk);
   });
 });

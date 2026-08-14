@@ -3,13 +3,19 @@ import { autoKickUnassigned } from './auto-kick-unassigned.js';
 import { autoSeedScheduler } from './auto-seed-scheduler.js';
 import { autoTkWarn } from './auto-tk-warn.js';
 import { broadcasts } from './broadcasts.js';
+import { cblInfo } from './cbl-info.js';
+import { chatCommands } from './chat-commands.js';
+import { eliteCommander } from './elite-commander.js';
+import { fogOfWar } from './fog-of-war.js';
 import { nameEnforcer } from './name-enforcer.js';
 import { playtimeSquadGuard } from './playtime-squad-guard.js';
 import { seedTracker } from './seed-tracker.js';
 import { seedingMode } from './seeding-mode.js';
 import { slBanEnforcer } from './sl-ban-enforcer.js';
 import { slKitEnforcer } from './sl-kit-enforcer.js';
+import { squadJoinRequest } from './squad-join-request.js';
 import { steamLevel } from './steam-level.js';
+import { teamRandomizer } from './team-randomizer.js';
 import { welcomeWarn } from './welcome-warn.js';
 
 /**
@@ -32,6 +38,12 @@ export const PLUGINS: AnyPlugin[] = [
   seedingMode,
   autoSeedScheduler,
   steamLevel,
+  chatCommands,
+  teamRandomizer,
+  squadJoinRequest,
+  fogOfWar,
+  cblInfo,
+  eliteCommander,
 ];
 
 export {
@@ -47,4 +59,10 @@ export {
   seedingMode,
   autoSeedScheduler,
   steamLevel,
+  chatCommands,
+  teamRandomizer,
+  squadJoinRequest,
+  fogOfWar,
+  cblInfo,
+  eliteCommander,
 };
