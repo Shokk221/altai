@@ -101,6 +101,29 @@ export const rawEvents = pgTable(
   (table) => [index('raw_events_server_type_idx').on(table.serverId, table.eventType)],
 );
 
+/**
+ * Seed (sunucu doldurma) oturumları.
+ *
+ * Eski sistemde bu iş iki ayrı plugin ve iki ayrı Mongo koleksiyonuydu:
+ * `SeedLog` yalnızca ADMİNLERİ, `SeedWLLog` HERKESİ takip ediyordu. İkisi de
+ * aynı JOIN/LEAVE satırlarını yazıyor, aynı ghost/checkpoint/orphan
+ * mantığını ayrı ayrı taşıyordu — ve iki plugin aynı anda çalıştığı için
+ * her oyuncu için iki kez zaman tutuluyordu.
+ *
+ * Burada tek tablo var. Ayrımı satırın kendisi taşıyor:
+ *  - `wasAdmin`: oturum sırasında gerçek admin yetkisi var mıydı,
+ *  - `seedReason`: sunucu neden "seed" sayıldı (harita modu mu, oyuncu
+ *    sayısı mı).
+ *
+ * Bu ayrım şart, çünkü iki raporun tanımı farklı: admin seed nöbeti YALNIZCA
+ * seed haritasında sayılıyordu (`gamemode`), haftalık whitelist ödülü ise
+ * sunucu az doluyken de sayıyordu (`player_count`). Tek tabloya indirip
+ * ayrımı kaybetmek, adminlere hak etmedikleri nöbet süresi yazardı.
+ *
+ * Satırlar KAPALI ARALIK: agent her oturumu bitince (ve uzun oturumlarda
+ * periyodik olarak) gönderiyor. Açık kayıt tutulmuyor — agent çökerse
+ * yarım kalan aralık kaybolur ama yanlış veri üretmez.
+ */
 export const seedSessions = pgTable(
   'seed_sessions',
   {
@@ -112,13 +135,20 @@ export const seedSessions = pgTable(
       .notNull()
       .references(() => players.id),
     startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
-    endedAt: timestamp('ended_at', { withTimezone: true }),
+    endedAt: timestamp('ended_at', { withTimezone: true }).notNull(),
     durationSeconds: integer('duration_seconds').notNull(),
+    /** 'gamemode' = seed/training haritası, 'player_count' = sunucu az doluydu. */
     seedReason: text('seed_reason').notNull(),
+    /** Oturum SIRASINDA gerçek admin yetkisi var mıydı (sonradan değişebilir). */
     wasAdmin: boolean('was_admin').notNull().default(false),
+    source: text('source').notNull().default('altai'),
+    externalId: text('external_id'),
   },
   (table) => [
-    index('seed_sessions_player_idx').on(table.playerId),
-    index('seed_sessions_server_idx').on(table.serverId),
+    // Haftalık whitelist hesabı: oyuncunun belirli tarihten sonraki toplamı.
+    index('seed_sessions_player_started_idx').on(table.playerId, table.startedAt),
+    // Admin nöbet raporu: sunucu + tarih aralığı.
+    index('seed_sessions_server_started_idx').on(table.serverId, table.startedAt),
+    uniqueIndex('seed_sessions_source_external_idx').on(table.source, table.externalId),
   ],
 );
