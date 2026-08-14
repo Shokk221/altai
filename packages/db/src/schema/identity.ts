@@ -1,6 +1,7 @@
 import {
   boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -101,3 +102,30 @@ export const sessions = pgTable('auth_sessions', {
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
+
+/**
+ * Steam profilinden okunan, oyuncuya ait ama bizim üretmediğimiz veri.
+ *
+ * `players` tablosuna kolon eklemek yerine ayrı tablo, çünkü buradaki her
+ * alan DIŞ bir kaynaktan geliyor ve bayatlayabiliyor: ne zaman okunduğu
+ * verinin kendisi kadar önemli. `players` ise kimliğin kendisi — orada
+ * bayatlayan bir şey yok.
+ *
+ * `level` NULL olabilir ve bu "seviye 0" DEMEK DEĞİL: profil gizliyse
+ * Steam seviye vermiyor. İkisini karıştırmak, profilini kapatmış herkesi
+ * en düşük seviyeymiş gibi işaretlemek olurdu.
+ */
+export const steamProfiles = pgTable(
+  'steam_profiles',
+  {
+    playerId: uuid('player_id')
+      .primaryKey()
+      .references(() => players.id),
+    /** Steam hesap seviyesi. NULL = okunamadı (gizli profil ya da API hatası). */
+    level: integer('level'),
+    /** Profil gizli olduğu için mi okunamadı — tekrar denemeye değer mi. */
+    private: boolean('private').notNull().default(false),
+    checkedAt: timestamp('checked_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('steam_profiles_checked_idx').on(table.checkedAt)],
+);

@@ -262,6 +262,13 @@ export class PluginHost {
           ...(eosId ? { eosId } : {}),
         })) as { bulundu: boolean; toplamSaniye: number; oturum: number } | null | undefined) ??
         null,
+      steamSeviyeTazeMi: async (steamId, maxAgeDays, privateMaxAgeDays) =>
+        ((await this.opts.sorgu?.({
+          kind: 'steam_level_freshness',
+          steamId,
+          maxAgeDays,
+          privateMaxAgeDays,
+        })) as { bulundu: boolean; taze: boolean } | null | undefined) ?? null,
       refreshPlayers: () => engine.refreshPlayers(),
       every: (ms, fn) => {
         const z = setInterval(() => {

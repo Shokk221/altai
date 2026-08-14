@@ -207,6 +207,28 @@ export const SeedSessionEvent = z.object({
   timestamp: z.string().datetime(),
 });
 
+/**
+ * Oyuncunun Steam hesap seviyesi.
+ *
+ * Plugin yalnızca OKUDUĞUNU bildiriyor; hangi seviyenin hangi etiketi hak
+ * ettiğine api karar veriyor. Eşikler panelden yönetilen bir ayar ve
+ * etiketler veritabanındaki satırlar — ikisi de oyun sunucusundaki bir
+ * dosyada durmamalı.
+ *
+ * `level` NULL olabilir: profil gizliyse Steam seviye vermiyor. Bu "seviye
+ * 0" DEĞİL. Karıştırmak, profilini kapatmış herkesi en düşük seviyeymiş
+ * gibi damgalamak olurdu.
+ */
+export const SteamLevelEvent = z.object({
+  type: z.literal('STEAM_LEVEL'),
+  serverSlug: z.string(),
+  steamId: z.string(),
+  level: z.number().int().nonnegative().nullable(),
+  /** Seviye okunamadıysa sebebi gizli profil miydi. */
+  private: z.boolean().default(false),
+  timestamp: z.string().datetime(),
+});
+
 export const AgentEvent = z.discriminatedUnion('type', [
   PlayerConnectedEvent,
   PlayerDisconnectedEvent,
@@ -219,6 +241,7 @@ export const AgentEvent = z.discriminatedUnion('type', [
   PlayerStateChangeEvent,
   TeamkillEvent,
   SeedSessionEvent,
+  SteamLevelEvent,
 ]);
 
 export type AgentEvent = z.infer<typeof AgentEvent>;
