@@ -1185,6 +1185,8 @@ describe('steam-level', () => {
   function kur(
     steamCevabi: unknown,
     tazelik: { bulundu: boolean; taze: boolean } | null = { bulundu: false, taze: false },
+    /** GetPlayerSummaries cevabı — yalnızca seviye gelmediğinde sorulur. */
+    ozetCevabi?: unknown,
   ) {
     const e = sahteEngine();
     const olaylar: AgentEvent[] = [];
@@ -1200,9 +1202,15 @@ describe('steam-level', () => {
       },
     });
     h.register(steamLevel);
-    vi.stubGlobal('fetch', async () => steamCevabi);
+    vi.stubGlobal('fetch', async (url: string) =>
+      String(url).includes('GetPlayerSummaries') ? ozetCevabi : steamCevabi,
+    );
     return { h, olaylar, sorgular };
   }
+
+  /** communityvisibilitystate: 3 = açık, 1 = gizli. */
+  const ozet = (gorunurluk: number) =>
+    cevap({ response: { players: [{ communityvisibilitystate: gorunurluk }] } });
 
   const seviyeOlaylari = (olaylar: AgentEvent[]) =>
     olaylar.filter((o) => o.type === 'STEAM_LEVEL') as Extract<
@@ -1239,9 +1247,9 @@ describe('steam-level', () => {
   });
 
   it('gizli profil "seviye 0" DEĞİL, level null gider', async () => {
-    // En kritik ayrım: Steam gizli profilde boş response dönüyor. Bunu 0
-    // saymak, profilini kapatmış herkesi kırmızı etiketlerdi.
-    const { h, olaylar } = kur(cevap({ response: {} }));
+    // En kritik ayrım. Gizlilik TAHMİN EDİLMİYOR: seviye gelmediğinde
+    // Steam'e görünürlük ayrıca soruluyor (communityvisibilitystate).
+    const { h, olaylar } = kur(cevap({ response: {} }), undefined, ozet(1));
     await h.applyConfigs([cfg()]);
     await h.handleEvent(baglandi('Ali'));
 
@@ -1340,5 +1348,96 @@ describe('steam-level', () => {
     });
 
     expect(sorgular).toEqual([]);
+  });
+});
+
+describe('steam-level — gizlilik tahmin edilmiyor', () => {
+  const cfg = { pluginName: 'steam-level', enabled: true, config: { delaySeconds: 0 } };
+
+  function kurGorunurluk(seviyeCevabi: unknown, ozetCevabi: unknown) {
+    const e = sahteEngine();
+    const olaylar: AgentEvent[] = [];
+    const istekler: string[] = [];
+    const h = new PluginHost({
+      serverSlug: 'squad-01',
+      engine: e,
+      emit: (ev) => olaylar.push(ev),
+      secrets: { steamApiKey: 'TEST_KEY' },
+      sorgu: async () => ({ bulundu: false, taze: false }),
+    });
+    h.register(steamLevel);
+    vi.stubGlobal('fetch', async (url: string) => {
+      istekler.push(String(url));
+      return String(url).includes('GetPlayerSummaries') ? ozetCevabi : seviyeCevabi;
+    });
+    return { h, olaylar, istekler };
+  }
+
+  const yanit = (body: unknown) => ({ ok: true, status: 200, json: async () => body });
+  const seviyeOlaylari = (o: AgentEvent[]) =>
+    o.filter((x) => x.type === 'STEAM_LEVEL') as Extract<AgentEvent, { type: 'STEAM_LEVEL' }>[];
+
+  it('seviye geldiyse görünürlük SORULMAZ', async () => {
+    // Ek istek yalnızca gerektiğinde atılmalı; her girişte iki çağrı
+    // Steam kotasını iki katına çıkarırdı.
+    const { h, olaylar, istekler } = kurGorunurluk(
+      yanit({ response: { player_level: 7 } }),
+      yanit({}),
+    );
+    await h.applyConfigs([cfg]);
+    await h.handleEvent(baglandi('Ali'));
+
+    expect(seviyeOlaylari(olaylar)[0]?.level).toBe(7);
+    expect(istekler.some((u) => u.includes('GetPlayerSummaries'))).toBe(false);
+  });
+
+  it('seviye yok + profil GİZLİ -> private, seviye null', async () => {
+    const { h, olaylar } = kurGorunurluk(
+      yanit({ response: {} }),
+      yanit({ response: { players: [{ communityvisibilitystate: 1 }] } }),
+    );
+    await h.applyConfigs([cfg]);
+    await h.handleEvent(baglandi('Ali'));
+
+    const s = seviyeOlaylari(olaylar);
+    expect(s).toHaveLength(1);
+    expect(s[0]?.level).toBeNull();
+    expect(s[0]?.private).toBe(true);
+  });
+
+  it('seviye yok ama profil AÇIK -> hiçbir şey bildirilmez', async () => {
+    // Beklenmedik durum. "Gizli" diye kaydetmek yanlış olurdu: bir sonraki
+    // deneme gizli profil takvimine göre ertelenirdi.
+    const { h, olaylar } = kurGorunurluk(
+      yanit({ response: {} }),
+      yanit({ response: { players: [{ communityvisibilitystate: 3 }] } }),
+    );
+    await h.applyConfigs([cfg]);
+    await h.handleEvent(baglandi('Ali'));
+
+    expect(seviyeOlaylari(olaylar)).toEqual([]);
+  });
+
+  it('görünürlük de okunamazsa hiçbir şey bildirilmez', async () => {
+    const { h, olaylar } = kurGorunurluk(yanit({ response: {} }), { ok: false, status: 500 });
+    await h.applyConfigs([cfg]);
+    await h.handleEvent(baglandi('Ali'));
+
+    expect(seviyeOlaylari(olaylar)).toEqual([]);
+  });
+
+  it('seviye 0 gerçek bir cevaptır — görünürlük sorulmaz', async () => {
+    // Steam gizli profil için 0 dönseydi bile bu yol etkilenmez: 0 sayı
+    // olduğu için doğrudan seviye kabul edilir. Gizliliği ayrı sormanın
+    // sebebi tam olarak bu belirsizliği ortadan kaldırmaktı.
+    const { h, olaylar, istekler } = kurGorunurluk(
+      yanit({ response: { player_level: 0 } }),
+      yanit({}),
+    );
+    await h.applyConfigs([cfg]);
+    await h.handleEvent(baglandi('Ali'));
+
+    expect(seviyeOlaylari(olaylar)[0]?.level).toBe(0);
+    expect(istekler.some((u) => u.includes('GetPlayerSummaries'))).toBe(false);
   });
 });

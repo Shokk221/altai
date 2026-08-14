@@ -58,12 +58,40 @@ export const steamLevel: ReturnType<typeof tanimla> = tanimla({
     let kapali = false;
 
     /**
+     * Profil gizli mi? Steam'in KENDİ görünürlük alanına bakılıyor.
+     *
+     * `communityvisibilitystate`: 3 = herkese açık, diğer değerler kapalı.
+     * (Aynı alan `playtime-squad-guard` içinde de bu iş için kullanılıyor.)
+     */
+    async function gizliMi(steamId: string): Promise<boolean | null> {
+      try {
+        const url = `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key=${anahtar}&steamids=${steamId}`;
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        const veri = (await res.json()) as {
+          response?: { players?: Array<{ communityvisibilitystate?: number }> };
+        };
+        const gorunurluk = veri.response?.players?.[0]?.communityvisibilitystate;
+        if (typeof gorunurluk !== 'number') return null;
+        return gorunurluk !== 3;
+      } catch {
+        return null;
+      }
+    }
+
+    /**
      * Steam'den seviyeyi okur.
      *
      * Dönüş: `{ level }` okunduysa, `{ private: true }` profil gizliyse,
-     * `null` istek başarısızsa. Üçü FARKLI durumlar ve üçüne farklı
-     * davranılıyor — "okunamadı"yı "seviye 0" saymak bu plugin'in
-     * yapabileceği en zararlı hata.
+     * `null` bilinmiyorsa. Üçü FARKLI durumlar ve üçüne farklı davranılıyor
+     * — "okunamadı"yı "seviye 0" saymak bu plugin'in yapabileceği en
+     * zararlı hata: profilini kapatmış herkes kırmızı etiket alırdı.
+     *
+     * Seviye gelmediğinde gizliliğe TAHMİNLE karar verilmiyor. Önce
+     * "`player_level` alanı yoksa profil gizlidir" deniyordu; bu, Steam'in
+     * gizli profil için ne döndürdüğüne dair doğrulanmamış bir varsayımdı
+     * ve yanlış çıkarsa (örneğin 0 dönerse) tam da önlemek istediğimiz
+     * zararı verirdi. Artık görünürlük Steam'e ayrıca soruluyor.
      */
     async function seviyeOku(
       steamId: string,
@@ -77,14 +105,18 @@ export const steamLevel: ReturnType<typeof tanimla> = tanimla({
           return null;
         }
         const veri = (await res.json()) as { response?: { player_level?: number } };
-
-        // Steam gizli profilde `response`'u BOŞ nesne olarak dönüyor —
-        // hata değil, veri yok. Bu ikisini ayırmanın tek yolu alanın
-        // varlığına bakmak.
         const seviye = veri.response?.player_level;
-        if (typeof seviye !== 'number') return { private: true };
+        if (typeof seviye === 'number') return { level: seviye };
 
-        return { level: seviye };
+        // Seviye yok: gizli mi, yoksa başka bir sebep mi? Bu ek istek
+        // yalnızca seviye gelmediğinde atılıyor, yani nadiren.
+        const gizli = await gizliMi(steamId);
+        if (gizli === true) return { private: true };
+
+        // Profil AÇIK ama seviye yok — beklenmedik. Bilmediğimiz bir
+        // durumda kayıt yazmak, bir sonraki denemeyi de erteler.
+        ctx.log.warn({ steamId, gizli }, 'Steam seviyesi gelmedi ve profil gizli değil');
+        return null;
       } catch (err) {
         ctx.log.warn({ err, steamId }, 'Steam API okunamadı');
         return null;
