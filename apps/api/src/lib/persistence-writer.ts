@@ -4,6 +4,7 @@ import { chatSchema, identitySchema, matchesSchema, presenceSchema } from '@alta
 import { logger } from '@altai/shared';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { VARSAYILAN_ODUL, seedOdulunuDegerlendir } from './seed-whitelist.js';
+import { steamSeviyesiniIsle } from './steam-level-flags.js';
 
 const RAW_EVENTS_FLUSH_INTERVAL_MS = 2_000;
 const RAW_EVENTS_FLUSH_MAX_BATCH = 200;
@@ -394,6 +395,15 @@ export function createPersistenceWriter(db: Db): PersistenceWriter {
     await seedOdulunuDegerlendir(db, playerId, VARSAYILAN_ODUL);
   }
 
+  async function handleSteamLevel(event: Extract<AgentEvent, { type: 'STEAM_LEVEL' }>) {
+    const playerId = await oyuncuyuBulVeyaOlustur(db, event.steamId, null);
+    if (!playerId) {
+      logger.warn({ event }, 'Steam seviyesi yazılamadı: oyuncu kimliği çözülemedi');
+      return;
+    }
+    await steamSeviyesiniIsle(db, playerId, event.level, event.private);
+  }
+
   return {
     write(serverId, event) {
       if (stopped) return;
@@ -427,6 +437,11 @@ export function createPersistenceWriter(db: Db): PersistenceWriter {
         case 'ROUND_ENDED':
           void handleRoundEnded(serverId, event).catch((err) =>
             logger.error({ err, event }, 'ROUND_ENDED işlenemedi'),
+          );
+          break;
+        case 'STEAM_LEVEL':
+          void handleSteamLevel(event).catch((err) =>
+            logger.error({ err, event }, 'STEAM_LEVEL işlenemedi'),
           );
           break;
         case 'SEED_SESSION':

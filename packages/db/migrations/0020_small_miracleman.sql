@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS "flags_altai_name_idx" ON "flags" USING btree ("name") WHERE "flags"."source" = 'altai';

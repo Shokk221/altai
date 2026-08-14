@@ -49,7 +49,51 @@ async function oyuncuId(
   return row?.id ?? null;
 }
 
+/**
+ * Steam seviyesi ne zaman okundu, yeniden okumaya gerek var mı?
+ *
+ * Gizli profillere AYRI ve daha kısa bir süre uygulanıyor: kullanıcı
+ * profilini açmış olabilir ve 30 gün beklemek gereksiz. Buna karşılık
+ * başarıyla okunmuş bir seviye uzun süre geçerli — Steam seviyesi yavaş
+ * değişen bir veri.
+ */
+async function steamTazeligi(
+  db: Db,
+  query: Extract<AgentQuery, { kind: 'steam_level_freshness' }>,
+): Promise<SteamTazelikYaniti> {
+  const id = await oyuncuId(db, query.steamId, null);
+  if (!id) return { bulundu: false, taze: false };
+
+  const [satir] = await db
+    .select({
+      checkedAt: identitySchema.steamProfiles.checkedAt,
+      private: identitySchema.steamProfiles.private,
+    })
+    .from(identitySchema.steamProfiles)
+    .where(eq(identitySchema.steamProfiles.playerId, id))
+    .limit(1);
+
+  if (!satir) return { bulundu: false, taze: false };
+
+  const gun = satir.private ? query.privateMaxAgeDays : query.maxAgeDays;
+  const yas = Date.now() - satir.checkedAt.getTime();
+  return { bulundu: true, taze: yas < gun * 24 * 60 * 60 * 1000 };
+}
+
+export interface SteamTazelikYaniti {
+  /** Bu oyuncu için hiç Steam kaydı var mı? */
+  bulundu: boolean;
+  /** Kayıt hâlâ taze mi — taze ise agent Steam'e istek atmıyor. */
+  taze: boolean;
+}
+
 export async function sorguyuCoz(db: Db, query: AgentQuery): Promise<unknown> {
+  // Steam tazeliği kendi kimlik çözümlemesini yapıyor: yalnızca SteamID
+  // taşıyor ve EOS alanı yok.
+  if (query.kind === 'steam_level_freshness') {
+    return steamTazeligi(db, query);
+  }
+
   const id = await oyuncuId(db, query.steamId, query.eosId);
 
   switch (query.kind) {

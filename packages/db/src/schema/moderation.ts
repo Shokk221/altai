@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { players, users } from './identity';
 import { servers } from './presence';
@@ -68,7 +69,27 @@ export const flags = pgTable(
     externalId: text('external_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [uniqueIndex('flags_source_external_idx').on(table.source, table.externalId)],
+  (table) => [
+    uniqueIndex('flags_source_external_idx').on(table.source, table.externalId),
+    /**
+     * Bizim ürettiğimiz etiketlerde ad TEKİL.
+     *
+     * Yokken gerçekten çakışma yaşandı: Steam seviye etiketlemesi dört
+     * oyuncuyu eşzamanlı işlerken "varsa bul, yoksa oluştur" mantığının
+     * SELECT ve INSERT'i arasına başka bir işlem girdi ve aynı adlı etiket
+     * iki kez oluştu. Aynı adı taşıyan iki etiket panelde ayırt edilemez,
+     * atamalar ikiye bölünür ve "bu oyuncuda bu etiket var mı" sorusu
+     * hangisine bakıldığına göre farklı cevap verir.
+     *
+     * KISMİ indeks (yalnızca source='altai'), tüm tablo değil: BM'den
+     * import edilmiş etiketlerde aynı ad bulunabilir ve o veriyi bizim
+     * kuralımız yüzünden reddetmek, migration'ı canlıda düşürürdü.
+     * İçeri aktarılan veriye geçmişe dönük kural dayatmıyoruz.
+     */
+    uniqueIndex('flags_altai_name_idx')
+      .on(table.name)
+      .where(sql`${table.source} = 'altai'`),
+  ],
 );
 
 export const flagAssignments = pgTable(

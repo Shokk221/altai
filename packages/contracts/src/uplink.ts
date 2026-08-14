@@ -50,6 +50,18 @@ export const AgentQuery = z.discriminatedUnion('kind', [
   }),
   /** Oyuncunun toplam oynama süresi ve oturum sayısı. */
   z.object({
+    kind: z.literal('steam_level_freshness'),
+    steamId: z.string(),
+    /**
+     * Kayıt kaç günden eskiyse bayat sayılır. Eşiği SORAN taraf veriyor:
+     * okuma sıklığı plugin'in ayarı ve api'nin onu ayrıca bilmesi, aynı
+     * sayıyı iki yerde tutmak olurdu.
+     */
+    maxAgeDays: z.number().int().positive(),
+    /** Gizli profiller için ayrı (daha kısa) tazelik süresi. */
+    privateMaxAgeDays: z.number().int().positive(),
+  }),
+  z.object({
     kind: z.literal('player_playtime'),
     steamId: z.string().nullish(),
     eosId: z.string().nullish(),
