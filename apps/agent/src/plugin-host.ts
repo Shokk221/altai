@@ -236,6 +236,14 @@ export class PluginHost {
         }
         await engine.rconExecute(`AdminDisbandSquad ${teamId} ${squadId}`);
       },
+      setFogOfWar: async (mode) => {
+        // Ayar/parametre doğrudan RCON'a gidiyor; yalnızca 0 ve 1 geçerli.
+        if (mode !== 0 && mode !== 1) throw new Error('setFogOfWar: mode 0 ya da 1 olmalı');
+        await engine.rconExecute(`AdminSetFogOfWar ${mode}`);
+      },
+      switchTeam: async (playerId) => {
+        await engine.rconExecute(`AdminForceTeamChange ${tekSatir(playerId)}`);
+      },
       execute: (command) => engine.rconExecute(command),
     };
 
@@ -246,6 +254,7 @@ export class PluginHost {
       status: () => engine.getStatus(),
       gercekAdminMi: (steamId, eosId) => this.adminler.gercekAdminMi(steamId, eosId),
       adminYetkileri: (steamId, eosId) => this.adminler.adminYetkileri(steamId, eosId),
+      adminGrubu: (steamId, eosId) => this.adminler.grup(steamId, eosId),
       // `?? null` şart: sorgu kanalı bağlı değilse `sorgu?.()` undefined
       // döner ve plugin'ler `=== null` ile "bilmiyoruz" durumunu kontrol
       // ediyor. undefined oradan sessizce sızsa "etiketi yok" gibi okunurdu.
@@ -262,6 +271,13 @@ export class PluginHost {
           ...(eosId ? { eosId } : {}),
         })) as { bulundu: boolean; toplamSaniye: number; oturum: number } | null | undefined) ??
         null,
+      steamSeviyeTazeMi: async (steamId, maxAgeDays, privateMaxAgeDays) =>
+        ((await this.opts.sorgu?.({
+          kind: 'steam_level_freshness',
+          steamId,
+          maxAgeDays,
+          privateMaxAgeDays,
+        })) as { bulundu: boolean; taze: boolean } | null | undefined) ?? null,
       refreshPlayers: () => engine.refreshPlayers(),
       every: (ms, fn) => {
         const z = setInterval(() => {

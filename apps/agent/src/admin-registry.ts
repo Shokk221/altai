@@ -36,17 +36,34 @@ const GERCEK_ADMIN_YETKILERI = [
 export class AdminRegistry {
   /** steam/eos kimliği -> yetki dizesi. İki kimlik de aynı kayda işaret eder. */
   private yetkiler = new Map<string, string>();
+  /**
+   * steam/eos kimliği -> grup adı (SuperAdmin, HeadAdmin, Admin, KlanWL...).
+   *
+   * Yetkiden AYRI tutuluyor çünkü ikisi farklı soruların cevabı: "bu kişi
+   * oyuncu atabilir mi" bir yetki sorusu, "bu kişi kıdemli admin mi" bir
+   * grup sorusu. Sis savaşı gibi ağır komutlar ikincisine bakıyor —
+   * `kick` yetkisi olan herkesin haritayı karartabilmesi istenmiyor.
+   */
+  private gruplar = new Map<string, string>();
   private geldiMi = false;
 
   /** api'den gelen tam listeyi uygular. */
   guncelle(admins: AdminIdentity[]): void {
     const yeni = new Map<string, string>();
+    const yeniGrup = new Map<string, string>();
     for (const a of admins) {
       // Aynı oyuncu iki kimlikle de aranabiliyor; ikisini de indeksliyoruz.
-      if (a.steamId) yeni.set(a.steamId, a.permissions);
-      if (a.eosId) yeni.set(a.eosId.toLowerCase(), a.permissions);
+      if (a.steamId) {
+        yeni.set(a.steamId, a.permissions);
+        yeniGrup.set(a.steamId, a.groupName);
+      }
+      if (a.eosId) {
+        yeni.set(a.eosId.toLowerCase(), a.permissions);
+        yeniGrup.set(a.eosId.toLowerCase(), a.groupName);
+      }
     }
     this.yetkiler = yeni;
+    this.gruplar = yeniGrup;
     this.geldiMi = true;
   }
 
@@ -67,6 +84,19 @@ export class AdminRegistry {
     if (eosId) {
       const y = this.yetkiler.get(eosId.toLowerCase());
       if (y !== undefined) return y;
+    }
+    return null;
+  }
+
+  /** Oyuncunun Admins.cfg grubu. Listede yoksa null. */
+  grup(steamId?: string | null, eosId?: string | null): string | null {
+    if (steamId) {
+      const g = this.gruplar.get(steamId);
+      if (g !== undefined) return g;
+    }
+    if (eosId) {
+      const g = this.gruplar.get(eosId.toLowerCase());
+      if (g !== undefined) return g;
     }
     return null;
   }

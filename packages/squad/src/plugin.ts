@@ -33,6 +33,21 @@ export interface PluginRcon {
   /** Mangayı dağıtır. `teamId` olmadan çağrılamaz (bkz. SQUAD_CREATED.teamId). */
   disbandSquad(teamId: number, squadId: number): Promise<void>;
   /**
+   * Sis savaşını açar/kapatır (1 = açık, 0 = kapalı).
+   *
+   * Harita genelinde etkili ve maçın gidişatını değiştiriyor; bu yüzden
+   * çağıran plugin'lerin yetkiyi grup düzeyinde kontrol etmesi bekleniyor.
+   */
+  setFogOfWar(mode: 0 | 1): Promise<void>;
+  /**
+   * Oyuncunun takımını değiştirir.
+   *
+   * Squad'ın kendi komutu hedef takım ALMIYOR — oyuncuyu karşı tarafa
+   * geçiriyor, o kadar. Bu yüzden "1. takıma al" diye bir çağrı yok;
+   * çağıran taraf oyuncunun mevcut takımına bakıp karar vermek zorunda.
+   */
+  switchTeam(playerId: string): Promise<void>;
+  /**
    * Kaçış kapısı. Yüzeyde karşılığı olmayan komutlar için; kullanımı
    * bilinçli olarak rahatsız edici, çünkü her kullanım bu arayüzün
    * eksik olduğunun işareti.
@@ -75,6 +90,14 @@ export interface PluginContext {
   adminYetkileri(steamId?: string | null, eosId?: string | null): string | null;
 
   /**
+   * Oyuncunun Admins.cfg grup adı ("SuperAdmin", "KlanWL"...). Yoksa null.
+   *
+   * Yetkiden ayrı bir soru: `kick` yetkisi olan herkes kıdemli admin
+   * değildir. Ağır komutlar (sis savaşı gibi) buna bakıyor.
+   */
+  adminGrubu(steamId?: string | null, eosId?: string | null): string | null;
+
+  /**
    * Oyuncunun AKTİF etiketleri (kaldırılmamış olanlar).
    *
    * Veri api'de; agent Postgres'e dokunmuyor. Bağlantı kopuksa ya da sorgu
@@ -92,6 +115,23 @@ export interface PluginContext {
     steamId?: string | null,
     eosId?: string | null,
   ): Promise<{ bulundu: boolean; toplamSaniye: number; oturum: number } | null>;
+
+  /**
+   * api'de bu SteamID için TAZE bir seviye kaydı var mı?
+   *
+   * Amaç dış servise gereksiz istek atmamak: Steam seviyesi yavaş değişen
+   * bir veri ve her girişte sormak kotayı boşa harcıyor. Kaydın ne zaman
+   * okunduğunu api biliyor, karar da orada veriliyor.
+   *
+   * Bilinmiyorsa (bağlantı yok, zaman aşımı) `null` döner — çağıran taraf
+   * bunu "taze değil" sayıp okumayı denemeli: bir dış sorgunun
+   * başarısızlığı yüzünden veri hiç toplanmamalı.
+   */
+  steamSeviyeTazeMi(
+    steamId: string,
+    maxAgeDays: number,
+    privateMaxAgeDays: number,
+  ): Promise<{ bulundu: boolean; taze: boolean } | null>;
 
   /**
    * Periyodik iş kaydeder.
