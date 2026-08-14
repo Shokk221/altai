@@ -3,6 +3,7 @@ import type { Db } from '@altai/db';
 import { chatSchema, identitySchema, matchesSchema, presenceSchema } from '@altai/db';
 import { logger } from '@altai/shared';
 import { and, desc, eq, isNull } from 'drizzle-orm';
+import { cblUyarisiniIsle } from './cbl-alerts.js';
 import { VARSAYILAN_ODUL, seedOdulunuDegerlendir } from './seed-whitelist.js';
 import { steamSeviyesiniIsle } from './steam-level-flags.js';
 
@@ -404,6 +405,15 @@ export function createPersistenceWriter(db: Db): PersistenceWriter {
     await steamSeviyesiniIsle(db, playerId, event.level, event.private);
   }
 
+  async function handleCblAlert(event: Extract<AgentEvent, { type: 'CBL_ALERT' }>) {
+    const playerId = await oyuncuyuBulVeyaOlustur(db, event.steamId, event.eosId);
+    if (!playerId) {
+      logger.warn({ event }, 'CBL uyarısı yazılamadı: oyuncu kimliği çözülemedi');
+      return;
+    }
+    await cblUyarisiniIsle(db, playerId, event.reputationPoints);
+  }
+
   return {
     write(serverId, event) {
       if (stopped) return;
@@ -437,6 +447,11 @@ export function createPersistenceWriter(db: Db): PersistenceWriter {
         case 'ROUND_ENDED':
           void handleRoundEnded(serverId, event).catch((err) =>
             logger.error({ err, event }, 'ROUND_ENDED işlenemedi'),
+          );
+          break;
+        case 'CBL_ALERT':
+          void handleCblAlert(event).catch((err) =>
+            logger.error({ err, event }, 'CBL_ALERT işlenemedi'),
           );
           break;
         case 'STEAM_LEVEL':

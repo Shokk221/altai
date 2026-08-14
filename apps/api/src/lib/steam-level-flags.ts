@@ -1,7 +1,7 @@
 import type { Db } from '@altai/db';
-import { identitySchema, moderationSchema } from '@altai/db';
+import { identitySchema } from '@altai/db';
 import { logger } from '@altai/shared';
-import { and, eq, isNull } from 'drizzle-orm';
+import { etiketiUygula } from './player-flags.js';
 
 /**
  * Steam seviyesine göre etiketleme.
@@ -51,62 +51,6 @@ export const VARSAYILAN_ESIKLER: SeviyeEsigi[] = [
   },
 ];
 
-/** Etiketi bulur, yoksa oluşturur. */
-async function flagIdBulVeyaOlustur(db: Db, esik: SeviyeEsigi): Promise<string | null> {
-  // Yalnızca KENDİ ürettiğimiz etiketlere bakılıyor: BM'den import edilmiş
-  // aynı adlı bir etiket varsa ona atama yapmak, iki sistemin kayıtlarını
-  // birbirine karıştırmak olurdu.
-  const bizimki = and(
-    eq(moderationSchema.flags.name, esik.flagAdi),
-    eq(moderationSchema.flags.source, 'altai'),
-  );
-
-  const [mevcut] = await db
-    .select({ id: moderationSchema.flags.id })
-    .from(moderationSchema.flags)
-    .where(bizimki)
-    .limit(1);
-  if (mevcut) return mevcut.id;
-
-  // `onConflictDoNothing` + yeniden okuma: iki oyuncu aynı anda işlenirken
-  // SELECT ile INSERT arasına başka bir işlem girebiliyor. Tekil indeks
-  // (flags_name_idx) çakışmayı ENGELLİYOR, burası da o çakışmayı hataya
-  // dönüştürmeden çözüyor — kaybeden taraf kazananın satırını okuyor.
-  const [olusan] = await db
-    .insert(moderationSchema.flags)
-    .values({
-      name: esik.flagAdi,
-      description: esik.aciklama,
-      color: esik.renk,
-    })
-    .onConflictDoNothing()
-    .returning({ id: moderationSchema.flags.id });
-  if (olusan) return olusan.id;
-
-  const [yaris] = await db
-    .select({ id: moderationSchema.flags.id })
-    .from(moderationSchema.flags)
-    .where(bizimki)
-    .limit(1);
-  return yaris?.id ?? null;
-}
-
-/** Oyuncuda bu etiket şu an aktif mi? */
-async function aktifAtamaVarMi(db: Db, playerId: string, flagId: string): Promise<boolean> {
-  const [satir] = await db
-    .select({ id: moderationSchema.flagAssignments.id })
-    .from(moderationSchema.flagAssignments)
-    .where(
-      and(
-        eq(moderationSchema.flagAssignments.playerId, playerId),
-        eq(moderationSchema.flagAssignments.flagId, flagId),
-        isNull(moderationSchema.flagAssignments.removedAt),
-      ),
-    )
-    .limit(1);
-  return Boolean(satir);
-}
-
 /**
  * Seviyeyi kaydeder ve etiketleri güncel duruma getirir.
  *
@@ -139,34 +83,13 @@ export async function steamSeviyesiniIsle(
     const hakEdilen = esikler.find((e) => level < e.altinda) ?? null;
 
     for (const esik of esikler) {
-      const flagId = await flagIdBulVeyaOlustur(db, esik);
-      if (!flagId) continue;
-
-      const olmali = hakEdilen?.flagAdi === esik.flagAdi;
-      const var_ = await aktifAtamaVarMi(db, playerId, flagId);
-
-      if (olmali && !var_) {
-        await db.insert(moderationSchema.flagAssignments).values({
-          flagId,
-          playerId,
-          addedByName: 'steam-level',
-        });
-        logger.info({ playerId, level, flag: esik.flagAdi }, 'Steam seviye etiketi atandı');
-      } else if (!olmali && var_) {
-        // Kaldırma SİLME değil işaretleme: "bu oyuncuda ne zaman bu etiket
-        // vardı" sorusu geçmişe dönük cevaplanabilmeli.
-        await db
-          .update(moderationSchema.flagAssignments)
-          .set({ removedAt: new Date() })
-          .where(
-            and(
-              eq(moderationSchema.flagAssignments.playerId, playerId),
-              eq(moderationSchema.flagAssignments.flagId, flagId),
-              isNull(moderationSchema.flagAssignments.removedAt),
-            ),
-          );
-        logger.info({ playerId, level, flag: esik.flagAdi }, 'Steam seviye etiketi kaldırıldı');
-      }
+      await etiketiUygula(
+        db,
+        playerId,
+        { ad: esik.flagAdi, renk: esik.renk, aciklama: esik.aciklama },
+        hakEdilen?.flagAdi === esik.flagAdi,
+        'steam-level',
+      );
     }
   } catch (err) {
     logger.error({ err, playerId, level }, 'Steam seviyesi işlenemedi');

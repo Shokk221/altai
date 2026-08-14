@@ -229,6 +229,35 @@ export const SteamLevelEvent = z.object({
   timestamp: z.string().datetime(),
 });
 
+/**
+ * Community Ban List'te yüksek itibar puanı olan bir oyuncu bağlandı.
+ *
+ * CBL, Squad topluluğunun ortak ban listesi: başka sunucularda ban yemiş
+ * oyuncuları itibar puanıyla derecelendiriyor. Yüksek puan "bu kişi
+ * başka yerlerde sorun çıkarmış" demek — otomatik bir yaptırım DEĞİL,
+ * adminlere bir uyarı.
+ *
+ * Bu yüzden olay yalnızca BİLGİ taşıyor; ne yapılacağına insan karar
+ * veriyor. Eski plugin de tam olarak böyle davranıyordu: Discord'a bir
+ * kart basıyor, kimseyi atmıyordu.
+ */
+export const CblAlertEvent = z.object({
+  type: z.literal('CBL_ALERT'),
+  serverSlug: z.string(),
+  playerName: z.string(),
+  steamId: z.string(),
+  eosId: z.string().nullish(),
+  /** CBL itibar puanı — yüksek olan kötü. */
+  reputationPoints: z.number(),
+  /** 0-10 arası risk derecesi. */
+  riskRating: z.number().nullish(),
+  reputationRank: z.number().int().nullish(),
+  activeBans: z.number().int().nonnegative().default(0),
+  expiredBans: z.number().int().nonnegative().default(0),
+  avatarUrl: z.string().nullish(),
+  timestamp: z.string().datetime(),
+});
+
 export const AgentEvent = z.discriminatedUnion('type', [
   PlayerConnectedEvent,
   PlayerDisconnectedEvent,
@@ -242,6 +271,7 @@ export const AgentEvent = z.discriminatedUnion('type', [
   TeamkillEvent,
   SeedSessionEvent,
   SteamLevelEvent,
+  CblAlertEvent,
 ]);
 
 export type AgentEvent = z.infer<typeof AgentEvent>;
