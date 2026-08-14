@@ -3,6 +3,7 @@ import type { Db } from '@altai/db';
 import { chatSchema, identitySchema, matchesSchema, presenceSchema } from '@altai/db';
 import { logger } from '@altai/shared';
 import { and, desc, eq, isNull } from 'drizzle-orm';
+import { VARSAYILAN_ODUL, seedOdulunuDegerlendir } from './seed-whitelist.js';
 
 const RAW_EVENTS_FLUSH_INTERVAL_MS = 2_000;
 const RAW_EVENTS_FLUSH_MAX_BATCH = 200;
@@ -333,6 +334,66 @@ export function createPersistenceWriter(db: Db): PersistenceWriter {
       .where(eq(matchesSchema.rounds.id, open.id));
   }
 
+  /**
+   * Oyuncuyu kimliğinden bulur, yoksa oluşturur.
+   *
+   * `upsertPlayer`'dan farkı SteamID'siz oyuncuyu da kabul etmesi. Squad
+   * artık oyuncuyu EOS ile tanıyor ve RCON listesinde SteamID'si hiç
+   * görünmeyen oyuncular oluyor; seed süresini "SteamID'si yok" diye
+   * düşürmek, o kişinin ödülünü sessizce yok etmek olurdu.
+   */
+  async function oyuncuyuBulVeyaOlustur(
+    db: Db,
+    steamId: string | null | undefined,
+    eosId: string | null | undefined,
+  ): Promise<string | null> {
+    if (steamId) {
+      const oyuncu = await upsertPlayer(db, steamId, eosId ?? undefined, '');
+      return oyuncu?.id ?? null;
+    }
+
+    if (!eosId) return null;
+    // EOS kimlikleri veritabanında küçük harf tutuluyor.
+    const eos = eosId.toLowerCase();
+
+    const [mevcut] = await db
+      .select({ id: identitySchema.players.id })
+      .from(identitySchema.players)
+      .where(eq(identitySchema.players.eosId, eos))
+      .limit(1);
+    if (mevcut) return mevcut.id;
+
+    const [olusan] = await db
+      .insert(identitySchema.players)
+      .values({ eosId: eos })
+      .returning({ id: identitySchema.players.id });
+    return olusan?.id ?? null;
+  }
+
+  async function handleSeedSession(
+    serverId: string,
+    event: Extract<AgentEvent, { type: 'SEED_SESSION' }>,
+  ) {
+    const playerId = await oyuncuyuBulVeyaOlustur(db, event.steamId, event.eosId);
+    if (!playerId) {
+      logger.warn({ event }, 'seed oturumu yazılamadı: oyuncu kimliği çözülemedi');
+      return;
+    }
+
+    await db.insert(presenceSchema.seedSessions).values({
+      serverId,
+      playerId,
+      startedAt: new Date(event.startedAt),
+      endedAt: new Date(event.endedAt),
+      durationSeconds: event.durationSeconds,
+      seedReason: event.seedReason,
+      wasAdmin: event.wasAdmin,
+    });
+
+    // Ödül değerlendirmesi kayıttan SONRA: eşiği geçiren süre de sayılsın.
+    await seedOdulunuDegerlendir(db, playerId, VARSAYILAN_ODUL);
+  }
+
   return {
     write(serverId, event) {
       if (stopped) return;
@@ -366,6 +427,11 @@ export function createPersistenceWriter(db: Db): PersistenceWriter {
         case 'ROUND_ENDED':
           void handleRoundEnded(serverId, event).catch((err) =>
             logger.error({ err, event }, 'ROUND_ENDED işlenemedi'),
+          );
+          break;
+        case 'SEED_SESSION':
+          void handleSeedSession(serverId, event).catch((err) =>
+            logger.error({ err, event }, 'SEED_SESSION işlenemedi'),
           );
           break;
         case 'CHAT_MESSAGE':

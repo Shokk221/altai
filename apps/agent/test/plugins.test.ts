@@ -3,9 +3,12 @@ import type { SquadJSEngine, SquadJSOnlinePlayer } from '@altai/squad';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PluginHost } from '../src/plugin-host.js';
 import {
+  autoSeedScheduler,
   autoTkWarn,
   nameEnforcer,
   playtimeSquadGuard,
+  seedTracker,
+  seedingMode,
   slBanEnforcer,
   slKitEnforcer,
   welcomeWarn,
@@ -828,5 +831,344 @@ describe('sl-ban-enforcer', () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(s.sorulan).toEqual([]);
     expect(h.acikPluginler()).toEqual(['sl-ban-enforcer']);
+  });
+});
+
+describe('seed-tracker', () => {
+  const cfg = (config: Record<string, unknown> = {}) => ({
+    pluginName: 'seed-tracker',
+    enabled: true,
+    config: { minSessionSeconds: 0, checkIntervalSeconds: 30, ...config },
+  });
+
+  /** Emit edilen olayları toplayan host. */
+  function seedHost(e: SahteEngine, admins: AdminIdentity[] = []) {
+    const olaylar: AgentEvent[] = [];
+    const h = new PluginHost({
+      serverSlug: 'squad-01',
+      engine: e,
+      emit: (ev) => olaylar.push(ev),
+    });
+    if (admins.length > 0) h.adminListesiniGuncelle(admins);
+    h.register(seedTracker);
+    return { h, olaylar };
+  }
+
+  const oyuncu = (over: Partial<SquadJSOnlinePlayer> = {}): SquadJSOnlinePlayer =>
+    ({
+      steamId: '76561190000000001',
+      eosId: 'abcdef01234567890abcdef012345678',
+      name: 'Ali',
+      teamId: 1,
+      squadId: 1,
+      isLeader: false,
+      role: 'USA_Rifleman_01',
+      ...over,
+    }) as SquadJSOnlinePlayer;
+
+  const seedOlaylari = (olaylar: AgentEvent[]) =>
+    olaylar.filter((o) => o.type === 'SEED_SESSION') as Extract<
+      AgentEvent,
+      { type: 'SEED_SESSION' }
+    >[];
+
+  it('seed haritasında geçen süreyi gamemode sebebiyle yazar', async () => {
+    const e = sahteEngine();
+    e.layer = 'Sumari_Seed_v1';
+    e.oyuncular.push(oyuncu());
+    const { h, olaylar } = seedHost(e);
+    await h.applyConfigs([cfg()]);
+
+    await vi.advanceTimersByTimeAsync(30_000); // takip başlar
+    await vi.advanceTimersByTimeAsync(60_000); // sürer
+    e.oyuncular.length = 0;
+    await vi.advanceTimersByTimeAsync(30_000); // hayalet temizliği kapatır
+
+    const s = seedOlaylari(olaylar);
+    expect(s).toHaveLength(1);
+    expect(s[0]?.seedReason).toBe('gamemode');
+    expect(s[0]?.durationSeconds).toBeGreaterThanOrEqual(60);
+  });
+
+  it('sunucu az doluysa seed sayılır ama sebebi player_count olur', async () => {
+    // Ayrım şart: admin nöbeti YALNIZCA seed haritasını sayıyordu,
+    // haftalık ödül ise az dolu sunucuyu da sayıyordu.
+    const e = sahteEngine();
+    e.layer = 'Narva_RAAS_v1';
+    e.oyuncular.push(oyuncu());
+    const { h, olaylar } = seedHost(e);
+    await h.applyConfigs([cfg({ playerCountThreshold: 50 })]);
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(60_000);
+    e.oyuncular.length = 0;
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(seedOlaylari(olaylar)[0]?.seedReason).toBe('player_count');
+  });
+
+  it('sunucu BOŞKEN kimse süre biriktirmez', async () => {
+    // Kimsenin olmadığı sunucuda "doldurma" diye bir şey yok; aksi hâlde
+    // sunucu kapalıyken herkes süre kazanırdı.
+    const e = sahteEngine();
+    e.layer = 'Narva_RAAS_v1';
+    const { h, olaylar } = seedHost(e);
+    await h.applyConfigs([cfg({ playerCountThreshold: 50 })]);
+
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(seedOlaylari(olaylar)).toEqual([]);
+  });
+
+  it('sunucu dolunca (canlı) takip kapanır ve süre yazılır', async () => {
+    const e = sahteEngine();
+    e.layer = 'Narva_RAAS_v1';
+    e.oyuncular.push(oyuncu());
+    const { h, olaylar } = seedHost(e);
+    await h.applyConfigs([cfg({ playerCountThreshold: 2 })]);
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    // Sunucu doldu: eşiğin üstüne çık.
+    e.oyuncular.push(oyuncu({ steamId: '76561190000000002', eosId: null, name: 'Veli' }));
+    e.oyuncular.push(oyuncu({ steamId: '76561190000000003', eosId: null, name: 'Ayse' }));
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(seedOlaylari(olaylar)).toHaveLength(1);
+  });
+
+  it('admin yetkisi kayda wasAdmin olarak geçer', async () => {
+    const e = sahteEngine();
+    e.layer = 'Sumari_Seed_v1';
+    e.oyuncular.push(oyuncu());
+    const { h, olaylar } = seedHost(e, [
+      { steamId: '76561190000000001', groupName: 'Admin', permissions: 'kick,ban' },
+    ]);
+    await h.applyConfigs([cfg()]);
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    e.oyuncular.length = 0;
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(seedOlaylari(olaylar)[0]?.wasAdmin).toBe(true);
+  });
+
+  it('YALNIZCA reserve yetkisi olan admin SAYILMAZ', async () => {
+    // Bağışçı/klan whitelist'i admin değil; nöbet raporuna girmemeli.
+    const e = sahteEngine();
+    e.layer = 'Sumari_Seed_v1';
+    e.oyuncular.push(oyuncu());
+    const { h, olaylar } = seedHost(e, [
+      { steamId: '76561190000000001', groupName: 'BagisWL', permissions: 'reserve' },
+    ]);
+    await h.applyConfigs([cfg()]);
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    e.oyuncular.length = 0;
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(seedOlaylari(olaylar)[0]?.wasAdmin).toBe(false);
+  });
+
+  it('kısa aralıklar gönderilmez', async () => {
+    // Harita geçişlerinde oyuncular saniyeler içinde düşüp geliyor; bu
+    // gürültü tabloyu anlamsız satırlarla dolduruyordu.
+    const e = sahteEngine();
+    e.layer = 'Sumari_Seed_v1';
+    e.oyuncular.push(oyuncu());
+    const { h, olaylar } = seedHost(e);
+    await h.applyConfigs([cfg({ minSessionSeconds: 60, checkIntervalSeconds: 10 })]);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    e.oyuncular.length = 0;
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(seedOlaylari(olaylar)).toEqual([]);
+  });
+
+  it('round bitince aralık KAPANIR — canlı maça taşınmaz', async () => {
+    const e = sahteEngine();
+    e.layer = 'Sumari_Seed_v1';
+    e.oyuncular.push(oyuncu());
+    const { h, olaylar } = seedHost(e);
+    await h.applyConfigs([cfg()]);
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await h.handleEvent({
+      type: 'ROUND_ENDED',
+      serverSlug: 'squad-01',
+      timestamp: new Date().toISOString(),
+    });
+
+    expect(seedOlaylari(olaylar)).toHaveLength(1);
+  });
+
+  it('uzun oturum checkpoint ile parçalanır', async () => {
+    // Agent çökerse yalnızca son parça kaybolsun.
+    const e = sahteEngine();
+    e.layer = 'Sumari_Seed_v1';
+    e.oyuncular.push(oyuncu());
+    const { h, olaylar } = seedHost(e);
+    await h.applyConfigs([cfg({ checkpointMinutes: 5, checkIntervalSeconds: 30 })]);
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(11 * 60_000);
+
+    expect(seedOlaylari(olaylar).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('plugin kapanınca biriken süre KAYBOLMAZ', async () => {
+    const e = sahteEngine();
+    e.layer = 'Sumari_Seed_v1';
+    e.oyuncular.push(oyuncu());
+    const { h, olaylar } = seedHost(e);
+    await h.applyConfigs([cfg()]);
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await h.applyConfigs([]);
+
+    expect(seedOlaylari(olaylar)).toHaveLength(1);
+  });
+
+  it('EOS ile takip edilen oyuncunun ayrılışı SteamID olayıyla yakalanır', async () => {
+    // PLAYER_DISCONNECTED yalnızca SteamID taşıyor; anahtarı doğrudan
+    // aramak EOS ile takip edilen oyuncuyu kaçırırdı.
+    const e = sahteEngine();
+    e.layer = 'Sumari_Seed_v1';
+    e.oyuncular.push(oyuncu());
+    const { h, olaylar } = seedHost(e);
+    await h.applyConfigs([cfg()]);
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await h.handleEvent({
+      type: 'PLAYER_DISCONNECTED',
+      serverSlug: 'squad-01',
+      steamId: '76561190000000001',
+      timestamp: new Date().toISOString(),
+    });
+
+    expect(seedOlaylari(olaylar)).toHaveLength(1);
+  });
+});
+
+describe('seeding-mode', () => {
+  const cfg = (config: Record<string, unknown> = {}) => ({
+    pluginName: 'seeding-mode',
+    enabled: true,
+    config: { intervalSeconds: 30, ...config },
+  });
+
+  it('eşiğin altında seed kuralları duyurulur', async () => {
+    const e = sahteEngine();
+    e.oyuncular.push({} as SquadJSOnlinePlayer);
+    const h = host(e);
+    h.register(seedingMode);
+    await h.applyConfigs([cfg({ seedingThreshold: 50, seedingMessage: 'Seed kurallari' })]);
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(e.komutlar).toEqual(['AdminBroadcast Seed kurallari']);
+  });
+
+  it('sunucu BOŞKEN duyuru yapılmaz', async () => {
+    const e = sahteEngine();
+    const h = host(e);
+    h.register(seedingMode);
+    await h.applyConfigs([cfg()]);
+
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(e.komutlar).toEqual([]);
+  });
+
+  it('yeni harita sonrası kısa süre sessiz kalır', async () => {
+    // Harita geçişinin hemen ardından oyuncu sayısı oturmamış oluyor;
+    // dolu sunucuda "seed kuralları" duyurmak yanlış mesaj demekti.
+    const e = sahteEngine();
+    e.oyuncular.push({} as SquadJSOnlinePlayer);
+    const h = host(e);
+    h.register(seedingMode);
+    await h.applyConfigs([cfg({ newGameQuietSeconds: 60 })]);
+
+    await h.handleEvent({
+      type: 'ROUND_STARTED',
+      serverSlug: 'squad-01',
+      timestamp: new Date().toISOString(),
+    });
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(e.komutlar).toEqual([]);
+
+    // Sessizlik 60. saniyede bitiyor; bir sonraki tur duyuruyu yapmalı.
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect(e.komutlar).toHaveLength(1);
+  });
+});
+
+describe('auto-seed-scheduler', () => {
+  const cfg = (config: Record<string, unknown> = {}) => ({
+    pluginName: 'auto-seed-scheduler',
+    enabled: true,
+    config: { roundEndDelaySeconds: 0, ...config },
+  });
+
+  it('round sonunda sunucu boşsa seed haritasına geçer', async () => {
+    const e = sahteEngine();
+    e.layer = 'Narva_RAAS_v1';
+    const h = host(e);
+    h.register(autoSeedScheduler);
+    await h.applyConfigs([cfg({ roundEndPlayerThreshold: 25, layer: 'Sumari_Seed_v1' })]);
+
+    await h.handleEvent({
+      type: 'ROUND_ENDED',
+      serverSlug: 'squad-01',
+      timestamp: new Date().toISOString(),
+    });
+    expect(e.komutlar).toEqual(['AdminChangeLayer Sumari_Seed_v1']);
+  });
+
+  it('sunucu doluysa round sonunda geçiş YAPILMAZ', async () => {
+    const e = sahteEngine();
+    e.layer = 'Narva_RAAS_v1';
+    for (let i = 0; i < 30; i++) e.oyuncular.push({} as SquadJSOnlinePlayer);
+    const h = host(e);
+    h.register(autoSeedScheduler);
+    await h.applyConfigs([cfg({ roundEndPlayerThreshold: 25 })]);
+
+    await h.handleEvent({
+      type: 'ROUND_ENDED',
+      serverSlug: 'squad-01',
+      timestamp: new Date().toISOString(),
+    });
+    expect(e.komutlar).toEqual([]);
+  });
+
+  it('zaten seed haritasındaysa geçiş yapılmaz', async () => {
+    const e = sahteEngine();
+    e.layer = 'Sumari_Seed_v1';
+    const h = host(e);
+    h.register(autoSeedScheduler);
+    await h.applyConfigs([cfg()]);
+
+    await h.handleEvent({
+      type: 'ROUND_ENDED',
+      serverSlug: 'squad-01',
+      timestamp: new Date().toISOString(),
+    });
+    expect(e.komutlar).toEqual([]);
+  });
+
+  it('harita adında boşluk varsa komut GÖNDERİLMEZ', async () => {
+    // Ayar panelden geliyor; boşluklu bir değer RCON komutunu ikiye böler.
+    const e = sahteEngine();
+    e.layer = 'Narva_RAAS_v1';
+    const h = host(e);
+    h.register(autoSeedScheduler);
+    await h.applyConfigs([cfg({ layer: 'Sumari Seed v1' })]);
+
+    await h.handleEvent({
+      type: 'ROUND_ENDED',
+      serverSlug: 'squad-01',
+      timestamp: new Date().toISOString(),
+    });
+    expect(e.komutlar).toEqual([]);
   });
 });
