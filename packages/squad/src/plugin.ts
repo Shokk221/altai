@@ -94,6 +94,23 @@ export interface PluginContext {
   ): Promise<{ bulundu: boolean; toplamSaniye: number; oturum: number } | null>;
 
   /**
+   * api'de bu SteamID için TAZE bir seviye kaydı var mı?
+   *
+   * Amaç dış servise gereksiz istek atmamak: Steam seviyesi yavaş değişen
+   * bir veri ve her girişte sormak kotayı boşa harcıyor. Kaydın ne zaman
+   * okunduğunu api biliyor, karar da orada veriliyor.
+   *
+   * Bilinmiyorsa (bağlantı yok, zaman aşımı) `null` döner — çağıran taraf
+   * bunu "taze değil" sayıp okumayı denemeli: bir dış sorgunun
+   * başarısızlığı yüzünden veri hiç toplanmamalı.
+   */
+  steamSeviyeTazeMi(
+    steamId: string,
+    maxAgeDays: number,
+    privateMaxAgeDays: number,
+  ): Promise<{ bulundu: boolean; taze: boolean } | null>;
+
+  /**
    * Periyodik iş kaydeder.
    *
    * Zamanlayıcıyı plugin DEĞİL host tutuyor: plugin kapatıldığında hepsi

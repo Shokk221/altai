@@ -11,6 +11,7 @@ import {
   seedingMode,
   slBanEnforcer,
   slKitEnforcer,
+  steamLevel,
   welcomeWarn,
 } from '../src/plugins/index.js';
 
@@ -1170,5 +1171,174 @@ describe('auto-seed-scheduler', () => {
       timestamp: new Date().toISOString(),
     });
     expect(e.komutlar).toEqual([]);
+  });
+});
+
+describe('steam-level', () => {
+  const cfg = (config: Record<string, unknown> = {}) => ({
+    pluginName: 'steam-level',
+    enabled: true,
+    config: { delaySeconds: 0, ...config },
+  });
+
+  /** Steam API'yi ve tazelik sorgusunu sahteleyen host. */
+  function kur(
+    steamCevabi: unknown,
+    tazelik: { bulundu: boolean; taze: boolean } | null = { bulundu: false, taze: false },
+  ) {
+    const e = sahteEngine();
+    const olaylar: AgentEvent[] = [];
+    const sorgular: AgentQuery[] = [];
+    const h = new PluginHost({
+      serverSlug: 'squad-01',
+      engine: e,
+      emit: (ev) => olaylar.push(ev),
+      secrets: { steamApiKey: 'TEST_KEY' },
+      sorgu: async (q) => {
+        sorgular.push(q);
+        return tazelik;
+      },
+    });
+    h.register(steamLevel);
+    vi.stubGlobal('fetch', async () => steamCevabi);
+    return { h, olaylar, sorgular };
+  }
+
+  const seviyeOlaylari = (olaylar: AgentEvent[]) =>
+    olaylar.filter((o) => o.type === 'STEAM_LEVEL') as Extract<
+      AgentEvent,
+      { type: 'STEAM_LEVEL' }
+    >[];
+
+  const cevap = (body: unknown, ok = true) => ({
+    ok,
+    status: ok ? 200 : 500,
+    json: async () => body,
+  });
+
+  it('okunan seviyeyi bildirir', async () => {
+    const { h, olaylar } = kur(cevap({ response: { player_level: 2 } }));
+    await h.applyConfigs([cfg()]);
+    await h.handleEvent(baglandi('Ali'));
+
+    const s = seviyeOlaylari(olaylar);
+    expect(s).toHaveLength(1);
+    expect(s[0]?.level).toBe(2);
+    expect(s[0]?.private).toBe(false);
+    expect(s[0]?.steamId).toBe('76561190000000001');
+  });
+
+  it('seviye 0 da geçerli bir cevaptır', async () => {
+    // Gerçekten seviye 0 olan hesaplar var; bunu "okunamadı" saymak
+    // en düşük seviyeli hesapları etiketsiz bırakırdı.
+    const { h, olaylar } = kur(cevap({ response: { player_level: 0 } }));
+    await h.applyConfigs([cfg()]);
+    await h.handleEvent(baglandi('Ali'));
+
+    expect(seviyeOlaylari(olaylar)[0]?.level).toBe(0);
+  });
+
+  it('gizli profil "seviye 0" DEĞİL, level null gider', async () => {
+    // En kritik ayrım: Steam gizli profilde boş response dönüyor. Bunu 0
+    // saymak, profilini kapatmış herkesi kırmızı etiketlerdi.
+    const { h, olaylar } = kur(cevap({ response: {} }));
+    await h.applyConfigs([cfg()]);
+    await h.handleEvent(baglandi('Ali'));
+
+    const s = seviyeOlaylari(olaylar);
+    expect(s).toHaveLength(1);
+    expect(s[0]?.level).toBeNull();
+    expect(s[0]?.private).toBe(true);
+  });
+
+  it('Steam ulaşılamazsa hiçbir şey bildirilmez', async () => {
+    // "Okunamadı" kaydı yazmak bir sonraki denemeyi de gereksizce erteler.
+    const { h, olaylar } = kur(cevap({}, false));
+    await h.applyConfigs([cfg()]);
+    await h.handleEvent(baglandi('Ali'));
+
+    expect(seviyeOlaylari(olaylar)).toEqual([]);
+  });
+
+  it('ağ hatası plugin’i düşürmez', async () => {
+    const e = sahteEngine();
+    const olaylar: AgentEvent[] = [];
+    const h = new PluginHost({
+      serverSlug: 'squad-01',
+      engine: e,
+      emit: (ev) => olaylar.push(ev),
+      secrets: { steamApiKey: 'TEST_KEY' },
+      sorgu: async () => ({ bulundu: false, taze: false }),
+    });
+    h.register(steamLevel);
+    vi.stubGlobal('fetch', async () => {
+      throw new Error('ağ hatası');
+    });
+    await h.applyConfigs([cfg()]);
+    await h.handleEvent(baglandi('Ali'));
+
+    expect(seviyeOlaylari(olaylar)).toEqual([]);
+    expect(h.acikPluginler()).toEqual(['steam-level']);
+  });
+
+  it('api’de TAZE kayıt varsa Steam’e hiç gidilmez', async () => {
+    // Steam kotasını korumanın tek yolu bu; seviye yavaş değişen bir veri.
+    let istekSayisi = 0;
+    const e = sahteEngine();
+    const olaylar: AgentEvent[] = [];
+    const h = new PluginHost({
+      serverSlug: 'squad-01',
+      engine: e,
+      emit: (ev) => olaylar.push(ev),
+      secrets: { steamApiKey: 'TEST_KEY' },
+      sorgu: async () => ({ bulundu: true, taze: true }),
+    });
+    h.register(steamLevel);
+    vi.stubGlobal('fetch', async () => {
+      istekSayisi++;
+      return cevap({ response: { player_level: 2 } });
+    });
+    await h.applyConfigs([cfg()]);
+    await h.handleEvent(baglandi('Ali'));
+
+    expect(istekSayisi).toBe(0);
+    expect(seviyeOlaylari(olaylar)).toEqual([]);
+  });
+
+  it('tazelik sorgusu cevapsızsa (null) yine de OKUNUR', async () => {
+    // Bir dış sorgunun başarısızlığı yüzünden veri hiç toplanmamalı;
+    // birkaç fazla Steam isteği bundan ucuz.
+    const { h, olaylar } = kur(cevap({ response: { player_level: 1 } }), null);
+    await h.applyConfigs([cfg()]);
+    await h.handleEvent(baglandi('Ali'));
+
+    expect(seviyeOlaylari(olaylar)).toHaveLength(1);
+  });
+
+  it('tazelik sorgusu plugin ayarındaki eşikleri taşır', async () => {
+    const { h, sorgular } = kur(cevap({ response: { player_level: 1 } }));
+    await h.applyConfigs([cfg({ recheckDays: 45, privateRecheckDays: 3 })]);
+    await h.handleEvent(baglandi('Ali'));
+
+    expect(sorgular[0]).toEqual({
+      kind: 'steam_level_freshness',
+      steamId: '76561190000000001',
+      maxAgeDays: 45,
+      privateMaxAgeDays: 3,
+    });
+  });
+
+  it('SteamID’si olmayan oyuncu için istek atılmaz', async () => {
+    const { h, sorgular } = kur(cevap({ response: { player_level: 1 } }));
+    await h.applyConfigs([cfg()]);
+    await h.handleEvent({
+      type: 'PLAYER_CONNECTED',
+      serverSlug: 'squad-01',
+      steamId: '',
+      name: 'Kimliksiz',
+      timestamp: new Date().toISOString(),
+    });
+
+    expect(sorgular).toEqual([]);
   });
 });

@@ -9,6 +9,7 @@ import { seedTracker } from './seed-tracker.js';
 import { seedingMode } from './seeding-mode.js';
 import { slBanEnforcer } from './sl-ban-enforcer.js';
 import { slKitEnforcer } from './sl-kit-enforcer.js';
+import { steamLevel } from './steam-level.js';
 import { welcomeWarn } from './welcome-warn.js';
 
 /**
@@ -30,6 +31,7 @@ export const PLUGINS: AnyPlugin[] = [
   seedTracker,
   seedingMode,
   autoSeedScheduler,
+  steamLevel,
 ];
 
 export {
@@ -44,4 +46,5 @@ export {
   seedTracker,
   seedingMode,
   autoSeedScheduler,
+  steamLevel,
 };

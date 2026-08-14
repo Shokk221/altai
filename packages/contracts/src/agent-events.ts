@@ -178,17 +178,54 @@ export const TeamkillEvent = z.object({
   timestamp: z.string().datetime(),
 });
 
+/**
+ * Kapanmış bir seed (sunucu doldurma) aralığı.
+ *
+ * Eski sistem bunu JOIN ve LEAVE olarak iki ayrı satır yazıyordu; toplam
+ * süre okunurken ikisinin eşleştirilmesi gerekiyordu ve agent çöktüğünde
+ * eşi olmayan JOIN satırları kalıyordu — "orphan reconciliation" diye ayrı
+ * bir mekanizma sırf bunun için vardı.
+ *
+ * Burada olay KAPALI BİR ARALIK: başlangıcı, bitişi ve süresi kendi
+ * içinde. Yarım kayıt diye bir şey olmadığı için eşleştirme de kurtarma da
+ * gerekmiyor. Uzun oturumlar periyodik olarak parçalara bölünüp
+ * gönderiliyor; toplam, parçaların toplamı.
+ */
 export const SeedSessionEvent = z.object({
   type: z.literal('SEED_SESSION'),
   serverSlug: z.string(),
   playerName: z.string(),
-  steamId: z.string().optional(),
-  eosId: z.string().optional(),
+  steamId: z.string().nullish(),
+  eosId: z.string().nullish(),
   startedAt: z.string().datetime(),
   endedAt: z.string().datetime(),
   durationSeconds: z.number().int().nonnegative(),
+  /** Sunucu neden "seed" sayıldı. Admin nöbeti yalnızca 'gamemode' sayar. */
   seedReason: z.enum(['gamemode', 'player_count']),
+  /** Oturum sırasında gerçek admin yetkisi var mıydı. */
   wasAdmin: z.boolean(),
+  timestamp: z.string().datetime(),
+});
+
+/**
+ * Oyuncunun Steam hesap seviyesi.
+ *
+ * Plugin yalnızca OKUDUĞUNU bildiriyor; hangi seviyenin hangi etiketi hak
+ * ettiğine api karar veriyor. Eşikler panelden yönetilen bir ayar ve
+ * etiketler veritabanındaki satırlar — ikisi de oyun sunucusundaki bir
+ * dosyada durmamalı.
+ *
+ * `level` NULL olabilir: profil gizliyse Steam seviye vermiyor. Bu "seviye
+ * 0" DEĞİL. Karıştırmak, profilini kapatmış herkesi en düşük seviyeymiş
+ * gibi damgalamak olurdu.
+ */
+export const SteamLevelEvent = z.object({
+  type: z.literal('STEAM_LEVEL'),
+  serverSlug: z.string(),
+  steamId: z.string(),
+  level: z.number().int().nonnegative().nullable(),
+  /** Seviye okunamadıysa sebebi gizli profil miydi. */
+  private: z.boolean().default(false),
   timestamp: z.string().datetime(),
 });
 
@@ -204,6 +241,7 @@ export const AgentEvent = z.discriminatedUnion('type', [
   PlayerStateChangeEvent,
   TeamkillEvent,
   SeedSessionEvent,
+  SteamLevelEvent,
 ]);
 
 export type AgentEvent = z.infer<typeof AgentEvent>;
