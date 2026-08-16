@@ -15,6 +15,7 @@ import {
   seedingMode,
   slBanEnforcer,
   slKitEnforcer,
+  squadClaim,
   squadJoinRequest,
   steamLevel,
   teamRandomizer,
@@ -2013,5 +2014,176 @@ describe('elite-commander', () => {
     });
     await vi.advanceTimersByTimeAsync(10_000);
     expect(e.komutlar.length).toBeGreaterThan(ilk);
+  });
+});
+
+describe('squad-claim', () => {
+  const kur = async (
+    e: SahteEngine,
+    config: Record<string, unknown> = {},
+    admins: AdminIdentity[] = [],
+  ) => {
+    const h = host(e, admins);
+    h.register(squadClaim);
+    await h.applyConfigs([
+      {
+        pluginName: 'squad-claim',
+        enabled: true,
+        config: { adminCooldownSeconds: 0, playerCooldownSeconds: 0, ...config },
+      },
+    ]);
+    return h;
+  };
+
+  const mangaKuruldu = (
+    squadId: string,
+    squadName: string,
+    teamId: number,
+    ms: number,
+  ): AgentEvent => ({
+    type: 'SQUAD_CREATED',
+    serverSlug: 'squad-01',
+    playerName: 'Kurucu',
+    steamId: '76561190000000009',
+    squadId,
+    squadName,
+    teamId,
+    timestamp: new Date(ms).toISOString(),
+  });
+
+  function sahne(e: SahteEngine) {
+    e.oyuncular.push(
+      {
+        steamId: '76561190000000001',
+        eosId: null,
+        name: 'Soran',
+        teamId: 1,
+        squadId: 1,
+        squadName: 'ALPHA',
+        isLeader: true,
+        role: 'r',
+      } as SquadJSOnlinePlayer,
+      {
+        steamId: '76561190000000002',
+        eosId: null,
+        name: 'Uye3',
+        teamId: 1,
+        squadId: 3,
+        squadName: 'CHARLIE',
+        isLeader: true,
+        role: 'r',
+      } as SquadJSOnlinePlayer,
+      {
+        steamId: '76561190000000003',
+        eosId: null,
+        name: 'Uye5',
+        teamId: 1,
+        squadId: 5,
+        squadName: 'ECHO',
+        isLeader: true,
+        role: 'r',
+      } as SquadJSOnlinePlayer,
+    );
+  }
+
+  it('mangaları kuruluş sırasına göre listeler', async () => {
+    const e = sahteEngine();
+    sahne(e);
+    const h = await kur(e);
+    // 5 numaralı manga ÖNCE kuruldu.
+    await h.handleEvent(mangaKuruldu('5', 'ECHO', 1, Date.UTC(2026, 0, 1, 10, 0, 0)));
+    await h.handleEvent(mangaKuruldu('3', 'CHARLIE', 1, Date.UTC(2026, 0, 1, 10, 5, 0)));
+
+    await h.handleEvent(komutMesaji('!claim 3 5'));
+
+    const warn = e.komutlar.find((c) => c.startsWith('AdminWarn'));
+    expect(warn).toBeDefined();
+    const govde = warn as string;
+    expect(govde.indexOf('Manga 5')).toBeLessThan(govde.indexOf('Manga 3'));
+  });
+
+  it('KARŞI takımın mangası sayılmaz', async () => {
+    // Aynı numara iki takımda da var; karıştırmak yanlış mangayı gösterir.
+    const e = sahteEngine();
+    sahne(e);
+    const h = await kur(e);
+    await h.handleEvent(mangaKuruldu('3', 'CHARLIE', 2, Date.UTC(2026, 0, 1, 10, 0, 0)));
+    await h.handleEvent(mangaKuruldu('5', 'ECHO', 1, Date.UTC(2026, 0, 1, 10, 5, 0)));
+
+    await h.handleEvent(komutMesaji('!claim 3 5'));
+    expect(e.komutlar[0]).toContain('En az iki geçerli');
+  });
+
+  it('tek numara yetersiz', async () => {
+    const e = sahteEngine();
+    sahne(e);
+    const h = await kur(e);
+    await h.handleEvent(komutMesaji('!claim 3'));
+    expect(e.komutlar[0]).toContain('En az iki manga numarası');
+  });
+
+  it('round bitince liste SIFIRLANIR', async () => {
+    // İddia yalnızca o maç içinde geçerli.
+    const e = sahteEngine();
+    sahne(e);
+    const h = await kur(e);
+    await h.handleEvent(mangaKuruldu('3', 'CHARLIE', 1, Date.UTC(2026, 0, 1, 10, 0, 0)));
+    await h.handleEvent(mangaKuruldu('5', 'ECHO', 1, Date.UTC(2026, 0, 1, 10, 5, 0)));
+    await h.handleEvent({
+      type: 'ROUND_ENDED',
+      serverSlug: 'squad-01',
+      timestamp: new Date().toISOString(),
+    });
+
+    await h.handleEvent(komutMesaji('!claim 3 5'));
+    expect(e.komutlar[0]).toContain('En az iki geçerli');
+  });
+
+  it('dağılmış manga listeden düşer', async () => {
+    const e = sahteEngine();
+    sahne(e);
+    const h = await kur(e);
+    await h.handleEvent(mangaKuruldu('3', 'CHARLIE', 1, Date.UTC(2026, 0, 1, 10, 0, 0)));
+    await h.handleEvent(mangaKuruldu('7', 'GOLF', 1, Date.UTC(2026, 0, 1, 10, 1, 0)));
+    await h.handleEvent(mangaKuruldu('5', 'ECHO', 1, Date.UTC(2026, 0, 1, 10, 5, 0)));
+
+    // 7 numaralı mangada kimse yok -> dağılmış.
+    await h.handleEvent(komutMesaji('!claim 3 5 7'));
+    const warn = e.komutlar.find((c) => c.startsWith('AdminWarn')) as string;
+    expect(warn).toContain('Bulunamadı: 7');
+  });
+
+  it('onlySquadLeader açıkken lider olmayan kullanamaz', async () => {
+    const e = sahteEngine();
+    sahne(e);
+    const soran = e.oyuncular[0];
+    if (soran) soran.isLeader = false;
+    const h = await kur(e, { onlySquadLeader: true });
+    await h.handleEvent(komutMesaji('!claim 3 5'));
+    expect(e.komutlar[0]).toContain('manga liderleri');
+  });
+
+  it('bekleme süresi uygulanır', async () => {
+    const e = sahteEngine();
+    sahne(e);
+    const h = await kur(e, { playerCooldownSeconds: 10 });
+    await h.handleEvent(mangaKuruldu('3', 'CHARLIE', 1, Date.UTC(2026, 0, 1, 10, 0, 0)));
+    await h.handleEvent(mangaKuruldu('5', 'ECHO', 1, Date.UTC(2026, 0, 1, 10, 5, 0)));
+
+    await h.handleEvent(komutMesaji('!claim 3 5'));
+    e.komutlar.length = 0;
+    await h.handleEvent(komutMesaji('!claim 3 5'));
+    expect(e.komutlar[0]).toContain('saniye bekle');
+  });
+
+  it('virgüllü yazım da kabul edilir', async () => {
+    const e = sahteEngine();
+    sahne(e);
+    const h = await kur(e);
+    await h.handleEvent(mangaKuruldu('3', 'CHARLIE', 1, Date.UTC(2026, 0, 1, 10, 0, 0)));
+    await h.handleEvent(mangaKuruldu('5', 'ECHO', 1, Date.UTC(2026, 0, 1, 10, 5, 0)));
+
+    await h.handleEvent(komutMesaji('!claim 3,5'));
+    expect(e.komutlar.some((c) => c.includes('Manga 3'))).toBe(true);
   });
 });

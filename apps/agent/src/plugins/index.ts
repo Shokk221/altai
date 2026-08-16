@@ -13,6 +13,7 @@ import { seedTracker } from './seed-tracker.js';
 import { seedingMode } from './seeding-mode.js';
 import { slBanEnforcer } from './sl-ban-enforcer.js';
 import { slKitEnforcer } from './sl-kit-enforcer.js';
+import { squadClaim } from './squad-claim.js';
 import { squadJoinRequest } from './squad-join-request.js';
 import { steamLevel } from './steam-level.js';
 import { teamRandomizer } from './team-randomizer.js';
@@ -44,6 +45,7 @@ export const PLUGINS: AnyPlugin[] = [
   fogOfWar,
   cblInfo,
   eliteCommander,
+  squadClaim,
 ];
 
 export {
@@ -65,4 +67,5 @@ export {
   fogOfWar,
   cblInfo,
   eliteCommander,
+  squadClaim,
 };
