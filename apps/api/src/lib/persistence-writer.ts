@@ -1,6 +1,12 @@
 import type { AgentEvent } from '@altai/contracts';
 import type { Db } from '@altai/db';
-import { chatSchema, identitySchema, matchesSchema, presenceSchema } from '@altai/db';
+import {
+  chatSchema,
+  identitySchema,
+  matchesSchema,
+  moderationSchema,
+  presenceSchema,
+} from '@altai/db';
 import { logger } from '@altai/shared';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { cblUyarisiniIsle } from './cbl-alerts.js';
@@ -414,6 +420,59 @@ export function createPersistenceWriter(db: Db): PersistenceWriter {
     await cblUyarisiniIsle(db, playerId, event.reputationPoints);
   }
 
+  /**
+   * Admin kamera oturumları.
+   *
+   * Tablo (admin_cam_logs) vardı ama YALNIZCA eski sistemin Mongo aktarımı
+   * dolduruyordu; canlı agent'tan gelen kamera girişleri hiçbir yere
+   * yazılmıyordu. Yani sistem devreye alındığı andan itibaren "hangi admin
+   * ne zaman kameradaydı" sorusu cevapsız kalıyordu — moderasyon
+   * hesapverebilirliğinin doğrudan parçası olan bir kayıt.
+   *
+   * Giriş satırı açık (`left_at` null) yazılıyor, çıkışta kapatılıyor.
+   * Kimliksiz kamera olayları atlanıyor: kime ait olduğu bilinmeyen bir
+   * oturum kaydı, olmayan kayıttan daha yanıltıcı.
+   */
+  async function handleAdminCam(
+    serverId: string,
+    event: Extract<AgentEvent, { type: 'ADMIN_ACTION' }>,
+  ) {
+    const playerId = await oyuncuyuBulVeyaOlustur(db, event.steamId ?? null, event.eosId ?? null);
+    if (!playerId) return;
+
+    const zaman = new Date(event.timestamp);
+
+    if (event.action === 'cam_enter') {
+      await db
+        .insert(moderationSchema.adminCamLogs)
+        .values({ serverId, playerId, enteredAt: zaman })
+        // (player_id, entered_at) tekil: aynı olay iki kez gelirse
+        // (spool yeniden gönderimi) ikinci satır oluşmamalı.
+        .onConflictDoNothing();
+      return;
+    }
+
+    // Çıkış: bu oyuncunun AÇIK kalan en son oturumunu kapat. Birden fazla
+    // açık satır olmamalı ama olursa en yenisi doğru olan.
+    const [acik] = await db
+      .select({ id: moderationSchema.adminCamLogs.id })
+      .from(moderationSchema.adminCamLogs)
+      .where(
+        and(
+          eq(moderationSchema.adminCamLogs.playerId, playerId),
+          isNull(moderationSchema.adminCamLogs.leftAt),
+        ),
+      )
+      .orderBy(desc(moderationSchema.adminCamLogs.enteredAt))
+      .limit(1);
+
+    if (!acik) return;
+    await db
+      .update(moderationSchema.adminCamLogs)
+      .set({ leftAt: zaman })
+      .where(eq(moderationSchema.adminCamLogs.id, acik.id));
+  }
+
   return {
     write(serverId, event) {
       if (stopped) return;
@@ -448,6 +507,13 @@ export function createPersistenceWriter(db: Db): PersistenceWriter {
           void handleRoundEnded(serverId, event).catch((err) =>
             logger.error({ err, event }, 'ROUND_ENDED işlenemedi'),
           );
+          break;
+        case 'ADMIN_ACTION':
+          if (event.action === 'cam_enter' || event.action === 'cam_exit') {
+            void handleAdminCam(serverId, event).catch((err) =>
+              logger.error({ err, event }, 'admin kamera kaydı işlenemedi'),
+            );
+          }
           break;
         case 'CBL_ALERT':
           void handleCblAlert(event).catch((err) =>

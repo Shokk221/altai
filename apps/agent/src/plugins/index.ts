@@ -1,4 +1,5 @@
 import type { AnyPlugin } from '@altai/squad';
+import { adminCamWatchlist } from './admin-cam-watchlist.js';
 import { autoKickUnassigned } from './auto-kick-unassigned.js';
 import { autoSeedScheduler } from './auto-seed-scheduler.js';
 import { autoTkWarn } from './auto-tk-warn.js';
@@ -46,6 +47,7 @@ export const PLUGINS: AnyPlugin[] = [
   cblInfo,
   eliteCommander,
   squadClaim,
+  adminCamWatchlist,
 ];
 
 export {
@@ -68,4 +70,5 @@ export {
   cblInfo,
   eliteCommander,
   squadClaim,
+  adminCamWatchlist,
 };

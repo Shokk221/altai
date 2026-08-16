@@ -271,6 +271,19 @@ export class PluginHost {
           ...(eosId ? { eosId } : {}),
         })) as { bulundu: boolean; toplamSaniye: number; oturum: number } | null | undefined) ??
         null,
+      etiketliOyuncular: async (ids, flagNames) => {
+        if (ids.length === 0) return [];
+        return (
+          ((await this.opts.sorgu?.({
+            kind: 'flagged_players',
+            ids,
+            flagNames: flagNames ?? [],
+          })) as
+            | Array<{ steamId: string | null; eosId: string | null; flags: string[] }>
+            | null
+            | undefined) ?? null
+        );
+      },
       steamSeviyeTazeMi: async (steamId, maxAgeDays, privateMaxAgeDays) =>
         ((await this.opts.sorgu?.({
           kind: 'steam_level_freshness',
