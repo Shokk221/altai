@@ -148,6 +148,13 @@
       "when": 1786705772974,
       "tag": "0020_small_miracleman",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1786887184041,
+      "tag": "0021_green_spirit",
+      "breakpoints": true
     }
   ]
 }

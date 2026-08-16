@@ -335,7 +335,7 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
             app.log.warn({ err, correlationId }, 'sorgu cevabı gönderilemedi (bağlantı kapalı)');
           }
         };
-        void sorguyuCoz(db, query)
+        void sorguyuCoz(db, query, serverId ?? undefined)
           .then((data) => cevapla({ correlationId, ok: true, data }))
           .catch((err) => {
             app.log.error({ err, kind: query.kind }, 'agent sorgusu çözülemedi');

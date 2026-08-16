@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
   boolean,
   index,
@@ -128,4 +129,66 @@ export const steamProfiles = pgTable(
     checkedAt: timestamp('checked_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [index('steam_profiles_checked_idx').on(table.checkedAt)],
+);
+
+/**
+ * Klanlar.
+ *
+ * Üyelik SteamID ile yönetiliyor: klan yöneticisi panele SteamID listesi
+ * yapıştırıyor, sistem oyuncuyu bulup (yoksa oluşturup) bağlıyor. Discord
+ * rolüne bağlamak daha zarif olurdu ama klan üyelerinin çoğunun Discord
+ * hesabı bizimkine bağlı değil — 550 whitelist kaydından yalnızca 97'sinin
+ * bağı var. Bağlı olmayan herkesi klansız saymak, takım dengeleyicinin
+ * klanları bir arada tutma işini büyük ölçüde işlevsiz bırakırdı.
+ */
+export const clans = pgTable(
+  'clans',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** Görünen ad ("Altai Kartalları"). */
+    name: text('name').notNull(),
+    /**
+     * Oyun içi etiket ("ALTAI", "[AK]").
+     *
+     * Takım dengeleyici oyuncu ADINDA bunu arayabiliyor: üyelik listesinde
+     * olmayan ama isminde etiket taşıyan oyuncular da klanla birlikte
+     * tutulsun diye. Bu yüzden kısa ve ayırt edici olmalı.
+     */
+    tag: text('tag'),
+    color: text('color'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex('clans_name_idx').on(table.name)],
+);
+
+/**
+ * Klan üyeliği.
+ *
+ * Ayrılma SİLME değil işaretleme: "bu oyuncu o maçta hangi klandaydı"
+ * sorusu geçmişe dönük sorulabilmeli — takım dengeleme kararlarının
+ * neden öyle verildiğini açıklayan tek kayıt bu.
+ */
+export const clanMembers = pgTable(
+  'clan_members',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    clanId: uuid('clan_id')
+      .notNull()
+      .references(() => clans.id),
+    playerId: uuid('player_id')
+      .notNull()
+      .references(() => players.id),
+    addedAt: timestamp('added_at', { withTimezone: true }).defaultNow().notNull(),
+    removedAt: timestamp('removed_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('clan_members_clan_idx').on(table.clanId),
+    index('clan_members_player_idx').on(table.playerId),
+    // Bir oyuncu aynı klana iki kez AKTİF üye olamaz. Kısmi indeks:
+    // ayrılıp geri dönen üyenin eski kaydı duruyor ve tam indeks bunu
+    // engellerdi.
+    uniqueIndex('clan_members_aktif_idx')
+      .on(table.clanId, table.playerId)
+      .where(sql`${table.removedAt} is null`),
+  ],
 );

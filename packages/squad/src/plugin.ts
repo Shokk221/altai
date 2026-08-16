@@ -117,6 +117,48 @@ export interface PluginContext {
   ): Promise<{ bulundu: boolean; toplamSaniye: number; oturum: number } | null>;
 
   /**
+   * Verilen kimliklerin klan üyelikleri — TEK sorguda.
+   *
+   * Yalnızca aktif üyelikler döner. Klanı olmayan oyuncular cevapta yer
+   * almaz. Bilinmiyorsa `null` — "kimse klanlı değil" ile karıştırılmamalı.
+   */
+  oyuncuKlanlari(ids: string[]): Promise<Array<{
+    steamId: string | null;
+    eosId: string | null;
+    clan: string;
+    tag: string | null;
+  }> | null>;
+
+  /**
+   * Sunucunun son maçları (yeniden eskiye).
+   *
+   * Galibiyet serisi bundan TÜRETİLİYOR; plugin kendi sayacını tutmuyor.
+   * İkinci bir doğruluk kaynağı, agent yeniden başladığında ya da iki
+   * sunucu aynı veriyi yazdığında ayrışacak bir sayaç demekti.
+   *
+   * Bilinmiyorsa `null`.
+   */
+  sonMaclar(limit: number): Promise<Array<{
+    winnerTeam: number | null;
+    winnerTickets: number | null;
+    loserTickets: number | null;
+  }> | null>;
+
+  /**
+   * Verilen kimlikler arasında etiketi olanlar — TEK sorguda.
+   *
+   * Oyuncu başına ayrı sormak dolu bir sunucuda yüzlerce tur demek ve
+   * cevap gelene kadar çağıran plugin bekliyor. `flagNames` boş
+   * bırakılırsa bütün etiketler döner.
+   *
+   * Bilinmiyorsa `null` — "kimsenin etiketi yok" ile karıştırılmamalı.
+   */
+  etiketliOyuncular(
+    ids: string[],
+    flagNames?: string[],
+  ): Promise<Array<{ steamId: string | null; eosId: string | null; flags: string[] }> | null>;
+
+  /**
    * api'de bu SteamID için TAZE bir seviye kaydı var mı?
    *
    * Amaç dış servise gereksiz istek atmamak: Steam seviyesi yavaş değişen

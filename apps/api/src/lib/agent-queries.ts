@@ -1,7 +1,7 @@
 import type { AgentQuery } from '@altai/contracts';
 import type { Db } from '@altai/db';
-import { identitySchema, moderationSchema } from '@altai/db';
-import { and, eq, isNull, or, sql } from 'drizzle-orm';
+import { identitySchema, matchesSchema, moderationSchema } from '@altai/db';
+import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 
 /**
  * Agent'ın sorabildiği soruların cevapları.
@@ -80,6 +80,156 @@ async function steamTazeligi(
   return { bulundu: true, taze: yas < gun * 24 * 60 * 60 * 1000 };
 }
 
+export interface OyuncuKlani {
+  steamId: string | null;
+  eosId: string | null;
+  clan: string;
+  tag: string | null;
+}
+
+/**
+ * Verilen kimliklerin klanları — tek turda.
+ *
+ * Takım dengeleyici bunu karıştırma planı kurarken çağırıyor: klan
+ * üyelerini aynı tarafta tutmak için önce kimin hangi klanda olduğunu
+ * bilmesi gerekiyor. Oyuncu başına sormak 80 tur demekti.
+ *
+ * Yalnızca AKTİF üyelikler. Ayrılmış üye kaydı duruyor (tarihçe) ama
+ * bugünün takım kararına girmemeli.
+ */
+async function oyuncuKlanlari(db: Db, ids: string[]): Promise<OyuncuKlani[]> {
+  const steamler = ids.filter((k) => /^7656119\d{10}$/.test(k));
+  const eoslar = ids.filter((k) => /^[0-9a-f]{32}$/i.test(k)).map((k) => k.toLowerCase());
+  if (steamler.length === 0 && eoslar.length === 0) return [];
+
+  const kimlikKosulu = [];
+  if (steamler.length > 0) kimlikKosulu.push(inArray(identitySchema.players.steamId, steamler));
+  if (eoslar.length > 0) kimlikKosulu.push(inArray(identitySchema.players.eosId, eoslar));
+
+  const rows = await db
+    .select({
+      steamId: identitySchema.players.steamId,
+      eosId: identitySchema.players.eosId,
+      clan: identitySchema.clans.name,
+      tag: identitySchema.clans.tag,
+    })
+    .from(identitySchema.clanMembers)
+    .innerJoin(identitySchema.clans, eq(identitySchema.clans.id, identitySchema.clanMembers.clanId))
+    .innerJoin(
+      identitySchema.players,
+      eq(identitySchema.players.id, identitySchema.clanMembers.playerId),
+    )
+    .where(and(isNull(identitySchema.clanMembers.removedAt), or(...kimlikKosulu)));
+
+  return rows;
+}
+
+export interface MacOzeti {
+  winnerTeam: number | null;
+  winnerTickets: number | null;
+  loserTickets: number | null;
+}
+
+/**
+ * Sunucunun son maçları — yeniden eskiye.
+ *
+ * Eski `teambalancer` galibiyet serisini kendi SQLite dosyasında
+ * tutuyordu, çünkü SquadJS'in maç geçmişi yoktu. Bizde `rounds` tablosu
+ * zaten var ve seri ondan TÜRETİLİYOR: ikinci bir doğruluk kaynağı
+ * tutmak, agent yeniden başladığında ya da iki sunucu aynı veriyi
+ * yazdığında ayrışacak bir sayaç demekti.
+ */
+async function sonMaclar(db: Db, serverId: string | undefined, limit: number): Promise<MacOzeti[]> {
+  if (!serverId) return [];
+  const rows = await db
+    .select({
+      winnerTeam: matchesSchema.rounds.winnerTeam,
+      team1Tickets: matchesSchema.rounds.team1Tickets,
+      team2Tickets: matchesSchema.rounds.team2Tickets,
+    })
+    .from(matchesSchema.rounds)
+    .where(
+      and(eq(matchesSchema.rounds.serverId, serverId), isNotNull(matchesSchema.rounds.endedAt)),
+    )
+    .orderBy(desc(matchesSchema.rounds.endedAt))
+    .limit(limit);
+
+  return rows.map((r) => {
+    const kazanan = r.winnerTeam ?? null;
+    const kazananBilet = kazanan === 1 ? r.team1Tickets : kazanan === 2 ? r.team2Tickets : null;
+    const kaybedenBilet = kazanan === 1 ? r.team2Tickets : kazanan === 2 ? r.team1Tickets : null;
+    return {
+      winnerTeam: kazanan,
+      winnerTickets: kazananBilet ?? null,
+      loserTickets: kaybedenBilet ?? null,
+    };
+  });
+}
+
+export interface EtiketliOyuncu {
+  steamId: string | null;
+  eosId: string | null;
+  flags: string[];
+}
+
+/**
+ * Verilen kimlikler arasında AKTİF etiketi olanlar.
+ *
+ * Tek turda cevap veriyor: admin kameraya geçtiğinde sunucudaki herkes
+ * için ayrı sorgu atmak, cevabı saniyelerce geciktirirdi.
+ *
+ * Etiketi OLMAYAN oyuncular cevapta hiç yer almıyor — çağıran taraf
+ * zaten kimleri sorduğunu biliyor ve boş satır göndermek, dolu bir
+ * sunucuda cevabın çoğunu anlamsız veriyle şişirirdi.
+ */
+async function etiketliOyuncular(
+  db: Db,
+  query: Extract<AgentQuery, { kind: 'flagged_players' }>,
+): Promise<EtiketliOyuncu[]> {
+  // Kimlikler karışık gelebiliyor (steam ya da eos). EOS küçük harfle
+  // saklandığı için ikisi ayrı ayrı karşılaştırılıyor.
+  const steamler = query.ids.filter((k) => /^7656119\d{10}$/.test(k));
+  const eoslar = query.ids.filter((k) => /^[0-9a-f]{32}$/i.test(k)).map((k) => k.toLowerCase());
+  if (steamler.length === 0 && eoslar.length === 0) return [];
+
+  const kimlikKosulu = [];
+  if (steamler.length > 0) kimlikKosulu.push(inArray(identitySchema.players.steamId, steamler));
+  if (eoslar.length > 0) kimlikKosulu.push(inArray(identitySchema.players.eosId, eoslar));
+
+  const rows = await db
+    .select({
+      steamId: identitySchema.players.steamId,
+      eosId: identitySchema.players.eosId,
+      flag: moderationSchema.flags.name,
+    })
+    .from(moderationSchema.flagAssignments)
+    .innerJoin(
+      moderationSchema.flags,
+      eq(moderationSchema.flags.id, moderationSchema.flagAssignments.flagId),
+    )
+    .innerJoin(
+      identitySchema.players,
+      eq(identitySchema.players.id, moderationSchema.flagAssignments.playerId),
+    )
+    .where(and(isNull(moderationSchema.flagAssignments.removedAt), or(...kimlikKosulu)));
+
+  // Ad süzmesi SQL'de değil burada: karşılaştırma harf duyarsız ve
+  // Türkçe'ye özgü (İ/ı), veritabanının collation'ına bırakılamaz.
+  const aranan = new Set(query.flagNames.map((f) => f.toLocaleUpperCase('tr-TR')));
+
+  const sonuc = new Map<string, EtiketliOyuncu>();
+  for (const r of rows) {
+    if (aranan.size > 0 && !aranan.has(r.flag.toLocaleUpperCase('tr-TR'))) continue;
+    const anahtar = r.steamId ?? r.eosId ?? '';
+    if (!anahtar) continue;
+    const mevcut = sonuc.get(anahtar);
+    if (mevcut) mevcut.flags.push(r.flag);
+    else sonuc.set(anahtar, { steamId: r.steamId, eosId: r.eosId, flags: [r.flag] });
+  }
+
+  return [...sonuc.values()];
+}
+
 export interface SteamTazelikYaniti {
   /** Bu oyuncu için hiç Steam kaydı var mı? */
   bulundu: boolean;
@@ -87,11 +237,23 @@ export interface SteamTazelikYaniti {
   taze: boolean;
 }
 
-export async function sorguyuCoz(db: Db, query: AgentQuery): Promise<unknown> {
+export async function sorguyuCoz(db: Db, query: AgentQuery, serverId?: string): Promise<unknown> {
   // Steam tazeliği kendi kimlik çözümlemesini yapıyor: yalnızca SteamID
   // taşıyor ve EOS alanı yok.
   if (query.kind === 'steam_level_freshness') {
     return steamTazeligi(db, query);
+  }
+
+  if (query.kind === 'flagged_players') {
+    return etiketliOyuncular(db, query);
+  }
+
+  if (query.kind === 'recent_rounds') {
+    return sonMaclar(db, serverId, query.limit);
+  }
+
+  if (query.kind === 'player_clans') {
+    return oyuncuKlanlari(db, query.ids);
   }
 
   const id = await oyuncuId(db, query.steamId, query.eosId);

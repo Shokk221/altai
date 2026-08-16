@@ -1,4 +1,5 @@
 import type { AnyPlugin } from '@altai/squad';
+import { adminCamWatchlist } from './admin-cam-watchlist.js';
 import { autoKickUnassigned } from './auto-kick-unassigned.js';
 import { autoSeedScheduler } from './auto-seed-scheduler.js';
 import { autoTkWarn } from './auto-tk-warn.js';
@@ -16,6 +17,7 @@ import { slKitEnforcer } from './sl-kit-enforcer.js';
 import { squadClaim } from './squad-claim.js';
 import { squadJoinRequest } from './squad-join-request.js';
 import { steamLevel } from './steam-level.js';
+import { teamBalancer } from './team-balancer.js';
 import { teamRandomizer } from './team-randomizer.js';
 import { welcomeWarn } from './welcome-warn.js';
 
@@ -46,6 +48,8 @@ export const PLUGINS: AnyPlugin[] = [
   cblInfo,
   eliteCommander,
   squadClaim,
+  adminCamWatchlist,
+  teamBalancer,
 ];
 
 export {
@@ -68,4 +72,6 @@ export {
   cblInfo,
   eliteCommander,
   squadClaim,
+  adminCamWatchlist,
+  teamBalancer,
 };

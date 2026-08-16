@@ -3,6 +3,7 @@ import type { SquadJSEngine, SquadJSOnlinePlayer } from '@altai/squad';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PluginHost } from '../src/plugin-host.js';
 import {
+  adminCamWatchlist,
   autoSeedScheduler,
   autoTkWarn,
   cblInfo,
@@ -18,6 +19,7 @@ import {
   squadClaim,
   squadJoinRequest,
   steamLevel,
+  teamBalancer,
   teamRandomizer,
   welcomeWarn,
 } from '../src/plugins/index.js';
@@ -2185,5 +2187,386 @@ describe('squad-claim', () => {
 
     await h.handleEvent(komutMesaji('!claim 3,5'));
     expect(e.komutlar.some((c) => c.includes('Manga 3'))).toBe(true);
+  });
+});
+
+describe('admin-cam-watchlist', () => {
+  function kur(
+    e: SahteEngine,
+    etiketliler: Array<{ steamId: string | null; eosId: string | null; flags: string[] }> | null,
+    config: Record<string, unknown> = {},
+    admins: AdminIdentity[] = [],
+  ) {
+    const sorulan: AgentQuery[] = [];
+    const h = new PluginHost({
+      serverSlug: 'squad-01',
+      engine: e,
+      emit: () => undefined,
+      sorgu: async (q) => {
+        sorulan.push(q);
+        return etiketliler;
+      },
+    });
+    if (admins.length > 0) h.adminListesiniGuncelle(admins);
+    h.register(adminCamWatchlist);
+    return {
+      h,
+      sorulan,
+      hazir: h.applyConfigs([
+        {
+          pluginName: 'admin-cam-watchlist',
+          enabled: true,
+          config: { warnDelaySeconds: 0, adminCooldownSeconds: 0, ...config },
+        },
+      ]),
+    };
+  }
+
+  function sahne(e: SahteEngine) {
+    e.oyuncular.push(
+      {
+        steamId: '76561190000000001',
+        eosId: null,
+        name: 'Supheli',
+        teamId: 1,
+        squadId: 1,
+        squadName: 'A',
+        isLeader: false,
+        role: 'r',
+      } as SquadJSOnlinePlayer,
+      {
+        steamId: '76561190000000002',
+        eosId: null,
+        name: 'Temiz',
+        teamId: 1,
+        squadId: 1,
+        squadName: 'A',
+        isLeader: false,
+        role: 'r',
+      } as SquadJSOnlinePlayer,
+    );
+  }
+
+  const kameraya = (steamId = '76561190000000009'): AgentEvent => ({
+    type: 'ADMIN_ACTION',
+    serverSlug: 'squad-01',
+    action: 'cam_enter',
+    steamId,
+    timestamp: new Date().toISOString(),
+  });
+
+  it('kameraya geçen admine izlenen oyuncuları gösterir', async () => {
+    const e = sahteEngine();
+    sahne(e);
+    const { h, hazir } = kur(e, [
+      { steamId: '76561190000000001', eosId: null, flags: ['Hile Şüphelisi'] },
+    ]);
+    await hazir;
+    await h.handleEvent(kameraya());
+
+    expect(e.komutlar).toHaveLength(1);
+    expect(e.komutlar[0]).toContain('Supheli');
+    expect(e.komutlar[0]).toContain('Hile Şüphelisi');
+  });
+
+  it('TEK sorgu atılır — oyuncu başına değil', async () => {
+    // Dolu sunucuda oyuncu başına sorgu, cevabı saniyelerce geciktirirdi.
+    const e = sahteEngine();
+    sahne(e);
+    const { h, sorulan, hazir } = kur(e, []);
+    await hazir;
+    await h.handleEvent(kameraya());
+
+    expect(sorulan).toHaveLength(1);
+    expect(sorulan[0]?.kind).toBe('flagged_players');
+  });
+
+  it('izlenen kimse yoksa varsayılan olarak sessiz', async () => {
+    const e = sahteEngine();
+    sahne(e);
+    const { h, hazir } = kur(e, []);
+    await hazir;
+    await h.handleEvent(kameraya());
+    expect(e.komutlar).toEqual([]);
+  });
+
+  it('notifyWhenEmpty açıkken boş liste de bildirilir', async () => {
+    const e = sahteEngine();
+    sahne(e);
+    const { h, hazir } = kur(e, [], { notifyWhenEmpty: true });
+    await hazir;
+    await h.handleEvent(kameraya());
+    expect(e.komutlar[0]).toContain('izlenecek oyuncu yok');
+  });
+
+  it('sorgu cevapsızsa SESSIZ KALINMAZ', async () => {
+    // Sessizlik, admine "izlenecek kimse yok" izlenimi verirdi; oysa
+    // bilmiyoruz. İkisi farklı şeyler.
+    const e = sahteEngine();
+    sahne(e);
+    const { h, hazir } = kur(e, null);
+    await hazir;
+    await h.handleEvent(kameraya());
+    expect(e.komutlar[0]).toContain('alınamadı');
+  });
+
+  it('liste uzunsa kırpılır ve kalan sayısı yazılır', async () => {
+    const e = sahteEngine();
+    sahne(e);
+    const cok = Array.from({ length: 20 }, (_, i) => ({
+      steamId: `7656119000000${String(i).padStart(4, '0')}`,
+      eosId: null,
+      flags: ['İzlenecek Oyuncu'],
+    }));
+    const { h, hazir } = kur(e, cok, { maxPlayersInMessage: 5 });
+    await hazir;
+    await h.handleEvent(kameraya());
+    expect(e.komutlar[0]).toContain('+15 kişi daha');
+  });
+
+  it('!takip komutu YETKİSİZ oyuncuda çalışmaz', async () => {
+    // Kimin izlendiği moderasyon bilgisi; sızarsa izleme anlamını yitirir.
+    const e = sahteEngine();
+    sahne(e);
+    const { h, hazir } = kur(e, [
+      { steamId: '76561190000000001', eosId: null, flags: ['Hile Şüphelisi'] },
+    ]);
+    await hazir;
+    await h.handleEvent(komutMesaji('!takip', 'Admin'));
+    expect(e.komutlar).toEqual([]);
+  });
+
+  it('!takip komutu adminde listeyi gönderir', async () => {
+    const e = sahteEngine();
+    sahne(e);
+    const { h, hazir } = kur(
+      e,
+      [{ steamId: '76561190000000001', eosId: null, flags: ['Hile Şüphelisi'] }],
+      {},
+      [{ steamId: '76561190000000001', groupName: 'Admin', permissions: 'kick,ban' }],
+    );
+    await hazir;
+    await h.handleEvent(komutMesaji('!takip', 'Admin'));
+    expect(e.komutlar[0]).toContain('Supheli');
+  });
+
+  it('bekleme süresi ikinci kamera geçişini susturur', async () => {
+    const e = sahteEngine();
+    sahne(e);
+    const { h, hazir } = kur(
+      e,
+      [{ steamId: '76561190000000001', eosId: null, flags: ['Hile Şüphelisi'] }],
+      { adminCooldownSeconds: 60 },
+    );
+    await hazir;
+    await h.handleEvent(kameraya());
+    expect(e.komutlar).toHaveLength(1);
+
+    await h.handleEvent(kameraya());
+    expect(e.komutlar).toHaveLength(1);
+  });
+});
+
+describe('team-balancer', () => {
+  const admin: AdminIdentity[] = [
+    { steamId: '76561190000000001', groupName: 'Admin', permissions: 'kick,ban,balance' },
+  ];
+
+  function doldur(e: SahteEngine, kisiBasinaManga = 5) {
+    let n = 0;
+    for (const teamId of [1, 2]) {
+      for (let s = 1; s <= 3; s++) {
+        for (let i = 0; i < kisiBasinaManga; i++) {
+          e.oyuncular.push({
+            steamId: `7656119000000${String(n++).padStart(4, '0')}`,
+            eosId: null,
+            name: `O${n}`,
+            teamId,
+            squadId: s,
+            squadName: `S${s}`,
+            isLeader: i === 0,
+            role: 'r',
+          } as SquadJSOnlinePlayer);
+        }
+      }
+    }
+  }
+
+  function kur(
+    e: SahteEngine,
+    maclar: Array<{
+      winnerTeam: number | null;
+      winnerTickets: number | null;
+      loserTickets: number | null;
+    }> | null,
+    config: Record<string, unknown> = {},
+    admins = admin,
+  ) {
+    const h = new PluginHost({
+      serverSlug: 'squad-01',
+      engine: e,
+      emit: () => undefined,
+      sorgu: async () => maclar,
+    });
+    if (admins.length > 0) h.adminListesiniGuncelle(admins);
+    h.register(teamBalancer);
+    return {
+      h,
+      hazir: h.applyConfigs([
+        {
+          pluginName: 'team-balancer',
+          enabled: true,
+          config: { announceDelaySeconds: 0, commandDelayMs: 0, minPlayers: 4, ...config },
+        },
+      ]),
+    };
+  }
+
+  const macBitti = (kazananBilet?: number, kaybedenBilet?: number): AgentEvent => ({
+    type: 'ROUND_ENDED',
+    serverSlug: 'squad-01',
+    winnerTeam: 1,
+    ...(kazananBilet !== undefined ? { winnerTickets: kazananBilet } : {}),
+    ...(kaybedenBilet !== undefined ? { loserTickets: kaybedenBilet } : {}),
+    timestamp: new Date().toISOString(),
+  });
+
+  const mac = (t: number | null) => ({ winnerTeam: t, winnerTickets: null, loserTickets: null });
+
+  it('seri eşiğe ulaşınca karıştırır', async () => {
+    const e = sahteEngine();
+    doldur(e);
+    const { h, hazir } = kur(e, [mac(1), mac(1)], { maxWinStreak: 2, dominantWinTicketDiff: 0 });
+    await hazir;
+    await h.handleEvent(macBitti());
+
+    expect(e.komutlar.some((c) => c.startsWith('AdminForceTeamChange'))).toBe(true);
+  });
+
+  it('seri eşiğin ALTINDAysa karıştırmaz', async () => {
+    const e = sahteEngine();
+    doldur(e);
+    const { h, hazir } = kur(e, [mac(1), mac(2)], { maxWinStreak: 2, dominantWinTicketDiff: 0 });
+    await hazir;
+    await h.handleEvent(macBitti());
+
+    expect(e.komutlar).toEqual([]);
+  });
+
+  it('maç geçmişi ALINAMAZSA karıştırmaz', async () => {
+    // Bilmediğimiz bir seri yüzünden takımları dağıtmak, dengesizliği
+    // düzeltmekten daha görünür bir hata.
+    const e = sahteEngine();
+    doldur(e);
+    const { h, hazir } = kur(e, null, { maxWinStreak: 2, dominantWinTicketDiff: 0 });
+    await hazir;
+    await h.handleEvent(macBitti());
+
+    expect(e.komutlar).toEqual([]);
+  });
+
+  it('ezici galibiyet seriyi beklemeden tetikler', async () => {
+    const e = sahteEngine();
+    doldur(e);
+    const { h, hazir } = kur(e, [mac(2)], { maxWinStreak: 0, dominantWinTicketDiff: 250 });
+    await hazir;
+    await h.handleEvent(macBitti(400, 100));
+
+    expect(e.komutlar.some((c) => c.startsWith('AdminForceTeamChange'))).toBe(true);
+  });
+
+  it('bilet farkı eşiğin altındaysa tetiklenmez', async () => {
+    const e = sahteEngine();
+    doldur(e);
+    const { h, hazir } = kur(e, [mac(2)], { maxWinStreak: 0, dominantWinTicketDiff: 250 });
+    await hazir;
+    await h.handleEvent(macBitti(300, 200));
+
+    expect(e.komutlar).toEqual([]);
+  });
+
+  it('az oyuncu varken karıştırmaz', async () => {
+    const e = sahteEngine();
+    const { h, hazir } = kur(e, [mac(1), mac(1)], { maxWinStreak: 2, minPlayers: 20 });
+    await hazir;
+    await h.handleEvent(macBitti());
+
+    expect(e.komutlar.some((c) => c.startsWith('AdminForceTeamChange'))).toBe(false);
+  });
+
+  it('elle karıştırma ONAY ister', async () => {
+    // Yanlışlıkla yazılan tek komut, dolu sunucudaki herkesin takımını
+    // değiştirebilirdi.
+    const e = sahteEngine();
+    doldur(e);
+    const { h, hazir } = kur(e, [mac(1)]);
+    await hazir;
+    await h.handleEvent(komutMesaji('!scramble', 'Admin'));
+
+    expect(e.komutlar.some((c) => c.startsWith('AdminForceTeamChange'))).toBe(false);
+    expect(e.komutlar[0]).toContain('Onaylamak için');
+  });
+
+  it('onaydan sonra karıştırır', async () => {
+    const e = sahteEngine();
+    doldur(e);
+    const { h, hazir } = kur(e, [mac(1)]);
+    await hazir;
+    await h.handleEvent(komutMesaji('!scramble', 'Admin'));
+    e.komutlar.length = 0;
+    await h.handleEvent(komutMesaji('!scramble onayla', 'Admin'));
+
+    expect(e.komutlar.some((c) => c.startsWith('AdminForceTeamChange'))).toBe(true);
+  });
+
+  it('bekleyen istek yokken onay reddedilir', async () => {
+    const e = sahteEngine();
+    doldur(e);
+    const { h, hazir } = kur(e, [mac(1)]);
+    await hazir;
+    await h.handleEvent(komutMesaji('!scramble onayla', 'Admin'));
+
+    expect(e.komutlar[0]).toContain('bekleyen bir karıştırma yok');
+  });
+
+  it('iptal bekleyen isteği düşürür', async () => {
+    const e = sahteEngine();
+    doldur(e);
+    const { h, hazir } = kur(e, [mac(1)]);
+    await hazir;
+    await h.handleEvent(komutMesaji('!scramble', 'Admin'));
+    await h.handleEvent(komutMesaji('!scramble iptal', 'Admin'));
+    e.komutlar.length = 0;
+    await h.handleEvent(komutMesaji('!scramble onayla', 'Admin'));
+
+    expect(e.komutlar[0]).toContain('bekleyen bir karıştırma yok');
+  });
+
+  it('YETKİSİZ oyuncu karıştıramaz', async () => {
+    const e = sahteEngine();
+    doldur(e);
+    const { h, hazir } = kur(e, [mac(1)], {}, []);
+    await hazir;
+    await h.handleEvent(komutMesaji('!scramble', 'Admin'));
+
+    expect(e.komutlar).toEqual([]);
+  });
+
+  it('mangalar bozulmadan taşınır', async () => {
+    // Bir manga ya tümüyle geçer ya da yerinde kalır.
+    const e = sahteEngine();
+    doldur(e, 5);
+    const { h, hazir } = kur(e, [mac(1), mac(1)], {
+      maxWinStreak: 2,
+      dominantWinTicketDiff: 0,
+      scramblePercentage: 0.5,
+    });
+    await hazir;
+    await h.handleEvent(macBitti());
+
+    const gecisler = e.komutlar.filter((c) => c.startsWith('AdminForceTeamChange'));
+    // 15+15 oyuncu, %50 -> her taraftan en az 1 manga (5 kişi).
+    expect(gecisler.length % 5).toBe(0);
+    expect(gecisler.length).toBeGreaterThanOrEqual(10);
   });
 });

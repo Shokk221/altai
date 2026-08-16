@@ -271,6 +271,42 @@ export class PluginHost {
           ...(eosId ? { eosId } : {}),
         })) as { bulundu: boolean; toplamSaniye: number; oturum: number } | null | undefined) ??
         null,
+      oyuncuKlanlari: async (ids) => {
+        if (ids.length === 0) return [];
+        return (
+          ((await this.opts.sorgu?.({ kind: 'player_clans', ids })) as
+            | Array<{
+                steamId: string | null;
+                eosId: string | null;
+                clan: string;
+                tag: string | null;
+              }>
+            | null
+            | undefined) ?? null
+        );
+      },
+      sonMaclar: async (limit) =>
+        ((await this.opts.sorgu?.({ kind: 'recent_rounds', limit })) as
+          | Array<{
+              winnerTeam: number | null;
+              winnerTickets: number | null;
+              loserTickets: number | null;
+            }>
+          | null
+          | undefined) ?? null,
+      etiketliOyuncular: async (ids, flagNames) => {
+        if (ids.length === 0) return [];
+        return (
+          ((await this.opts.sorgu?.({
+            kind: 'flagged_players',
+            ids,
+            flagNames: flagNames ?? [],
+          })) as
+            | Array<{ steamId: string | null; eosId: string | null; flags: string[] }>
+            | null
+            | undefined) ?? null
+        );
+      },
       steamSeviyeTazeMi: async (steamId, maxAgeDays, privateMaxAgeDays) =>
         ((await this.opts.sorgu?.({
           kind: 'steam_level_freshness',

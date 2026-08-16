@@ -50,6 +50,30 @@ export const AgentQuery = z.discriminatedUnion('kind', [
   }),
   /** Oyuncunun toplam oynama süresi ve oturum sayısı. */
   z.object({
+    kind: z.literal('player_clans'),
+    /** Aranacak kimlikler (steam ya da eos). */
+    ids: z.array(z.string().min(1)).min(1).max(150),
+  }),
+  z.object({
+    kind: z.literal('recent_rounds'),
+    /** Kaç maç geriye bakılacak. */
+    limit: z.number().int().min(1).max(20),
+  }),
+  z.object({
+    kind: z.literal('flagged_players'),
+    /**
+     * Aranacak kimlikler (steam ya da eos, karışık olabilir).
+     *
+     * Toplu sorgu ŞART: admin kameraya geçtiğinde sunucudaki 100 oyuncu
+     * için ayrı ayrı sormak 100 tur demek ve cevap gelene kadar admin
+     * ekranda bekliyor. Sınır bilinçli — istek boyutu sunucu doluluğuyla
+     * sınırlı kalmalı.
+     */
+    ids: z.array(z.string().min(1)).min(1).max(150),
+    /** Yalnızca bu adlardaki etiketler döner (harf duyarsız). Boş = hepsi. */
+    flagNames: z.array(z.string().min(1)).max(20).default([]),
+  }),
+  z.object({
     kind: z.literal('steam_level_freshness'),
     steamId: z.string(),
     /**
