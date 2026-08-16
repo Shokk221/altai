@@ -63,6 +63,14 @@ export class PluginHost {
    * sorguluyor; api'den gelene kadar boş ve o hâlde kimse admin sayılmıyor.
    */
   private readonly adminler = new AdminRegistry();
+  /**
+   * Plugin'ler arası işaretler: ad -> bitiş zamanı (ms).
+   *
+   * Host'ta duruyor çünkü plugin'ler hot-reload'da kapanıp açılıyor ve
+   * işaretin ömrü plugin örneğinden uzun olabiliyor: karıştırma sonrası
+   * kilit, dengeleyici yeniden kurulsa bile sürmeli.
+   */
+  private readonly isaretler = new Map<string, number>();
 
   constructor(opts: PluginHostOptions) {
     this.opts = opts;
@@ -327,6 +335,19 @@ export class PluginHost {
             });
         }, ms);
         zamanlayicilar.push(z);
+      },
+      isaretKoy: (ad, sureSaniye) => {
+        this.isaretler.set(ad, Date.now() + sureSaniye * 1000);
+      },
+      isaretVarMi: (ad) => {
+        const biter = this.isaretler.get(ad);
+        if (biter === undefined) return false;
+        if (Date.now() >= biter) {
+          // Süresi geçen işaret temizleniyor: Map sonsuza kadar büyümesin.
+          this.isaretler.delete(ad);
+          return false;
+        }
+        return true;
       },
       emit,
       secrets: {

@@ -72,6 +72,12 @@ const Config = z.object({
    * maçı tatsızlaştırıyor — eski plugin'de de ayrı bir ayardı.
    */
   rivalClans: z.array(z.tuple([z.string().trim().min(1), z.string().trim().min(1)])).default([]),
+  /**
+   * Karıştırmadan sonra takım değiştirme kaç dakika kapalı kalır.
+   *
+   * `team-switch` plugin'i bu işareti okuyor. 0 = kilit yok.
+   */
+  scrambleLockdownMinutes: z.number().int().min(0).max(120).default(20),
   /** Elle karıştırma onay ister mi. */
   requireConfirmation: z.boolean().default(true),
   /** Onay için tanınan süre (saniye). */
@@ -348,6 +354,14 @@ export const teamBalancer: ReturnType<typeof tanimla> = tanimla({
         }
 
         await ctx.rcon.broadcast(config.doneMessage);
+
+        // Takım değiştirme plugin'ine haber: bir süre geçiş kapalı kalsın.
+        // Olmasaydı karıştırılan oyuncular anında eski taraflarına döner
+        // ve yapılan iş boşa giderdi.
+        if (config.scrambleLockdownMinutes > 0) {
+          ctx.isaretKoy('scramble', config.scrambleLockdownMinutes * 60);
+        }
+
         ctx.log.info({ sebep, tasinan, basarisiz, manga: plan.length }, 'takımlar karıştırıldı');
       } finally {
         calisiyor = false;

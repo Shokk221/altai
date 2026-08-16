@@ -19,6 +19,7 @@ import { squadJoinRequest } from './squad-join-request.js';
 import { steamLevel } from './steam-level.js';
 import { teamBalancer } from './team-balancer.js';
 import { teamRandomizer } from './team-randomizer.js';
+import { teamSwitch } from './team-switch.js';
 import { welcomeWarn } from './welcome-warn.js';
 
 /**
@@ -50,6 +51,7 @@ export const PLUGINS: AnyPlugin[] = [
   squadClaim,
   adminCamWatchlist,
   teamBalancer,
+  teamSwitch,
 ];
 
 export {
@@ -74,4 +76,5 @@ export {
   squadClaim,
   adminCamWatchlist,
   teamBalancer,
+  teamSwitch,
 };

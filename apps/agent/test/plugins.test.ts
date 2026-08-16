@@ -21,6 +21,7 @@ import {
   steamLevel,
   teamBalancer,
   teamRandomizer,
+  teamSwitch,
   welcomeWarn,
 } from '../src/plugins/index.js';
 
@@ -2568,5 +2569,207 @@ describe('team-balancer', () => {
     // 15+15 oyuncu, %50 -> her taraftan en az 1 manga (5 kişi).
     expect(gecisler.length % 5).toBe(0);
     expect(gecisler.length).toBeGreaterThanOrEqual(10);
+  });
+});
+
+describe('team-switch', () => {
+  function doldur(e: SahteEngine, t1: number, t2: number) {
+    let n = 0;
+    for (const [teamId, adet] of [
+      [1, t1],
+      [2, t2],
+    ] as const) {
+      for (let i = 0; i < adet; i++) {
+        e.oyuncular.push({
+          steamId: `7656119000000${String(n++).padStart(4, '0')}`,
+          eosId: null,
+          name: `O${n}`,
+          teamId,
+          squadId: 1,
+          squadName: 'A',
+          isLeader: false,
+          role: 'r',
+        } as SquadJSOnlinePlayer);
+      }
+    }
+  }
+
+  function kur(
+    e: SahteEngine,
+    config: Record<string, unknown> = {},
+    klanlar: Array<{
+      steamId: string | null;
+      eosId: string | null;
+      clan: string;
+      tag: string | null;
+    }> | null = [],
+  ) {
+    const h = new PluginHost({
+      serverSlug: 'squad-01',
+      engine: e,
+      emit: () => undefined,
+      sorgu: async () => klanlar,
+    });
+    h.register(teamSwitch);
+    return {
+      h,
+      hazir: h.applyConfigs([
+        {
+          pluginName: 'team-switch',
+          enabled: true,
+          config: { doubleSwitchDelayMs: 100, ...config },
+        },
+      ]),
+    };
+  }
+
+  const ilkOyuncu = '76561190000000000';
+
+  it('maçın başında geçişe izin verir', async () => {
+    const e = sahteEngine();
+    doldur(e, 10, 10);
+    const { h, hazir } = kur(e);
+    await hazir;
+    await h.handleEvent(komutMesaji('!switch', 'All', ilkOyuncu));
+
+    expect(e.komutlar.some((c) => c.startsWith('AdminForceTeamChange'))).toBe(true);
+  });
+
+  it('bekleme süresi dolmadan ikinci geçiş reddedilir', async () => {
+    const e = sahteEngine();
+    doldur(e, 10, 10);
+    const { h, hazir } = kur(e, { switchCooldownHours: 3 });
+    await hazir;
+    await h.handleEvent(komutMesaji('!switch', 'All', ilkOyuncu));
+    e.komutlar.length = 0;
+    await h.handleEvent(komutMesaji('!switch', 'All', ilkOyuncu));
+
+    expect(e.komutlar.some((c) => c.startsWith('AdminForceTeamChange'))).toBe(false);
+    expect(e.komutlar[0]).toContain('bekle');
+  });
+
+  it('dengeyi bozacak geçiş reddedilir', async () => {
+    const e = sahteEngine();
+    doldur(e, 8, 12); // 1. takım az; 1'den 2'ye geçmek farkı açar
+    const { h, hazir } = kur(e, { maxUnbalancedSlots: 3 });
+    await hazir;
+    await h.handleEvent(komutMesaji('!switch', 'All', ilkOyuncu));
+
+    expect(e.komutlar[0]).toContain('dengesiz');
+  });
+
+  it('KARIŞTIRMA sonrası geçiş kapalı', async () => {
+    // Olmasaydı karıştırılan oyuncular anında eski taraflarına dönerdi.
+    const e = sahteEngine();
+    doldur(e, 10, 10);
+    const h = new PluginHost({ serverSlug: 'squad-01', engine: e, emit: () => undefined });
+    h.register(teamSwitch, teamBalancer);
+    await h.applyConfigs([
+      { pluginName: 'team-switch', enabled: true, config: {} },
+      {
+        pluginName: 'team-balancer',
+        enabled: true,
+        config: {
+          announceDelaySeconds: 0,
+          commandDelayMs: 0,
+          minPlayers: 4,
+          scrambleLockdownMinutes: 20,
+        },
+      },
+    ]);
+
+    // Dengeleyiciyi elle çalıştır (admin komutu, onaysız).
+    h.adminListesiniGuncelle([{ steamId: ilkOyuncu, groupName: 'Admin', permissions: 'kick,ban' }]);
+    await h.applyConfigs([
+      { pluginName: 'team-switch', enabled: true, config: {} },
+      {
+        pluginName: 'team-balancer',
+        enabled: true,
+        config: {
+          announceDelaySeconds: 0,
+          commandDelayMs: 0,
+          minPlayers: 4,
+          requireConfirmation: false,
+          scrambleLockdownMinutes: 20,
+        },
+      },
+    ]);
+    await h.handleEvent(komutMesaji('!scramble', 'Admin', ilkOyuncu));
+    e.komutlar.length = 0;
+
+    await h.handleEvent(komutMesaji('!switch', 'All', '76561190000000005'));
+    expect(e.komutlar.some((c) => c.startsWith('AdminForceTeamChange'))).toBe(false);
+    expect(e.komutlar[0]).toContain('geçiş şu an kapalı');
+  });
+
+  it('!bug çift geçiş yapar ve dengeye bakmaz', async () => {
+    // Net etkisi sıfır: oyuncu geldiği tarafa dönüyor.
+    const e = sahteEngine();
+    doldur(e, 8, 12);
+    const { h, hazir } = kur(e);
+    await hazir;
+    // Sahte zamanlayıcıda önce işi başlat, sonra zamanı ilerlet: awaiting
+    // etmek bekleyişi hiç çözülmeyen bir söze bağlardı.
+    const is = h.handleEvent(komutMesaji('!bug', 'All', ilkOyuncu));
+    await vi.advanceTimersByTimeAsync(200);
+    await is;
+
+    const gecisler = e.komutlar.filter((c) => c.startsWith('AdminForceTeamChange'));
+    expect(gecisler).toHaveLength(2);
+  });
+
+  it('klan arkadaşları karşıdaysa süre sınırı atlanır', async () => {
+    const e = sahteEngine();
+    doldur(e, 10, 10);
+    const { h, hazir } = kur(e, { switchEnabledMinutes: 5 }, [
+      { steamId: ilkOyuncu, eosId: null, clan: 'ALTAI', tag: null },
+      { steamId: '76561190000000010', eosId: null, clan: 'ALTAI', tag: null },
+      { steamId: '76561190000000011', eosId: null, clan: 'ALTAI', tag: null },
+    ]);
+    await hazir;
+    // Maç başlangıcını geçmişe it: normalde süre sınırı reddederdi.
+    await h.handleEvent({
+      type: 'ROUND_STARTED',
+      serverSlug: 'squad-01',
+      timestamp: new Date().toISOString(),
+    });
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+
+    await h.handleEvent(komutMesaji('!switch', 'All', ilkOyuncu));
+    expect(e.komutlar.some((c) => c.startsWith('AdminForceTeamChange'))).toBe(true);
+  });
+
+  it('klan bilgisi alınamazsa muafiyet UYGULANMAZ', async () => {
+    // Bilmediğimiz bir gerekçeyle kuralı gevşetmek, kuralı hiç
+    // koymamakla aynı kapıya çıkar.
+    const e = sahteEngine();
+    doldur(e, 10, 10);
+    const { h, hazir } = kur(e, { switchEnabledMinutes: 5 }, null);
+    await hazir;
+    await h.handleEvent({
+      type: 'ROUND_STARTED',
+      serverSlug: 'squad-01',
+      timestamp: new Date().toISOString(),
+    });
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+
+    await h.handleEvent(komutMesaji('!switch', 'All', ilkOyuncu));
+    expect(e.komutlar[0]).toContain('ilk 5 dakika');
+  });
+
+  it('süre sınırı dolunca geçiş reddedilir', async () => {
+    const e = sahteEngine();
+    doldur(e, 10, 10);
+    const { h, hazir } = kur(e, { switchEnabledMinutes: 5 });
+    await hazir;
+    await h.handleEvent({
+      type: 'ROUND_STARTED',
+      serverSlug: 'squad-01',
+      timestamp: new Date().toISOString(),
+    });
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+
+    await h.handleEvent(komutMesaji('!switch', 'All', ilkOyuncu));
+    expect(e.komutlar.some((c) => c.startsWith('AdminForceTeamChange'))).toBe(false);
   });
 });

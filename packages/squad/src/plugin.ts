@@ -176,6 +176,24 @@ export interface PluginContext {
   ): Promise<{ bulundu: boolean; taze: boolean } | null>;
 
   /**
+   * Plugin'ler arası kısa ömürlü işaret bırakır.
+   *
+   * Bazı kurallar birden fazla plugin'i ilgilendiriyor: takım dengeleyici
+   * karıştırma yaptıktan sonra takım değiştirme bir süre kapanmalı, yoksa
+   * karıştırılan oyuncular anında eski taraflarına dönüp yapılan işi
+   * geçersiz kılıyor.
+   *
+   * Olayla çözülemiyor: plugin'in `emit` ettiği şey api'ye gidiyor, diğer
+   * plugin'lere değil. Ortak durumu paylaşmak da olmaz — plugin'ler
+   * birbirinin belleğine dokunmamalı. Bu yüzden yüzey bilinçli olarak dar:
+   * yalnızca ADI ve SÜRESİ olan bir işaret, veri taşımıyor.
+   */
+  isaretKoy(ad: string, sureSaniye: number): void;
+
+  /** İşaret hâlâ geçerli mi? */
+  isaretVarMi(ad: string): boolean;
+
+  /**
    * Periyodik iş kaydeder.
    *
    * Zamanlayıcıyı plugin DEĞİL host tutuyor: plugin kapatıldığında hepsi
