@@ -1,12 +1,22 @@
 import { createDb } from '@altai/db';
 import { logger } from '@altai/shared';
-import { Client, GatewayIntentBits } from 'discord.js';
+import { Client, GatewayIntentBits, type TextChannel } from 'discord.js';
+import { createOlayOkuyucu } from './event-reader.js';
+import { macSonuGomusu, teamkillGomusu } from './render.js';
 import { guildiEsitle, uyeyiEsitle, uyeyiTemizle } from './role-sync.js';
 
-// Botun tek işi şimdilik ROL SENKRONU: Discord'daki rolleri
-// discord_member_roles tablosuna yansıtmak. Admins.cfg o tablodan üretiliyor,
-// yani "Discord'da rol alınınca oyun içi yetki düşer" garantisi buraya
-// dayanıyor. Killfeed/ticket gibi işler Faz 3.
+// Botun iki işi var:
+//
+//  1. ROL SENKRONU — Discord rollerini discord_member_roles'a yansıtmak.
+//     Admins.cfg o tablodan üretiliyor, yani "Discord'da rol alınınca oyun
+//     içi yetki düşer" garantisi buraya dayanıyor.
+//
+//  2. OLAY RENDER'I — plugin'lerin ürettiği olayları Discord kanallarına
+//     kart olarak basmak (killfeed, maç sonu). Plan Bölüm 6'nın kuralının
+//     öbür ucu: plugin Discord'u bilmiyor, bot da oyunu bilmiyor.
+//
+// Kanal kimliği verilmeyen render KAPALI kalıyor: yanlış kanala mesaj
+// basmaktansa hiç basmamak yeğ.
 
 if (!process.env.DISCORD_BOT_TOKEN) {
   // Token yoksa yapacak iş yok ve süreç hemen biter.
@@ -47,6 +57,30 @@ const TAM_TARAMA_MS = 15 * 60 * 1000;
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
 
+/** Kanal kimlikleri .env'den; verilmeyen özellik sessizce kapalı. */
+const killfeedKanali = process.env.DISCORD_KILLFEED_CHANNEL_ID;
+const macKanali = process.env.DISCORD_MATCH_CHANNEL_ID;
+
+/**
+ * Gömüyü kanala basar.
+ *
+ * Hata YUTULMUYOR ama akışı da durdurmuyor: bir kanalın silinmesi ya da
+ * izin kaybı yüzünden bot'un olay okumayı bırakması, sorunun kendisinden
+ * daha pahalı olurdu.
+ */
+async function gomuGonder(kanalId: string, gomu: ReturnType<typeof teamkillGomusu>) {
+  try {
+    const kanal = await client.channels.fetch(kanalId);
+    if (!kanal || !kanal.isTextBased()) {
+      logger.warn({ kanalId }, 'kanal bulunamadı ya da metin kanalı değil');
+      return;
+    }
+    await (kanal as TextChannel).send({ embeds: [gomu] });
+  } catch (err) {
+    logger.error({ err, kanalId }, 'Discord mesajı gönderilemedi');
+  }
+}
+
 async function tamTarama(sebep: string) {
   try {
     const guild = await client.guilds.fetch(guildId as string);
@@ -62,11 +96,38 @@ async function tamTarama(sebep: string) {
   }
 }
 
+// Yalnızca render'ı açık olan olay türleri okunuyor: kapalı bir özellik
+// için veritabanını yoklamanın anlamı yok.
+const okunacakTurler = [
+  ...(killfeedKanali ? ['TEAMKILL'] : []),
+  ...(macKanali ? ['ROUND_ENDED'] : []),
+];
+
+const olayOkuyucu =
+  okunacakTurler.length > 0
+    ? createOlayOkuyucu({
+        db,
+        turler: okunacakTurler,
+        isle: async (event) => {
+          if (event.type === 'TEAMKILL' && killfeedKanali) {
+            await gomuGonder(killfeedKanali, teamkillGomusu(event));
+            return;
+          }
+          if (event.type === 'ROUND_ENDED' && macKanali) {
+            await gomuGonder(macKanali, macSonuGomusu(event));
+          }
+        },
+      })
+    : null;
+
 client.once('ready', () => {
   logger.info(`bot giriş yaptı: ${client.user?.tag}`);
   void tamTarama('acilis');
   const zamanlayici = setInterval(() => void tamTarama('periyodik'), TAM_TARAMA_MS);
   zamanlayici.unref?.();
+
+  if (olayOkuyucu) olayOkuyucu.baslat();
+  else logger.info({}, 'olay render kanalı tanımlı değil — killfeed ve maç sonu kapalı');
 });
 
 client.on('guildMemberUpdate', (_eski, yeni) => {
@@ -92,6 +153,7 @@ await client.login(process.env.DISCORD_BOT_TOKEN);
 
 async function shutdown(signal: string) {
   logger.info({ signal }, 'bot kapanıyor');
+  olayOkuyucu?.durdur();
   await client.destroy();
   process.exit(0);
 }
