@@ -1,6 +1,6 @@
 import type { AgentEvent } from '@altai/contracts';
 import { describe, expect, it } from 'vitest';
-import { macSonuGomusu, teamkillGomusu } from '../src/render.js';
+import { adminCagrisiGomusu, macSonuGomusu, teamkillGomusu } from '../src/render.js';
 
 /**
  * Discord kartlarının içeriği.
@@ -116,5 +116,48 @@ describe('macSonuGomusu', () => {
       }),
     );
     expect(g.fields).toBeUndefined();
+  });
+});
+
+const cagri = (
+  over: Record<string, unknown> = {},
+): Extract<AgentEvent, { type: 'ADMIN_REQUEST' }> =>
+  ({
+    type: 'ADMIN_REQUEST',
+    serverSlug: 'squad-01',
+    playerName: 'Oyuncu',
+    steamId: '76561190000000001',
+    reason: 'Hileci var',
+    onlineAdmins: 2,
+    timestamp: '2026-08-16T12:00:00.000Z',
+    ...over,
+  }) as Extract<AgentEvent, { type: 'ADMIN_REQUEST' }>;
+
+describe('adminCagrisiGomusu', () => {
+  it('sebebi açıklamaya yazar', () => {
+    expect(adminCagrisiGomusu(cagri()).description).toBe('Hileci var');
+  });
+
+  it('sebep yoksa alan GİZLENMEZ, belirtilmedi yazar', () => {
+    // Sebebin yokluğu da bilgi: çağrının aceleyle yapıldığını söylüyor.
+    expect(adminCagrisiGomusu(cagri({ reason: null })).description).toContain('belirtilmedi');
+  });
+
+  it('sunucudaki yetkili sayısını gösterir', () => {
+    const alan = adminCagrisiGomusu(cagri()).fields?.find((f) => f.name === 'Sunucudaki yetkili');
+    expect(alan?.value).toBe('2');
+  });
+
+  it('hiç yetkili yoksa "yok" yazar', () => {
+    // "0" ile "yok" aynı bilgi ama ikincisi bir bakışta okunuyor.
+    const alan = adminCagrisiGomusu(cagri({ onlineAdmins: 0 })).fields?.find(
+      (f) => f.name === 'Sunucudaki yetkili',
+    );
+    expect(alan?.value).toBe('yok');
+  });
+
+  it('çağıranın profiline bağlantı verir', () => {
+    const alan = adminCagrisiGomusu(cagri()).fields?.find((f) => f.name === 'Çağıran');
+    expect(alan?.value).toContain('steamcommunity.com/profiles/76561190000000001');
   });
 });

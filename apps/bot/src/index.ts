@@ -1,8 +1,9 @@
 import { createDb } from '@altai/db';
 import { logger } from '@altai/shared';
-import { Client, GatewayIntentBits, type TextChannel } from 'discord.js';
+import { Client, GatewayIntentBits, SlashCommandBuilder, type TextChannel } from 'discord.js';
 import { createOlayOkuyucu } from './event-reader.js';
-import { macSonuGomusu, teamkillGomusu } from './render.js';
+import { hesapBagla, hesapCoz } from './linking.js';
+import { adminCagrisiGomusu, macSonuGomusu, teamkillGomusu } from './render.js';
 import { guildiEsitle, uyeyiEsitle, uyeyiTemizle } from './role-sync.js';
 
 // Botun iki işi var:
@@ -60,6 +61,9 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBit
 /** Kanal kimlikleri .env'den; verilmeyen özellik sessizce kapalı. */
 const killfeedKanali = process.env.DISCORD_KILLFEED_CHANNEL_ID;
 const macKanali = process.env.DISCORD_MATCH_CHANNEL_ID;
+const cagriKanali = process.env.DISCORD_ADMIN_REQUEST_CHANNEL_ID;
+/** Çağrı kartında etiketlenecek rol. Verilmezse etiket yok. */
+const cagriRolu = process.env.DISCORD_ADMIN_ROLE_ID;
 
 /**
  * Gömüyü kanala basar.
@@ -68,14 +72,18 @@ const macKanali = process.env.DISCORD_MATCH_CHANNEL_ID;
  * izin kaybı yüzünden bot'un olay okumayı bırakması, sorunun kendisinden
  * daha pahalı olurdu.
  */
-async function gomuGonder(kanalId: string, gomu: ReturnType<typeof teamkillGomusu>) {
+async function gomuGonder(
+  kanalId: string,
+  gomu: ReturnType<typeof teamkillGomusu>,
+  icerik?: string,
+) {
   try {
     const kanal = await client.channels.fetch(kanalId);
     if (!kanal || !kanal.isTextBased()) {
       logger.warn({ kanalId }, 'kanal bulunamadı ya da metin kanalı değil');
       return;
     }
-    await (kanal as TextChannel).send({ embeds: [gomu] });
+    await (kanal as TextChannel).send({ embeds: [gomu], ...(icerik ? { content: icerik } : {}) });
   } catch (err) {
     logger.error({ err, kanalId }, 'Discord mesajı gönderilemedi');
   }
@@ -101,6 +109,7 @@ async function tamTarama(sebep: string) {
 const okunacakTurler = [
   ...(killfeedKanali ? ['TEAMKILL'] : []),
   ...(macKanali ? ['ROUND_ENDED'] : []),
+  ...(cagriKanali ? ['ADMIN_REQUEST'] : []),
 ];
 
 const olayOkuyucu =
@@ -115,6 +124,16 @@ const olayOkuyucu =
           }
           if (event.type === 'ROUND_ENDED' && macKanali) {
             await gomuGonder(macKanali, macSonuGomusu(event));
+            return;
+          }
+          if (event.type === 'ADMIN_REQUEST' && cagriKanali) {
+            // Rol etiketi kartın DIŞINDA: gömü içindeki etiket bildirim
+            // üretmiyor, oysa çağrının bütün amacı birinin haberdar olması.
+            await gomuGonder(
+              cagriKanali,
+              adminCagrisiGomusu(event),
+              cagriRolu ? `<@&${cagriRolu}>` : undefined,
+            );
           }
         },
       })
@@ -128,6 +147,8 @@ client.once('ready', () => {
 
   if (olayOkuyucu) olayOkuyucu.baslat();
   else logger.info({}, 'olay render kanalı tanımlı değil — killfeed ve maç sonu kapalı');
+
+  void komutlariKaydet();
 });
 
 client.on('guildMemberUpdate', (_eski, yeni) => {
@@ -143,6 +164,86 @@ client.on('guildMemberRemove', (uye) => {
   void uyeyiTemizle(db, uye.id).catch((err) =>
     logger.error({ err, discordId: uye.id }, 'ayrılan üye temizlenemedi'),
   );
+});
+
+/**
+ * Slash komutlarını guild'e kaydeder.
+ *
+ * Guild'e (global'e DEĞİL): global kayıt Discord tarafında bir saate kadar
+ * yayılıyor, guild kaydı anında geçerli. Tek sunucuda çalışan bir bot için
+ * beklemenin karşılığı yok.
+ */
+async function komutlariKaydet() {
+  try {
+    const guild = await client.guilds.fetch(guildId as string);
+    await guild.commands.set([
+      new SlashCommandBuilder()
+        .setName('baglan')
+        .setDescription('Steam hesabını Discord hesabına bağlar')
+        .addStringOption((o) =>
+          o
+            .setName('steamid')
+            .setDescription('17 haneli SteamID ya da profil bağlantısı')
+            .setRequired(true),
+        )
+        .toJSON(),
+      new SlashCommandBuilder()
+        .setName('bagikaldir')
+        .setDescription('Steam hesabı bağını kaldırır')
+        .toJSON(),
+    ]);
+    logger.info({}, 'slash komutları kaydedildi');
+  } catch (err) {
+    // Komut kaydı başarısız olsa bile bot'un diğer işleri (rol senkronu,
+    // render) çalışmaya devam etmeli.
+    logger.error({ err }, 'slash komutları kaydedilemedi');
+  }
+}
+
+/**
+ * Hesap bağlama komutları.
+ *
+ * Sunucuya değil KULLANICIYA özel cevap veriliyor (`ephemeral`): SteamID
+ * kişisel bir bilgi ve kanalda herkese göstermenin bir faydası yok.
+ */
+client.on('interactionCreate', async (etkilesim) => {
+  if (!etkilesim.isChatInputCommand()) return;
+
+  try {
+    if (etkilesim.commandName === 'baglan') {
+      const steamId = etkilesim.options.getString('steamid', true);
+      const sonuc = await hesapBagla(db, etkilesim.user.id, steamId);
+
+      const mesaj =
+        sonuc.durum === 'baglandi'
+          ? 'Hesabın bağlandı. Discord rollerin oyun içi yetkiye dönüşecek.'
+          : sonuc.durum === 'zaten_bagli'
+            ? `Zaten bağlısın (${sonuc.steamId}). Değiştirmek için önce /bagikaldir yaz.`
+            : sonuc.durum === 'steam_baskasinda'
+              ? 'Bu Steam hesabı başka bir Discord hesabına bağlı. Yetkiliyle görüş.'
+              : 'Geçersiz SteamID. 17 haneli Steam64 kimliği ya da profil bağlantısı gönder.';
+
+      await etkilesim.reply({ content: mesaj, ephemeral: true });
+      return;
+    }
+
+    if (etkilesim.commandName === 'bagikaldir') {
+      const kaldirildi = await hesapCoz(db, etkilesim.user.id);
+      await etkilesim.reply({
+        content: kaldirildi ? 'Bağın kaldırıldı.' : 'Zaten bağlı bir hesabın yok.',
+        ephemeral: true,
+      });
+    }
+  } catch (err) {
+    logger.error({ err, komut: etkilesim.commandName }, 'slash komutu işlenemedi');
+    // Cevapsız bırakmak Discord'da "uygulama yanıt vermedi" hatası
+    // gösteriyor ve kullanıcı komutun çalışmadığını sanıyor.
+    if (!etkilesim.replied) {
+      await etkilesim
+        .reply({ content: 'Komut işlenemedi, birazdan tekrar dene.', ephemeral: true })
+        .catch(() => undefined);
+    }
+  }
 });
 
 client.on('error', (err) => {

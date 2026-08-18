@@ -1,4 +1,5 @@
 import {
+  bigserial,
   boolean,
   doublePrecision,
   index,
@@ -94,11 +95,34 @@ export const rawEvents = pgTable(
     serverId: uuid('server_id')
       .notNull()
       .references(() => servers.id),
+    /**
+     * Artan sıra numarası — bot'un okuma imleci.
+     *
+     * İmleç ÖNCE `received_at` idi ve bu sessiz bir hataydı: Postgres
+     * `timestamptz`'i mikrosaniye tutuyor, JS `Date` ise milisaniyeye
+     * yuvarlıyor. İmleç `...970` olarak saklanınca `...970123` satırı her
+     * turda "daha yeni" görünüyor ve aynı olaylar sonsuza kadar yeniden
+     * okunuyordu — yani Discord'a her yoklamada aynı killfeed düşüyordu.
+     *
+     * Sıra numarası bu sınıfın tamamını ortadan kaldırıyor: tam sayı,
+     * kesin artan ve tablo zaten yalnızca ekleme alıyor.
+     */
+    seq: bigserial('seq', { mode: 'number' }).notNull(),
     eventType: text('event_type').notNull(),
     payload: jsonb('payload').notNull(),
     receivedAt: timestamp('received_at', { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [index('raw_events_server_type_idx').on(table.serverId, table.eventType)],
+  (table) => [
+    index('raw_events_server_type_idx').on(table.serverId, table.eventType),
+    /**
+     * Bot olayları buradan SIRAYLA okuyor (imleç `seq`).
+     *
+     * İndeks olmadan her yoklama tüm tabloyu tarıyordu; `raw_events` en
+     * hızlı büyüyen tablo (dolu sunucuda dakikada ~30 satır), yani bu
+     * tarama zamanla botu da veritabanını da yoruyordu.
+     */
+    uniqueIndex('raw_events_seq_idx').on(table.seq),
+  ],
 );
 
 /**
