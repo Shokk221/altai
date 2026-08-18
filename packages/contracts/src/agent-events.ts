@@ -258,6 +258,28 @@ export const CblAlertEvent = z.object({
   timestamp: z.string().datetime(),
 });
 
+/**
+ * Oyuncu oyun içinden yetkili çağırdı (`!admin <sebep>`).
+ *
+ * Eski sistemde bu doğrudan Discord'a yazan bir plugin'di. Burada olay:
+ * plugin çağrıyı yakalıyor, bot kanala basıp yetkili rolünü etiketliyor.
+ *
+ * `reason` boş OLABİLİR — oyuncu aceleyle yalnızca `!admin` yazmış
+ * olabilir ve çağrıyı sebepsiz diye düşürmek, gerçekten yardım isteyen
+ * birini görmezden gelmek olurdu.
+ */
+export const AdminRequestEvent = z.object({
+  type: z.literal('ADMIN_REQUEST'),
+  serverSlug: z.string(),
+  playerName: z.string(),
+  steamId: z.string(),
+  eosId: z.string().nullish(),
+  reason: z.string().nullish(),
+  /** Çağrı sırasında sunucuda kaç yetkili vardı — bot bunu gösteriyor. */
+  onlineAdmins: z.number().int().nonnegative().default(0),
+  timestamp: z.string().datetime(),
+});
+
 export const AgentEvent = z.discriminatedUnion('type', [
   PlayerConnectedEvent,
   PlayerDisconnectedEvent,
@@ -272,6 +294,7 @@ export const AgentEvent = z.discriminatedUnion('type', [
   SeedSessionEvent,
   SteamLevelEvent,
   CblAlertEvent,
+  AdminRequestEvent,
 ]);
 
 export type AgentEvent = z.infer<typeof AgentEvent>;

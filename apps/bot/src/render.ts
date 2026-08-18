@@ -26,6 +26,7 @@ const BILINMEYEN = 'bilinmeyen';
 
 const RENK_TK = 0xdc2626;
 const RENK_MAC = 0x2563eb;
+const RENK_CAGRI = 0xf59e0b;
 
 /**
  * Takım öldürme kartı.
@@ -91,6 +92,34 @@ export function macSonuGomusu(event: Extract<AgentEvent, { type: 'ROUND_ENDED' }
     title: kazanan ? `Maç bitti — ${kazanan} kazandı` : 'Maç bitti',
     color: RENK_MAC,
     ...(alanlar.length > 0 ? { fields: alanlar } : {}),
+    timestamp: event.timestamp,
+    footer: { text: event.serverSlug },
+  };
+}
+
+/**
+ * Yetkili çağrısı kartı.
+ *
+ * Sunucudaki yetkili sayısı ayrı bir alan: "kimse yok" ile "üç kişi var
+ * ama bakmıyor" moderatör için çok farklı durumlar ve ikisine verilecek
+ * tepki de farklı.
+ *
+ * Sebep boşsa alan "(belirtilmedi)" ile gösteriliyor, gizlenmiyor: sebebin
+ * yokluğu da bilgi — çağrının aceleyle yapıldığını söylüyor.
+ */
+export function adminCagrisiGomusu(event: Extract<AgentEvent, { type: 'ADMIN_REQUEST' }>): Gomu {
+  return {
+    title: `Yetkili çağrısı: ${event.playerName}`,
+    description: event.reason?.trim() || '_(sebep belirtilmedi)_',
+    color: RENK_CAGRI,
+    fields: [
+      { name: 'Çağıran', value: kimlikSatiri(event.steamId, event.playerName), inline: true },
+      {
+        name: 'Sunucudaki yetkili',
+        value: event.onlineAdmins > 0 ? String(event.onlineAdmins) : 'yok',
+        inline: true,
+      },
+    ],
     timestamp: event.timestamp,
     footer: { text: event.serverSlug },
   };

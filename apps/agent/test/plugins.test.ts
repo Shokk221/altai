@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PluginHost } from '../src/plugin-host.js';
 import {
   adminCamWatchlist,
+  adminRequest,
   autoSeedScheduler,
   autoTkWarn,
   cblInfo,
@@ -2771,5 +2772,129 @@ describe('team-switch', () => {
 
     await h.handleEvent(komutMesaji('!switch', 'All', ilkOyuncu));
     expect(e.komutlar.some((c) => c.startsWith('AdminForceTeamChange'))).toBe(false);
+  });
+});
+
+describe('admin-request', () => {
+  function kur(e: SahteEngine, admins: AdminIdentity[] = [], config: Record<string, unknown> = {}) {
+    const olaylar: AgentEvent[] = [];
+    const h = new PluginHost({ serverSlug: 'squad-01', engine: e, emit: (ev) => olaylar.push(ev) });
+    if (admins.length > 0) h.adminListesiniGuncelle(admins);
+    h.register(adminRequest);
+    return {
+      h,
+      olaylar,
+      hazir: h.applyConfigs([
+        { pluginName: 'admin-request', enabled: true, config: { cooldownSeconds: 0, ...config } },
+      ]),
+    };
+  }
+
+  function sahne(e: SahteEngine) {
+    e.oyuncular.push(
+      {
+        steamId: '76561190000000001',
+        eosId: null,
+        name: 'Cagiran',
+        teamId: 1,
+        squadId: 1,
+        squadName: 'A',
+        isLeader: false,
+        role: 'r',
+      } as SquadJSOnlinePlayer,
+      {
+        steamId: '76561190000000002',
+        eosId: null,
+        name: 'Yetkili',
+        teamId: 1,
+        squadId: 1,
+        squadName: 'A',
+        isLeader: false,
+        role: 'r',
+      } as SquadJSOnlinePlayer,
+    );
+  }
+
+  const cagrilar = (o: AgentEvent[]) =>
+    o.filter((x) => x.type === 'ADMIN_REQUEST') as Extract<AgentEvent, { type: 'ADMIN_REQUEST' }>[];
+
+  it('sebebiyle birlikte çağrı üretir', async () => {
+    const e = sahteEngine();
+    sahne(e);
+    const { h, olaylar, hazir } = kur(e);
+    await hazir;
+    await h.handleEvent(komutMesaji('!admin hileci var', 'All'));
+
+    const c = cagrilar(olaylar);
+    expect(c).toHaveLength(1);
+    expect(c[0]?.reason).toBe('hileci var');
+    expect(c[0]?.playerName).toBe('Cagiran');
+  });
+
+  it('SEBEPSİZ çağrı da geçerli', async () => {
+    // Aceleyle yalnızca !admin yazan biri gerçekten yardım istiyor
+    // olabilir; düşürmek onu görmezden gelmek olurdu.
+    const e = sahteEngine();
+    sahne(e);
+    const { h, olaylar, hazir } = kur(e);
+    await hazir;
+    await h.handleEvent(komutMesaji('!admin', 'All'));
+
+    expect(cagrilar(olaylar)).toHaveLength(1);
+  });
+
+  it('çağırana HER ZAMAN cevap gider', async () => {
+    const e = sahteEngine();
+    sahne(e);
+    const { h, hazir } = kur(e);
+    await hazir;
+    await h.handleEvent(komutMesaji('!admin', 'All'));
+
+    expect(e.komutlar.some((c) => c.startsWith('AdminWarn 76561190000000001'))).toBe(true);
+  });
+
+  it('sunucudaki yetkili sayısı olaya yazılır', async () => {
+    const e = sahteEngine();
+    sahne(e);
+    const { h, olaylar, hazir } = kur(e, [
+      { steamId: '76561190000000002', groupName: 'Admin', permissions: 'kick,ban' },
+    ]);
+    await hazir;
+    await h.handleEvent(komutMesaji('!admin', 'All'));
+
+    expect(cagrilar(olaylar)[0]?.onlineAdmins).toBe(1);
+  });
+
+  it('yetkili yokken farklı mesaj gider', async () => {
+    const e = sahteEngine();
+    sahne(e);
+    const { h, hazir } = kur(e);
+    await hazir;
+    await h.handleEvent(komutMesaji('!admin', 'All'));
+
+    expect(e.komutlar[0]).toContain('yetkili yok');
+  });
+
+  it('bekleme süresi içinde ikinci çağrı reddedilir', async () => {
+    const e = sahteEngine();
+    sahne(e);
+    const { h, olaylar, hazir } = kur(e, [], { cooldownSeconds: 120 });
+    await hazir;
+    await h.handleEvent(komutMesaji('!admin', 'All'));
+    e.komutlar.length = 0;
+    await h.handleEvent(komutMesaji('!admin', 'All'));
+
+    expect(cagrilar(olaylar)).toHaveLength(1);
+    expect(e.komutlar[0]).toContain('bekle');
+  });
+
+  it('uzun sebep kırpılır', async () => {
+    const e = sahteEngine();
+    sahne(e);
+    const { h, olaylar, hazir } = kur(e, [], { maxReasonLength: 20 });
+    await hazir;
+    await h.handleEvent(komutMesaji(`!admin ${'a'.repeat(100)}`, 'All'));
+
+    expect(cagrilar(olaylar)[0]?.reason).toHaveLength(20);
   });
 });
