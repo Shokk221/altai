@@ -110,6 +110,59 @@ export interface PluginContext {
     eosId?: string | null,
   ): Promise<{ bulundu: boolean; flags: string[] } | null>;
 
+  /**
+   * Oyuncunun maç istatistikleri toplamı (Faz 4).
+   *
+   * `days` verilirse yalnızca o kadar gün geriye bakılır; verilmezse tüm
+   * zamanlar. Bilinmiyorsa `null` — "istatistiği yok" ile "ulaşamadık"
+   * farklı şeyler ve oyuncuya "hiç maçın yok" demek, veri varken yanlış
+   * cevap olurdu.
+   */
+  oyuncuIstatistigi(
+    steamId?: string | null,
+    eosId?: string | null,
+    days?: number | null,
+  ): Promise<{
+    bulundu: boolean;
+    rounds: number;
+    kills: number;
+    deaths: number;
+    revives: number;
+    teamkills: number;
+    bestKillstreak: number;
+    damageDealt: number;
+    damageTaken: number;
+    wins: number;
+    losses: number;
+    kdr: number;
+    winRate: number | null;
+    topWeapons: Array<{ weapon: string; kills: number }>;
+  } | null>;
+
+  /**
+   * Sıralama — ilk N oyuncu (Faz 4).
+   *
+   * `minRounds` K/D sıralamasında zorunlu: tek maçta 3 öldürüp hiç ölmeyen
+   * biri, yüz maç oynamış herkesin üstüne çıkardı.
+   *
+   * Bilinmiyorsa `null`.
+   */
+  siralama(opts: {
+    metric: 'kills' | 'kdr' | 'revives' | 'rounds';
+    limit: number;
+    days?: number | null;
+    minRounds?: number;
+  }): Promise<Array<{
+    playerId: string;
+    steamId: string | null;
+    name: string | null;
+    rounds: number;
+    kills: number;
+    deaths: number;
+    revives: number;
+    kdr: number;
+  }> | null>;
+
   /** Oyuncunun toplam oynama süresi. Bilinmiyorsa null. */
   oyuncuSuresi(
     steamId?: string | null,
@@ -202,6 +255,18 @@ export interface PluginContext {
    * üçer gitmeye başlar — eski sistemde tam olarak bu yaşandı.
    */
   every(ms: number, fn: () => void | Promise<void>): void;
+
+  /**
+   * Tek seferlik gecikmeli iş kaydeder.
+   *
+   * `every` ile aynı sebeple host'a ait: plugin kapatıldığında bekleyen iş
+   * de İPTAL oluyor. Kapalı bir plugin'in on saniye sonra konuşması,
+   * panelden kapatan kişinin beklemediği bir davranış olurdu.
+   *
+   * `ms` 0 ise iş bir sonraki döngüde çalışır, senkron değil — çağıranın
+   * olay işleyicisi bitmeden araya girmemeli.
+   */
+  sonra(ms: number, fn: () => void | Promise<void>): void;
 
   /** Olay üretir: uplink -> api -> bot/panel. */
   emit(event: AgentEvent): void;
