@@ -171,6 +171,59 @@ export interface SquadJSTeamkillRaw {
   time?: Date | string | undefined;
 }
 
+/**
+ * Ölüm. Maç istatistiklerinin (Faz 4) ana kaynağı.
+ *
+ * `victim` fork'ta İSİMDEN çözülüyor (index.js:385 `getPlayerByName`),
+ * `attacker` ise EOS kimliğinden. İsim eşleşmesi başarısız olabildiği için
+ * kurban null gelebilir — o ölüm kimseye yazılamaz. Bunu sessizce
+ * "bilinmeyen oyuncu" satırına toplamak istatistiği kirletirdi; sayaç
+ * tutuluyor ve maç sonunda loglanıyor.
+ *
+ * `teamkill` YALNIZCA iki taraf da çözülebildiyse hesaplanıyor
+ * (index.js:392), yani `undefined` "TK değil" demek değil, "bilinmiyor"
+ * demek. Ayrım önemli: bilinmeyeni normal öldürme sayarsak TK yapan
+ * oyuncular skorborda kill kazanmış gibi girerdi.
+ */
+export interface SquadJSPlayerDiedRaw {
+  victim?: SquadJSPlayer | null | undefined;
+  attacker?: SquadJSPlayer | null | undefined;
+  weapon?: string | undefined;
+  teamkill?: boolean | undefined;
+  time?: Date | string | undefined;
+}
+
+/**
+ * Canlandırma.
+ *
+ * Üç taraf var: `reviver` canlandıran, `victim` canlandırılan, `attacker`
+ * ise onu yere seren kişi. İstatistikte sayılan `reviver` — Squad'da
+ * canlandırma medic oyununun tek ölçülebilir çıktısı ve eski sistemde de
+ * skorbordun en çok bakılan sütunuydu.
+ */
+export interface SquadJSPlayerRevivedRaw {
+  reviver?: SquadJSPlayer | null | undefined;
+  victim?: SquadJSPlayer | null | undefined;
+  attacker?: SquadJSPlayer | null | undefined;
+  time?: Date | string | undefined;
+}
+
+/**
+ * Hasar.
+ *
+ * Saniyede onlarca kez düşen en yoğun olay. UPLINK'E GÖNDERİLMİYOR:
+ * yalnızca agent'ın belleğindeki skorborda toplanıyor ve maç sonunda tek
+ * satır olarak çıkıyor. Her isabeti ayrı olay yapmak, bir maçta on binlerce
+ * satır demekti ve taşıdığı bilgi zaten toplamın kendisi.
+ */
+export interface SquadJSPlayerDamagedRaw {
+  victim?: SquadJSPlayer | null | undefined;
+  attacker?: SquadJSPlayer | null | undefined;
+  damage?: number | undefined;
+  teamkill?: boolean | undefined;
+  time?: Date | string | undefined;
+}
+
 // SquadJS'in ürettiği ham event isimleri — upstream'de bunlar sabit.
 export interface SquadJSEngineEvents {
   PLAYER_CONNECTED: (raw: SquadJSPlayerConnectedRaw) => void;
@@ -193,6 +246,11 @@ export interface SquadJSEngineEvents {
   PLAYER_NOW_IS_LEADER: (raw: SquadJSPlayerStateChangeRaw) => void;
   PLAYER_NOW_IS_NOT_LEADER: (raw: SquadJSPlayerStateChangeRaw) => void;
   TEAMKILL: (raw: SquadJSTeamkillRaw) => void;
+  // Maç istatistikleri (Faz 4) — agent'ın belleğinde toplanıp maç sonunda
+  // ROUND_ENDED'ın içinde tek seferde gönderiliyor.
+  PLAYER_DIED: (raw: SquadJSPlayerDiedRaw) => void;
+  PLAYER_REVIVED: (raw: SquadJSPlayerRevivedRaw) => void;
+  PLAYER_DAMAGED: (raw: SquadJSPlayerDamagedRaw) => void;
 }
 
 export interface SquadJSEngine {

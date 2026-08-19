@@ -5,13 +5,17 @@ import type {
   SquadJSEngine,
   SquadJSNewGameRaw,
   SquadJSPlayerConnectedRaw,
+  SquadJSPlayerDamagedRaw,
+  SquadJSPlayerDiedRaw,
   SquadJSPlayerDisconnectedRaw,
+  SquadJSPlayerRevivedRaw,
   SquadJSPlayerStateChangeRaw,
   SquadJSRoundEndedRaw,
   SquadJSSquadCreatedRaw,
   SquadJSTeamkillRaw,
   SquadJSTickRateRaw,
 } from './engine.js';
+import { type SkorbordOzeti, macSkorborduOlustur, satirlariTazele } from './scoreboard.js';
 
 const CHAT_CHANNEL_MAP: Record<SquadJSChatMessageRaw['chat'], 'All' | 'Team' | 'Squad' | 'Admin'> =
   {
@@ -89,11 +93,29 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
     });
   };
 
+  /**
+   * Maç içi skorbord (plan Faz 4).
+   *
+   * Agent'ın belleğinde duruyor ve maç sonunda ROUND_ENDED'ın içine
+   * biniyor. Agent maç ortasında yeniden başlarsa o maçın skorbordu
+   * kayboluyor — bilinçli sınır: ara durumu diske yazmak, sürekli I/O
+   * karşılığında yılda birkaç maçlık veri kurtarırdı.
+   */
+  const skorbord = macSkorborduOlustur();
+
+  const handleDied = (raw: SquadJSPlayerDiedRaw) => skorbord.olum(raw);
+  const handleRevived = (raw: SquadJSPlayerRevivedRaw) => skorbord.canlandirma(raw);
+  const handleDamaged = (raw: SquadJSPlayerDamagedRaw) => skorbord.hasar(raw);
+
   const handleNewGame = (raw: SquadJSNewGameRaw) => {
     // Okunabilir ad yoksa classname'e düşüyoruz: "Yehorivka_RAAS_v1" çirkin
     // ama boş bırakmaktan iyi — maçın hangi haritada oynandığı kaybolmasın.
     const layer = raw.layer?.name ?? raw.layerClassname;
     const map = raw.layer?.map?.name ?? raw.mapClassname;
+    // Yeni maç = temiz skorbord. ROUND_ENDED hiç düşmediyse (sunucu çöktü,
+    // log döndü) önceki maçın sayaçları buraya sızardı ve iki maçın
+    // istatistiği tek maça yazılırdı.
+    skorbord.sifirla();
     onEvent({
       type: 'ROUND_STARTED',
       serverSlug,
@@ -104,6 +126,26 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
   };
 
   const handleRoundEnded = (raw: SquadJSRoundEndedRaw) => {
+    // Skorbord ÖNCE ve SENKRON kapatılıyor. Aşağıdaki oyuncu listesi
+    // sorgusu await gerektiriyor ve o sırada NEW_GAME düşerse sifirla()
+    // maçın tüm istatistiğini silerdi.
+    const ozet = skorbord.bitir();
+    // takeSnapshot ile aynı duruş: onEvent'in kendi hatası adapter'ı
+    // devirmemeli. Yakalanmayan bir reddetme burada tüm agent'ı düşürürdü.
+    void roundEndedGonder(raw, ozet).catch(() => {});
+  };
+
+  async function roundEndedGonder(raw: SquadJSRoundEndedRaw, ozet: SkorbordOzeti) {
+    // Maç sonundaki takım/manga/rol bilgisi yalnızca RCON listesinde var.
+    // Alınamazsa satırlar maç içinde son görülen değerlerle gidiyor —
+    // eksik alan yüzünden tüm skorbordu düşürmek çok daha pahalı olurdu.
+    let satirlar = ozet.satirlar;
+    try {
+      satirlar = satirlariTazele(satirlar, await engine.getPlayers());
+    } catch {
+      // RCON yanıt vermiyor; elimizdekiyle devam.
+    }
+
     // Takım ve ticket log'dan string geliyor; sayıya çevrilemiyorsa alanı
     // hiç göndermiyoruz — sözleşme opsiyonel, uydurma değer yazmıyoruz.
     const team = Number(raw.winner?.team);
@@ -117,9 +159,14 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
       ...(Number.isFinite(winnerTickets) ? { winnerTickets } : {}),
       ...(raw.loser?.faction ? { loserFaction: raw.loser.faction } : {}),
       ...(Number.isFinite(loserTickets) ? { loserTickets } : {}),
+      // Boş skorbord GÖNDERİLMİYOR: alanın yokluğu "bu maçın istatistiği
+      // yok" (agent maç ortasında başladı) demek; boş dizi ise "maçta hiç
+      // oyuncu yoktu" demek olurdu ve ikisi farklı şeyler.
+      ...(satirlar.length > 0 ? { players: satirlar } : {}),
+      ...(ozet.atlananOlum > 0 ? { skippedDeaths: ozet.atlananOlum } : {}),
       timestamp: raw.time.toISOString(),
     });
-  };
+  }
 
   /**
    * En son görülen tick hızı.
@@ -290,6 +337,9 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
       engine.on('PLAYER_NOW_IS_LEADER', handleBecameLeader);
       engine.on('PLAYER_NOW_IS_NOT_LEADER', handleLostLeader);
       engine.on('TEAMKILL', handleTeamkill);
+      engine.on('PLAYER_DIED', handleDied);
+      engine.on('PLAYER_REVIVED', handleRevived);
+      engine.on('PLAYER_DAMAGED', handleDamaged);
       snapshotTimer = setInterval(takeSnapshot, snapshotIntervalMs);
       void takeSnapshot();
     },
@@ -312,6 +362,9 @@ export function createSquadJSAdapter(opts: SquadJSAdapterOptions): SquadJSAdapte
       engine.off('PLAYER_NOW_IS_LEADER', handleBecameLeader);
       engine.off('PLAYER_NOW_IS_NOT_LEADER', handleLostLeader);
       engine.off('TEAMKILL', handleTeamkill);
+      engine.off('PLAYER_DIED', handleDied);
+      engine.off('PLAYER_REVIVED', handleRevived);
+      engine.off('PLAYER_DAMAGED', handleDamaged);
       if (snapshotTimer) clearInterval(snapshotTimer);
     },
   };

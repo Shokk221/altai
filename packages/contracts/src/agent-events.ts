@@ -92,9 +92,50 @@ export const RoundStartedEvent = z.object({
 });
 
 /**
+ * Maç sonu skorbordunun tek oyuncu satırı.
+ *
+ * `round_players` tablosunun kolonlarıyla birebir hizalı ve eski sistemin
+ * Mongo'dan aktarılan 2.304 maçıyla aynı alanları taşıyor — geçmiş ve yeni
+ * veri tek şemada, tek biçimde duruyor.
+ *
+ * Kimlik alanları opsiyonel: Squad oyuncuyu EOS ile tanıyor ve RCON
+ * listesinde SteamID'si hiç görünmeyen oyuncular var. İkisinden biri
+ * yeterli.
+ */
+export const RoundPlayerStat = z.object({
+  steamId: z.string().nullish(),
+  eosId: z.string().nullish(),
+  name: z.string().nullish(),
+  teamId: z.number().int().nullish(),
+  squadId: z.number().int().nullish(),
+  role: z.string().nullish(),
+  isLeader: z.boolean().nullish(),
+  kills: z.number().int().min(0),
+  deaths: z.number().int().min(0),
+  revives: z.number().int().min(0),
+  teamkills: z.number().int().min(0),
+  killstreak: z.number().int().min(0),
+  damageDealt: z.number().int().min(0),
+  damageTaken: z.number().int().min(0),
+  weapons: z.record(z.string(), z.number().int().min(0)),
+});
+
+export type RoundPlayerStat = z.infer<typeof RoundPlayerStat>;
+
+/**
  * Maç bitişi. Kazanan ve ticket bilgisi SquadJS'te ROUND_ENDED ile geliyor;
  * bazı harita/mod birleşimlerinde kazanan hiç bildirilmiyor, o yüzden tüm
  * alanlar opsiyonel — bilgi yoksa maçı kaydetmemek yerine eksik kaydediyoruz.
+ *
+ * SKORBORD BU OLAYIN İÇİNDE, ayrı bir olay olarak DEĞİL. Sebep api'nin
+ * olay işleyicisi: olaylar `void handle(...)` ile paralel başlatılıyor
+ * (persistence-writer.ts), yani ayrı bir SKORBORD olayı maçın kapanmasından
+ * ÖNCE işlenebilir ve satırlar hangi maça yazılacağını bulamazdı. Aynı
+ * olayın içinde geldiklerinde maç kimliği zaten elde.
+ *
+ * `players` opsiyonel: agent maç ortasında yeniden başlarsa o maçın
+ * skorbordu yok. Eksik skorbord yüzünden maçı hiç kaydetmemek, kaydın
+ * tamamını kaybetmek olurdu.
  */
 export const RoundEndedEvent = z.object({
   type: z.literal('ROUND_ENDED'),
@@ -104,6 +145,9 @@ export const RoundEndedEvent = z.object({
   winnerTickets: z.number().int().optional(),
   loserFaction: z.string().optional(),
   loserTickets: z.number().int().optional(),
+  players: z.array(RoundPlayerStat).optional(),
+  /** Kimliği çözülemediği için hiçbir satıra yazılamayan ölüm sayısı. */
+  skippedDeaths: z.number().int().min(0).optional(),
   timestamp: z.string().datetime(),
 });
 

@@ -1,4 +1,4 @@
-import type { AgentEvent } from '@altai/contracts';
+import type { AgentEvent, RoundPlayerStat } from '@altai/contracts';
 import type { Db } from '@altai/db';
 import {
   chatSchema,
@@ -27,6 +27,45 @@ const RAW_EVENTS_FLUSH_MAX_BATCH = 200;
  * bin giriş yeterli. Dolunca en eskiler atılıyor (Map ekleme sırasını korur).
  */
 const OYUNCU_ONBELLEK_TAVANI = 5_000;
+
+/**
+ * Maç toplamları — skorbord satırlarından TÜRETİLİYOR, ayrıca sayılmıyor.
+ *
+ * Agent'ın gönderdiği ayrı bir toplam alanına güvenmek, satırlarla toplamın
+ * birbirini tutmadığı bir maç kaydı üretebilirdi; tek kaynak satırlar.
+ */
+export function macToplamlari(players: RoundPlayerStat[]) {
+  let kills = 0;
+  let revives = 0;
+  let teamkills = 0;
+  for (const p of players) {
+    kills += p.kills;
+    revives += p.revives;
+    teamkills += p.teamkills;
+  }
+  return {
+    totalKills: kills,
+    totalRevives: revives,
+    totalTeamkills: teamkills,
+    playerCount: players.length,
+  };
+}
+
+/**
+ * Oyuncu maçı kazandı mı?
+ *
+ * Kazanan bilinmiyorsa ya da oyuncunun takımı çözülemediyse `null` —
+ * "bilinmiyor" ile "kaybetti" ayrı şeyler. Herkesi kaybetmiş saymak,
+ * kazananı bildirmeyen modlarda ve beraberliklerde galibiyet oranını
+ * sessizce sıfıra çekerdi.
+ */
+export function kazandiMi(
+  teamId: number | null | undefined,
+  winnerTeam: number | null,
+): boolean | null {
+  if (winnerTeam === null || teamId === null || teamId === undefined) return null;
+  return teamId === winnerTeam;
+}
 
 /**
  * Kalıcı yazım katmanı — api'de çalışır.
@@ -338,8 +377,102 @@ export function createPersistenceWriter(db: Db): PersistenceWriter {
         team2Tickets: winner === 2 ? (event.winnerTickets ?? null) : (event.loserTickets ?? null),
         team1Faction: winner === 1 ? (event.winnerFaction ?? null) : (event.loserFaction ?? null),
         team2Faction: winner === 2 ? (event.winnerFaction ?? null) : (event.loserFaction ?? null),
+        ...(event.players ? macToplamlari(event.players) : {}),
       })
       .where(eq(matchesSchema.rounds.id, open.id));
+
+    if (event.players?.length) {
+      await skorborduYaz(open.id, event.players, winner ?? null);
+    }
+    if (event.skippedDeaths) {
+      logger.warn(
+        { roundId: open.id, atlanan: event.skippedDeaths },
+        'skorbordda kimliği çözülemeyen ölümler var',
+      );
+    }
+  }
+
+  /**
+   * Maç sonu skorbordunu yazar.
+   *
+   * `playerId` çözülüyor ama ÇÖZÜLEMEZSE satır yine yazılıyor: şema
+   * bilerek nullable ve ham steam/eos kimliği saklanıyor, böylece oyuncu
+   * sonradan oluştuğunda geriye dönük bağlanabiliyor. Aktarılan geçmiş
+   * veride de aynı kural işliyor.
+   *
+   * Oyuncu kaydı burada OLUŞTURULMUYOR (upsert yok): skorbordda görünen
+   * herkes zaten sunucuya girmiş, yani PLAYER_CONNECTED ile kaydı açılmış
+   * olmalı. Açılmadıysa bu bir boşluk işareti ve maç yazımı sırasında yüz
+   * tane oyuncu satırı uydurmak o boşluğu gizlerdi.
+   */
+  async function skorborduYaz(
+    roundId: string,
+    players: RoundPlayerStat[],
+    winnerTeam: number | null,
+  ) {
+    const satirlar: (typeof matchesSchema.roundPlayers.$inferInsert)[] = [];
+    for (const p of players) {
+      const playerId = await oyuncuKimligiCoz(p.steamId, p.eosId);
+      satirlar.push({
+        roundId,
+        playerId,
+        steamId: p.steamId ?? null,
+        eosId: p.eosId ?? null,
+        name: p.name ?? null,
+        teamId: p.teamId ?? null,
+        squadId: p.squadId ?? null,
+        role: p.role ?? null,
+        isLeader: p.isLeader ?? null,
+        kills: p.kills,
+        deaths: p.deaths,
+        revives: p.revives,
+        teamkills: p.teamkills,
+        killstreak: p.killstreak,
+        damageDealt: p.damageDealt,
+        damageTaken: p.damageTaken,
+        isWinner: kazandiMi(p.teamId, winnerTeam),
+        weapons: Object.keys(p.weapons).length > 0 ? p.weapons : null,
+      });
+    }
+
+    // Tek INSERT: 100 satır için 100 gidiş-dönüş anlamsız. Çakışma
+    // yoksayılıyor — aynı ROUND_ENDED spool'dan tekrar gelirse (agent
+    // yeniden bağlandığında olabiliyor) satırlar ikilenmesin.
+    if (satirlar.length > 0) {
+      await db.insert(matchesSchema.roundPlayers).values(satirlar).onConflictDoNothing();
+    }
+  }
+
+  /**
+   * Skorbord satırının oyuncusunu bulur. Bulamazsa null — oluşturmuyor.
+   *
+   * Önce EOS'a bakılıyor: Squad oyuncuyu onunla tanıyor ve SteamID'si
+   * hiç görünmeyen oyuncular var. SteamID ikinci sırada, çünkü skorbordda
+   * dolu olma ihtimali daha düşük.
+   */
+  async function oyuncuKimligiCoz(
+    steamId: string | null | undefined,
+    eosId: string | null | undefined,
+  ): Promise<string | null> {
+    if (eosId) {
+      const [byEos] = await db
+        .select({ id: identitySchema.players.id })
+        .from(identitySchema.players)
+        .where(eq(identitySchema.players.eosId, eosId))
+        .limit(1);
+      if (byEos) return byEos.id;
+    }
+    if (steamId) {
+      const cached = playerIdBySteam.get(steamId);
+      if (cached) return cached;
+      const [bySteam] = await db
+        .select({ id: identitySchema.players.id })
+        .from(identitySchema.players)
+        .where(eq(identitySchema.players.steamId, steamId))
+        .limit(1);
+      if (bySteam) return bySteam.id;
+    }
+    return null;
   }
 
   /**
