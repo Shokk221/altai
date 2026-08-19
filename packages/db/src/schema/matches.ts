@@ -116,5 +116,13 @@ export const roundPlayers = pgTable(
     // steam_id null olan satırlar bu kısıttan muaf (Postgres'te null'lar
     // birbirine eşit sayılmaz) — o kayıtlar zaten oyuncuya bağlanamıyor.
     roundSteamIdx: uniqueIndex('round_players_round_steam_idx').on(t.roundId, t.steamId),
+    // EOS kimliği için ikinci tekillik: canlı skorbordda SteamID'si hiç
+    // görünmeyen oyuncular var (Squad artık oyuncuyu EOS ile tanıyor) ve
+    // yalnızca steam_id'ye bakan indeks onları KORUMUYORDU — null'lar
+    // birbirine eşit sayılmadığı için aynı ROUND_ENDED ikinci kez gelse
+    // (agent yeniden bağlanıp spool'u boşalttığında olur) o satırlar
+    // ikilenirdi. Aktarılan geçmiş veride eos_id null; oradaki satırlar
+    // aynı sebeple bu kısıttan muaf ve steam indeksi onları koruyor.
+    roundEosIdx: uniqueIndex('round_players_round_eos_idx').on(t.roundId, t.eosId),
   }),
 );

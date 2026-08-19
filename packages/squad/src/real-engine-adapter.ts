@@ -6,10 +6,15 @@ import type {
   SquadJSNewGameRaw,
   SquadJSOnlinePlayer,
   SquadJSPlayerConnectedRaw,
+  SquadJSPlayerDamagedRaw,
+  SquadJSPlayerDiedRaw,
   SquadJSPlayerDisconnectedRaw,
+  SquadJSPlayerRevivedRaw,
+  SquadJSPlayerStateChangeRaw,
   SquadJSRoundEndedRaw,
   SquadJSServerStatusRaw,
   SquadJSSquadCreatedRaw,
+  SquadJSTeamkillRaw,
 } from './engine.js';
 
 // Gerçek vendored SquadServer instance'ının (squad-server/squad-server/index.js)
@@ -195,6 +200,35 @@ export function createSquadServerEngineAdapter(
         register(event, listener, ((data: SquadJSAdminActionRaw) => {
           (listener as (raw: SquadJSAdminActionRaw) => void)(data ?? {});
         }) as RealListener);
+      } else if (event === 'PLAYER_DIED') {
+        register(event, listener, ((data: SquadJSPlayerDiedRaw) => {
+          (listener as SquadJSEngineEvents['PLAYER_DIED'])(data ?? {});
+        }) as RealListener);
+      } else if (event === 'PLAYER_REVIVED') {
+        register(event, listener, ((data: SquadJSPlayerRevivedRaw) => {
+          (listener as SquadJSEngineEvents['PLAYER_REVIVED'])(data ?? {});
+        }) as RealListener);
+      } else if (event === 'PLAYER_DAMAGED') {
+        register(event, listener, ((data: SquadJSPlayerDamagedRaw) => {
+          (listener as SquadJSEngineEvents['PLAYER_DAMAGED'])(data ?? {});
+        }) as RealListener);
+      } else if (event === 'TEAMKILL') {
+        register(event, listener, ((data: SquadJSTeamkillRaw) => {
+          (listener as SquadJSEngineEvents['TEAMKILL'])(data ?? {});
+        }) as RealListener);
+      } else if (
+        event === 'PLAYER_ROLE_CHANGE' ||
+        event === 'PLAYER_SQUAD_CHANGE' ||
+        event === 'PLAYER_NOW_IS_LEADER' ||
+        event === 'PLAYER_NOW_IS_NOT_LEADER'
+      ) {
+        // Dördü de aynı diff şeklinde geliyor (index.js:576-612), ayrım
+        // olay adında. Fork çözümlenmiş oyuncu kaydını `player` alanında
+        // veriyor; ek dönüştürmeye gerek yok.
+        register(event, listener, ((data: SquadJSPlayerStateChangeRaw) => {
+          if (!data?.player) return;
+          (listener as (raw: SquadJSPlayerStateChangeRaw) => void)(data);
+        }) as RealListener);
       } else if (event === 'ROUND_ENDED') {
         register(event, listener, ((data: RealRoundEndedData) => {
           const raw: SquadJSRoundEndedRaw = {
@@ -204,6 +238,16 @@ export function createSquadServerEngineAdapter(
           };
           (listener as SquadJSEngineEvents['ROUND_ENDED'])(raw);
         }) as RealListener);
+      } else {
+        // Köprüsü olmayan olaya abone olmak SESSİZ bir hataydı: `on()`
+        // hiçbir şey yapmıyor, plugin de olayı hiç görmüyordu. Gerçek
+        // sunucuda TEAMKILL ve rol/manga diff'leri tam olarak böyle
+        // kaybolmuştu — testler geçiyordu çünkü fixture motoru ayrı bir
+        // sınıf. Artık başlangıçta patlıyor: bir plugin'in aylarca ölü
+        // çalışmasındansa agent'ın açılışta durması yeğ.
+        throw new Error(
+          `real-engine-adapter: '${String(event)}' olayının köprüsü yok — abone olan kod olayı hiç almayacaktı`,
+        );
       }
     },
 

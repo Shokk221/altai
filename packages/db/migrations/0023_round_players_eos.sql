@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS "round_players_round_eos_idx" ON "round_players" USING btree ("round_id","eos_id");
