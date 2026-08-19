@@ -2,6 +2,13 @@ import type { AgentQuery } from '@altai/contracts';
 import type { Db } from '@altai/db';
 import { identitySchema, matchesSchema, moderationSchema } from '@altai/db';
 import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import {
+  type OyuncuIstatistigi,
+  type SiralamaSatiri,
+  bosIstatistik,
+  galibiyetOrani,
+  kdOrani,
+} from './player-stats.js';
 
 /**
  * Agent'ın sorabildiği soruların cevapları.
@@ -237,6 +244,212 @@ export interface SteamTazelikYaniti {
   taze: boolean;
 }
 
+/**
+ * Oyuncunun maç istatistikleri toplamı (Faz 4).
+ *
+ * Önceden hesaplanmış bir özet TABLOSU yok, sorgu anında toplanıyor.
+ * Sebep: özet tablosu ikinci bir doğruluk kaynağı demek ve geriye dönük
+ * bir düzeltme (yanlış maçın silinmesi, aktarımın tekrarlanması) yapıldığında
+ * sessizce ayrışırdı. `round_players(player_id)` indeksi var ve 230 bin
+ * satırlık geçmişte bile tek oyuncunun toplamı milisaniyeler sürüyor.
+ *
+ * Silah kırılımı AYRI sorguda: jsonb'yi ana toplamayla birlikte açmak,
+ * satır sayısını silah çeşidi kadar çoğaltıp diğer bütün toplamları
+ * bozardı.
+ */
+async function oyuncuIstatistigi(
+  db: Db,
+  id: string | null,
+  days: number | null | undefined,
+): Promise<OyuncuIstatistigi> {
+  if (!id) return bosIstatistik();
+
+  // Zaman filtresi maçın BAŞLAMA anına bakıyor, satırın kendisine değil:
+  // round_players'da zaman kolonu yok ve olması da gereksiz — bir maçın
+  // satırları o maça ait.
+  const zamanSuzgeci = days ? sql`and r.started_at >= now() - ${`${days} days`}::interval` : sql``;
+
+  const res = await db.execute(sql`
+    select count(*)::int                                        as rounds,
+           coalesce(sum(rp.kills), 0)::int                      as kills,
+           coalesce(sum(rp.deaths), 0)::int                     as deaths,
+           coalesce(sum(rp.revives), 0)::int                    as revives,
+           coalesce(sum(rp.teamkills), 0)::int                  as teamkills,
+           coalesce(max(rp.killstreak), 0)::int                 as best_killstreak,
+           coalesce(sum(rp.damage_dealt), 0)::bigint            as damage_dealt,
+           coalesce(sum(rp.damage_taken), 0)::bigint            as damage_taken,
+           count(*) filter (where rp.is_winner is true)::int    as wins,
+           count(*) filter (where rp.is_winner is false)::int   as losses
+      from round_players rp
+      join rounds r on r.id = rp.round_id
+     where rp.player_id = ${id}
+       ${zamanSuzgeci}
+  `);
+  const r = (res as unknown as Record<string, unknown>[])[0] ?? {};
+  const rounds = Number(r.rounds ?? 0);
+
+  // Hiç maçı yoksa silah sorgusu atlanıyor: kesin boş dönecek bir sorgu.
+  const silahlar = rounds > 0 ? await enCokKullanilanSilahlar(db, id, days) : [];
+
+  const kills = Number(r.kills ?? 0);
+  const deaths = Number(r.deaths ?? 0);
+  const wins = Number(r.wins ?? 0);
+  const losses = Number(r.losses ?? 0);
+
+  return {
+    // `bulundu` oyuncunun VARLIĞINI değil, istatistiğinin varlığını
+    // anlatıyor: kaydı olup hiç maç bitirmemiş oyuncuya "veri yok" demek,
+    // yeni gelen birine doğru cevap.
+    bulundu: rounds > 0,
+    rounds,
+    kills,
+    deaths,
+    revives: Number(r.revives ?? 0),
+    teamkills: Number(r.teamkills ?? 0),
+    bestKillstreak: Number(r.best_killstreak ?? 0),
+    damageDealt: Number(r.damage_dealt ?? 0),
+    damageTaken: Number(r.damage_taken ?? 0),
+    wins,
+    losses,
+    kdr: kdOrani(kills, deaths),
+    winRate: galibiyetOrani(wins, losses),
+    topWeapons: silahlar,
+  };
+}
+
+/** Silah kırılımı — jsonb'yi satırlara açıp topluyor. */
+async function enCokKullanilanSilahlar(
+  db: Db,
+  id: string,
+  days: number | null | undefined,
+): Promise<Array<{ weapon: string; kills: number }>> {
+  const zamanSuzgeci = days ? sql`and r.started_at >= now() - ${`${days} days`}::interval` : sql``;
+
+  const res = await db.execute(sql`
+    select w.key as weapon, sum((w.value)::int)::int as kills
+      from round_players rp
+      join rounds r on r.id = rp.round_id
+      cross join lateral jsonb_each_text(rp.weapons) as w(key, value)
+     where rp.player_id = ${id}
+       and rp.weapons is not null
+       ${zamanSuzgeci}
+     group by w.key
+     -- Eşitlikte ada göre: sırası oynayan bir liste panelde her
+     -- yenilemede farklı görünürdü.
+     order by kills desc, weapon asc
+     limit 3
+  `);
+  return (res as unknown as Record<string, unknown>[]).map((row) => ({
+    weapon: String(row.weapon),
+    kills: Number(row.kills ?? 0),
+  }));
+}
+
+/**
+ * Sıralama — ilk N oyuncu (Faz 4).
+ *
+ * `minRounds` K/D sıralamasında zorunlu bir güvenlik: tek maçta 3 öldürüp
+ * hiç ölmeyen biri, yüz maç oynamış herkesin üstüne çıkardı. Eşiği çağıran
+ * veriyor çünkü doğru değer sunucunun doluluğuna göre değişiyor.
+ *
+ * Yalnızca `player_id` çözülmüş satırlar sayılıyor: aynı kişi bazı
+ * maçlarda ham kimlikle, bazılarında oyuncu kaydıyla göründüğünde
+ * sıralamada iki kez yer alırdı.
+ */
+export async function siralama(
+  db: Db,
+  query: Extract<AgentQuery, { kind: 'leaderboard' }>,
+): Promise<SiralamaSatiri[]> {
+  const zamanSuzgeci = query.days
+    ? sql`and r.started_at >= now() - ${`${query.days} days`}::interval`
+    : sql``;
+
+  // K/D sıralamasında ölüm sayısı sıfır olanlar için `greatest(deaths, 1)`
+  // kullanılıyor: bölme hatası olmuyor ve "hiç ölmemiş" oyuncu öldürme
+  // sayısı kadar oranla giriyor — kdOrani ile aynı kural.
+  const siraOlcutu =
+    query.metric === 'kills'
+      ? sql`sum(rp.kills) desc`
+      : query.metric === 'revives'
+        ? sql`sum(rp.revives) desc`
+        : query.metric === 'rounds'
+          ? sql`count(*) desc`
+          : sql`(sum(rp.kills)::numeric / greatest(sum(rp.deaths), 1)) desc`;
+
+  // Dış sorgunun sıralaması: CTE'de artık toplanmış KOLONLAR var, toplama
+  // ifadeleri değil. İkisini ayrı yazmak zorunlu — `limit` iç sorguda,
+  // ama CTE'nin sırası dışarıya taşınmıyor.
+  const siraOlcutu2 =
+    query.metric === 'kills'
+      ? sql`t.kills desc`
+      : query.metric === 'revives'
+        ? sql`t.revives desc`
+        : query.metric === 'rounds'
+          ? sql`t.rounds desc`
+          : sql`(t.kills::numeric / greatest(t.deaths, 1)) desc`;
+
+  // İsim ÖNCE toplanıp SONRA çözülüyor. `players` tablosunda isim yok —
+  // isimler `player_names`'te ve bir oyuncunun onlarca kaydı olabiliyor.
+  // Toplama sorgusuna katmak, her oyuncuyu isim sayısı kadar çoğaltıp
+  // bütün toplamları bozardı. Bu yüzden önce ilk N bulunuyor, isim
+  // yalnızca o N satır için aranıyor.
+  const res = await db.execute(sql`
+    with toplam as (
+      select rp.player_id                       as player_id,
+             count(*)::int                      as rounds,
+             coalesce(sum(rp.kills), 0)::int    as kills,
+             coalesce(sum(rp.deaths), 0)::int   as deaths,
+             coalesce(sum(rp.revives), 0)::int  as revives
+        from round_players rp
+        join rounds r on r.id = rp.round_id
+       where rp.player_id is not null
+         ${zamanSuzgeci}
+       group by rp.player_id
+      having count(*) >= ${query.minRounds}
+       order by ${siraOlcutu}
+       limit ${query.limit}
+    )
+    select t.player_id,
+           p.steam_id,
+           -- EN SON görülen isim: oyuncu adını değiştirdiğinde sıralamada
+           -- eski adıyla durmamalı. last_seen null olan (aktarımdan gelen)
+           -- kayıtlar sona atılıyor, elenmiyor.
+           (select pn.name
+              from player_names pn
+             where pn.player_id = t.player_id
+             order by pn.last_seen desc nulls last
+             limit 1) as name,
+           t.rounds, t.kills, t.deaths, t.revives
+      from toplam t
+      join players p on p.id = t.player_id
+     order by ${siraOlcutu2}
+  `);
+
+  return (res as unknown as Record<string, unknown>[]).map((row) => {
+    const kills = Number(row.kills ?? 0);
+    const deaths = Number(row.deaths ?? 0);
+    return {
+      playerId: String(row.player_id),
+      steamId: row.steam_id === null || row.steam_id === undefined ? null : String(row.steam_id),
+      name: row.name === null || row.name === undefined ? null : String(row.name),
+      rounds: Number(row.rounds ?? 0),
+      kills,
+      deaths,
+      revives: Number(row.revives ?? 0),
+      kdr: kdOrani(kills, deaths),
+    };
+  });
+}
+
+/** Oyuncunun kimliğinden istatistiğini çözer — REST ucu da bunu kullanıyor. */
+export async function oyuncuIstatistiginiGetir(
+  db: Db,
+  playerId: string,
+  days?: number | null,
+): Promise<OyuncuIstatistigi> {
+  return oyuncuIstatistigi(db, playerId, days);
+}
+
 export async function sorguyuCoz(db: Db, query: AgentQuery, serverId?: string): Promise<unknown> {
   // Steam tazeliği kendi kimlik çözümlemesini yapıyor: yalnızca SteamID
   // taşıyor ve EOS alanı yok.
@@ -254,6 +467,10 @@ export async function sorguyuCoz(db: Db, query: AgentQuery, serverId?: string): 
 
   if (query.kind === 'player_clans') {
     return oyuncuKlanlari(db, query.ids);
+  }
+
+  if (query.kind === 'leaderboard') {
+    return siralama(db, query);
   }
 
   const id = await oyuncuId(db, query.steamId, query.eosId);
@@ -298,5 +515,8 @@ export async function sorguyuCoz(db: Db, query: AgentQuery, serverId?: string): 
         oturum: Number(r.oturum ?? 0),
       } satisfies PlaytimeYaniti;
     }
+
+    case 'player_stats':
+      return oyuncuIstatistigi(db, id, query.days);
   }
 }

@@ -90,6 +90,34 @@ export const AgentQuery = z.discriminatedUnion('kind', [
     steamId: z.string().nullish(),
     eosId: z.string().nullish(),
   }),
+  /** Oyuncunun maç istatistikleri toplamı (Faz 4). */
+  z.object({
+    kind: z.literal('player_stats'),
+    steamId: z.string().nullish(),
+    eosId: z.string().nullish(),
+    /**
+     * Kaç gün geriye bakılacak. Verilmezse tüm zamanlar.
+     *
+     * Eşiği SORAN taraf veriyor: "bu ayki istatistiğim" ile "tüm zamanlar"
+     * aynı sorgunun iki kullanımı ve hangisinin isteneceği plugin'in ayarı.
+     */
+    days: z.number().int().positive().max(3650).nullish(),
+  }),
+  /** Sıralama — ilk N oyuncu (Faz 4). */
+  z.object({
+    kind: z.literal('leaderboard'),
+    metric: z.enum(['kills', 'kdr', 'revives', 'rounds']),
+    limit: z.number().int().min(1).max(25),
+    days: z.number().int().positive().max(3650).nullish(),
+    /**
+     * Sıralamaya girmek için gereken en az maç sayısı.
+     *
+     * K/D sıralamasında ŞART: tek maçta 3 öldürüp hiç ölmeyen biri, yüz
+     * maç oynamış herkesin üstüne çıkardı. Eşiği çağıran veriyor çünkü
+     * doğru değer sunucunun doluluğuna göre değişiyor.
+     */
+    minRounds: z.number().int().min(0).max(1000).default(0),
+  }),
 ]);
 export type AgentQuery = z.infer<typeof AgentQuery>;
 

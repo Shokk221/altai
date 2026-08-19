@@ -279,6 +279,21 @@ export class PluginHost {
           ...(eosId ? { eosId } : {}),
         })) as { bulundu: boolean; toplamSaniye: number; oturum: number } | null | undefined) ??
         null,
+      oyuncuIstatistigi: async (steamId, eosId, days) =>
+        ((await this.opts.sorgu?.({
+          kind: 'player_stats',
+          ...(steamId ? { steamId } : {}),
+          ...(eosId ? { eosId } : {}),
+          ...(days ? { days } : {}),
+        })) as Awaited<ReturnType<PluginContext['oyuncuIstatistigi']>> | undefined) ?? null,
+      siralama: async (opts) =>
+        ((await this.opts.sorgu?.({
+          kind: 'leaderboard',
+          metric: opts.metric,
+          limit: opts.limit,
+          ...(opts.days ? { days: opts.days } : {}),
+          minRounds: opts.minRounds ?? 0,
+        })) as Awaited<ReturnType<PluginContext['siralama']>> | undefined) ?? null,
       oyuncuKlanlari: async (ids) => {
         if (ids.length === 0) return [];
         return (
@@ -332,6 +347,20 @@ export class PluginHost {
             .then(fn)
             .catch((err) => {
               logger.error({ err, plugin: pluginAdi }, 'plugin periyodik işi hata verdi');
+            });
+        }, ms);
+        zamanlayicilar.push(z);
+      },
+      sonra: (ms, fn) => {
+        // `every` ile AYNI listeye giriyor: kapatma tarafı zaten bu listeyi
+        // temizliyor ve Node'da clearInterval bir setTimeout kaydını da
+        // iptal ediyor (ikisi de aynı Timeout nesnesi). Ayrı bir liste
+        // tutmak, kapatmada birini unutma riski demekti.
+        const z = setTimeout(() => {
+          void Promise.resolve()
+            .then(fn)
+            .catch((err) => {
+              logger.error({ err, plugin: pluginAdi }, 'plugin gecikmeli işi hata verdi');
             });
         }, ms);
         zamanlayicilar.push(z);

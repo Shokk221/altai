@@ -9,8 +9,10 @@ import { cblInfo } from './cbl-info.js';
 import { chatCommands } from './chat-commands.js';
 import { eliteCommander } from './elite-commander.js';
 import { fogOfWar } from './fog-of-war.js';
+import { myStats } from './my-stats.js';
 import { nameEnforcer } from './name-enforcer.js';
 import { playtimeSquadGuard } from './playtime-squad-guard.js';
+import { roundScoreboard } from './round-scoreboard.js';
 import { seedTracker } from './seed-tracker.js';
 import { seedingMode } from './seeding-mode.js';
 import { slBanEnforcer } from './sl-ban-enforcer.js';
@@ -54,6 +56,8 @@ export const PLUGINS: AnyPlugin[] = [
   teamBalancer,
   teamSwitch,
   adminRequest,
+  myStats,
+  roundScoreboard,
 ];
 
 export {
@@ -80,4 +84,6 @@ export {
   teamBalancer,
   teamSwitch,
   adminRequest,
+  myStats,
+  roundScoreboard,
 };

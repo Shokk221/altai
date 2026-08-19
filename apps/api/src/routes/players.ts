@@ -4,6 +4,7 @@ import { and, desc, eq, gt, ilike, inArray, isNull, lt, or, sql } from 'drizzle-
 import type { FastifyInstance } from 'fastify';
 import { requireSession } from '../lib/auth-guard.js';
 import { aktifBanKosulu, banAktifMi } from '../lib/ban-active.js';
+import { galibiyetOrani } from '../lib/player-stats.js';
 
 /**
  * Oyuncu arama ve profil — plan Bölüm 5 ("Oyuncu arama: pg_trgm ile kısmi
@@ -324,11 +325,19 @@ export async function playerRoutes(app: FastifyInstance, opts: { db: Db }) {
            where player_id = ${id}
         `),
 
-      db.execute<{ mac: number; kill: number; olum: number; revive: number }>(sql`
+      // Faz 4: takım öldürme, en uzun seri ve galibiyet de buradan geliyor.
+      // Galibiyet sayımı `is_winner is true/false` ile yapılıyor, `= true`
+      // ile değil: null olan satırlar (beraberlik, kazananı bildirmeyen
+      // mod) hiçbir tarafa yazılmamalı.
+      db.execute(sql`
           select count(*)::int as mac,
                  coalesce(sum(kills), 0)::int as kill,
                  coalesce(sum(deaths), 0)::int as olum,
-                 coalesce(sum(revives), 0)::int as revive
+                 coalesce(sum(revives), 0)::int as revive,
+                 coalesce(sum(teamkills), 0)::int as tk,
+                 coalesce(max(killstreak), 0)::int as seri,
+                 count(*) filter (where is_winner is true)::int as galibiyet,
+                 count(*) filter (where is_winner is false)::int as maglubiyet
             from round_players
            where player_id = ${id}
         `),
@@ -365,6 +374,12 @@ export async function playerRoutes(app: FastifyInstance, opts: { db: Db }) {
         kill: Number(m.kill ?? 0),
         olum: Number(m.olum ?? 0),
         revive: Number(m.revive ?? 0),
+        tk: Number(m.tk ?? 0),
+        enUzunSeri: Number(m.seri ?? 0),
+        galibiyet: Number(m.galibiyet ?? 0),
+        maglubiyet: Number(m.maglubiyet ?? 0),
+        // Bilinen sonuç yoksa null: sıfır yazmak "hep kaybetti" demekti.
+        galibiyetOrani: galibiyetOrani(Number(m.galibiyet ?? 0), Number(m.maglubiyet ?? 0)),
       },
     };
   });
