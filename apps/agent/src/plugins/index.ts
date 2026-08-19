@@ -1,4 +1,5 @@
 import type { AnyPlugin } from '@altai/squad';
+import { adminCamVoice } from './admin-cam-voice.js';
 import { adminCamWatchlist } from './admin-cam-watchlist.js';
 import { adminRequest } from './admin-request.js';
 import { autoKickUnassigned } from './auto-kick-unassigned.js';
@@ -58,6 +59,7 @@ export const PLUGINS: AnyPlugin[] = [
   adminRequest,
   myStats,
   roundScoreboard,
+  adminCamVoice,
 ];
 
 export {
@@ -86,4 +88,5 @@ export {
   adminRequest,
   myStats,
   roundScoreboard,
+  adminCamVoice,
 };

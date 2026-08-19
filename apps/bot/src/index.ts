@@ -5,6 +5,7 @@ import { createOlayOkuyucu } from './event-reader.js';
 import { hesapBagla, hesapCoz } from './linking.js';
 import { adminCagrisiGomusu, macSonuGomusu, teamkillGomusu } from './render.js';
 import { guildiEsitle, uyeyiEsitle, uyeyiTemizle } from './role-sync.js';
+import { type SesUyesi, sesDurumuDegisti, sesDurumunuEsitle, sesNabzi } from './voice.js';
 
 // Botun iki işi var:
 //
@@ -56,7 +57,25 @@ const db = createDb(databaseUrl);
  */
 const TAM_TARAMA_MS = 15 * 60 * 1000;
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
+/**
+ * Ses nabız aralığı.
+ *
+ * api bunun iki katından eskiyse ses bilgisini "bilinmiyor" sayıyor. Kısa
+ * tutuluyor çünkü bir yetkilinin haksız yere uyarılmaması, tek satırlık
+ * bir yazmadan daha değerli.
+ */
+const SES_NABIZ_MS = 30 * 1000;
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    // Ses durumu ayrı bir intent ve Discord panelinden ayrıca açılması
+    // gerekmiyor (ayrıcalıklı değil). Olmadan voiceStateUpdate hiç düşmez
+    // ve ses denetimi sessizce çalışmaz.
+    GatewayIntentBits.GuildVoiceStates,
+  ],
+});
 
 /** Kanal kimlikleri .env'den; verilmeyen özellik sessizce kapalı. */
 const killfeedKanali = process.env.DISCORD_KILLFEED_CHANNEL_ID;
@@ -104,6 +123,41 @@ async function tamTarama(sebep: string) {
   }
 }
 
+/**
+ * Guild'deki ses durumunu baştan yazar.
+ *
+ * Açılışta ve periyodik olarak çağrılıyor. Periyodik olması şart:
+ * `voiceStateUpdate` bot kapalıyken düşen değişiklikleri getirmiyor ve
+ * yeniden bağlanma sırasında da olay kaçabiliyor. Tam tarama, kaçan her
+ * şeyi bir sonraki turda düzeltiyor.
+ */
+async function sesTaramasi(sebep: string) {
+  try {
+    const guild = await client.guilds.fetch(guildId as string);
+    const uyeler: SesUyesi[] = [];
+    for (const [, durum] of guild.voiceStates.cache) {
+      // Kanalı olmayan ses durumu = sesten çıkmış; önbellekte kalıntı
+      // olarak durabiliyor.
+      if (!durum.channelId) continue;
+      uyeler.push({
+        discordId: durum.id,
+        channelId: durum.channelId,
+        channelName: durum.channel?.name ?? null,
+      });
+    }
+    const sonuc = await sesDurumunuEsitle(db, guildId as string, uyeler);
+    // Nabız senkronun ARDINDAN atılıyor: önce atılsaydı, senkron
+    // başarısız olduğunda bayat veri taze görünürdü.
+    await sesNabzi(db);
+    logger.info({ sebep, ...sonuc }, 'ses durumu senkronu tamamlandı');
+  } catch (err) {
+    // Nabız ATILMIYOR: senkron başarısızsa veri bayat demektir ve api'nin
+    // bunu bilmesi gerekiyor. Nabzı yine de atmak, bayat veriyi taze
+    // göstermek olurdu.
+    logger.error({ err, sebep }, 'ses durumu senkronu başarısız — nabız atılmadı');
+  }
+}
+
 // Yalnızca render'ı açık olan olay türleri okunuyor: kapalı bir özellik
 // için veritabanını yoklamanın anlamı yok.
 const okunacakTurler = [
@@ -145,6 +199,10 @@ client.once('ready', () => {
   const zamanlayici = setInterval(() => void tamTarama('periyodik'), TAM_TARAMA_MS);
   zamanlayici.unref?.();
 
+  void sesTaramasi('acilis');
+  const sesZamanlayici = setInterval(() => void sesTaramasi('periyodik'), SES_NABIZ_MS);
+  sesZamanlayici.unref?.();
+
   if (olayOkuyucu) olayOkuyucu.baslat();
   else logger.info({}, 'olay render kanalı tanımlı değil — killfeed ve maç sonu kapalı');
 
@@ -156,6 +214,16 @@ client.on('guildMemberUpdate', (_eski, yeni) => {
   void uyeyiEsitle(db, yeni).catch((err) =>
     logger.error({ err, discordId: yeni.id }, 'üye rol senkronu başarısız'),
   );
+});
+
+client.on('voiceStateUpdate', (_eski, yeni) => {
+  if (yeni.guild.id !== guildId) return;
+  void sesDurumuDegisti(
+    db,
+    guildId as string,
+    yeni.id,
+    yeni.channelId ? { id: yeni.channelId, name: yeni.channel?.name ?? null } : null,
+  ).catch((err) => logger.error({ err, discordId: yeni.id }, 'ses durumu yazılamadı'));
 });
 
 // Üye ayrıldığında rolleri de gitmeli: ayrılan biri Admins.cfg'de kalmamalı.

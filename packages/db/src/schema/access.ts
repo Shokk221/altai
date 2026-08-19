@@ -1,4 +1,13 @@
-import { index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  index,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { players, users } from './identity';
 import { servers } from './presence';
 
@@ -180,3 +189,44 @@ export const discordMemberRoles = pgTable(
     index('discord_member_roles_role_idx').on(table.discordRoleId),
   ],
 );
+
+/**
+ * O an Discord ses kanalında olan hesaplar. Bot senkronize eder.
+ *
+ * Yalnızca SESTE OLANLAR burada duruyor; ayrılan kişinin satırı siliniyor.
+ * Tarihçe tutulmuyor çünkü sorulan soru tek: "şu an seste mi". Geçmişi
+ * saklamak, saniyede birkaç kez değişen bir veriyi kalıcı tabloya
+ * yazmak olurdu.
+ *
+ * `discord_id` tekil: bir hesap aynı anda tek ses kanalında olabilir.
+ */
+export const discordVoiceStates = pgTable(
+  'discord_voice_states',
+  {
+    discordId: text('discord_id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    channelId: text('channel_id').notNull(),
+    /** Kanal adı — plugin oyuncuya "X kanalına gir" diyebilsin diye. */
+    channelName: text('channel_name'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('discord_voice_states_channel_idx').on(table.channelId)],
+);
+
+/**
+ * Ses senkronunun canlılık nabzı — TEK satır.
+ *
+ * Bu tablo olmadan sessiz ve tehlikeli bir hata çıkıyor: bot kapalıyken
+ * `discord_voice_states` BOŞ olur ve "kimse seste değil" gibi okunur.
+ * Ses zorunluluğu uygulayan bir plugin de o anda sunucudaki bütün
+ * yetkilileri cezalandırırdı — botun kapalı olması yetkililerin suçu değil.
+ *
+ * Bot düzenli olarak buraya yazıyor. Nabız bayatsa cevap "seste değil"
+ * değil, "BİLİNMİYOR" oluyor ve plugin hiçbir şey yapmıyor. Aynı ayrım
+ * etiket sorgusunda da var (bkz. oyuncuEtiketleri).
+ */
+export const discordVoiceSync = pgTable('discord_voice_sync', {
+  /** Tek satır garantisi: birincil anahtar sabit `true`. */
+  id: boolean('id').primaryKey().default(true),
+  syncedAt: timestamp('synced_at', { withTimezone: true }).defaultNow().notNull(),
+});
