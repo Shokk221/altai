@@ -88,6 +88,19 @@ export function macSonuGomusu(event: Extract<AgentEvent, { type: 'ROUND_ENDED' }
     });
   }
 
+  // Skorbord varsa ilk üç oyuncu tek alana yazılıyor. Ayrı alan yapmak
+  // kartı üç sütuna bölüp maç bilgisini aşağı itiyordu; asıl bilgi maçın
+  // kendisi, skorbord ona ek.
+  const enIyiler = macinEnIyileri(event.players ?? [], 3);
+  if (enIyiler.length > 0) {
+    alanlar.push({
+      name: 'En çok öldüren',
+      value: enIyiler
+        .map((p, i) => `${i + 1}. ${p.name?.trim() || BILINMEYEN} — ${p.kills}/${p.deaths}`)
+        .join('\n'),
+    });
+  }
+
   return {
     title: kazanan ? `Maç bitti — ${kazanan} kazandı` : 'Maç bitti',
     color: RENK_MAC,
@@ -95,6 +108,24 @@ export function macSonuGomusu(event: Extract<AgentEvent, { type: 'ROUND_ENDED' }
     timestamp: event.timestamp,
     footer: { text: event.serverSlug },
   };
+}
+
+/**
+ * Skorbordun ilk N'i, öldürmeye göre.
+ *
+ * Hiç öldürme yapmamış oyuncular ELENİYOR: listeyi doldurmak uğruna sıfır
+ * öldürmeli birini "en çok öldüren" başlığı altına koymak, kartı okuyan
+ * kişiye yanlış bilgi verirdi. Eşitlikte isme göre sıralanıyor ki aynı maç
+ * iki kez çizilse aynı sıra çıksın.
+ */
+export function macinEnIyileri(
+  players: NonNullable<Extract<AgentEvent, { type: 'ROUND_ENDED' }>['players']>,
+  n: number,
+) {
+  return players
+    .filter((p) => p.kills > 0)
+    .sort((a, b) => b.kills - a.kills || (a.name ?? '').localeCompare(b.name ?? ''))
+    .slice(0, n);
 }
 
 /**

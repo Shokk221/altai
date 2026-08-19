@@ -77,6 +77,12 @@ interface Profil {
     kill: number;
     olum: number;
     revive: number;
+    tk: number;
+    enUzunSeri: number;
+    galibiyet: number;
+    maglubiyet: number;
+    /** Bilinen sonuç yoksa null — sıfır "hep kaybetti" demekti. */
+    galibiyetOrani: number | null;
   };
 }
 
@@ -212,6 +218,15 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
           <Deger baslik="oturum" deger={sayi(oyun.oturum)} />
           <Deger baslik="maç" deger={sayi(oyun.mac)} />
           <Deger baslik="K / D" deger={kd} />
+          <Deger baslik="canlandırma" deger={sayi(oyun.revive)} />
+          {/* Sıfır seri gösterilmiyor: hiç maçı olmayan oyuncuda "0" bir
+              bilgi değil, boş bir sütun. */}
+          {oyun.enUzunSeri > 0 ? (
+            <Deger baslik="en uzun seri" deger={sayi(oyun.enUzunSeri)} />
+          ) : null}
+          {oyun.galibiyetOrani === null ? null : (
+            <Deger baslik="galibiyet" deger={`%${oyun.galibiyetOrani}`} />
+          )}
           <Deger baslik="ban" deger={sayi(profil.bans.length)} />
           <Deger baslik="açık kayıt" deger={sayi(acikKayit)} />
           <div className="ml-auto text-right text-[11px] leading-relaxed text-fg-faint">

@@ -24,6 +24,7 @@ import { moderationRoutes } from './routes/moderation.js';
 import { playerRoutes } from './routes/players.js';
 import { pluginConfigRoutes } from './routes/plugin-configs.js';
 import { serverStatusRoutes } from './routes/server-status.js';
+import { statsRoutes } from './routes/stats.js';
 
 const config = loadConfig();
 const db = createDb(config.DATABASE_URL);
@@ -118,6 +119,7 @@ await app.register(
     await api.register(liveActionRoutes, { db });
     await api.register(activityRoutes, { db });
     await api.register(clanRoutes, { db });
+    await api.register(statsRoutes, { db });
   },
   { prefix: '/api' },
 );

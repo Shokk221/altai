@@ -161,3 +161,56 @@ describe('adminCagrisiGomusu', () => {
     expect(alan?.value).toContain('steamcommunity.com/profiles/76561190000000001');
   });
 });
+
+/**
+ * Maç sonu kartındaki skorbord.
+ *
+ * Veri `ROUND_ENDED`'ın kendi yükünden geliyor (Faz 4), bot ayrıca sorgu
+ * atmıyor. Bu yüzden kartın doğruluğu tamamen buradaki sıralamaya bağlı.
+ */
+describe('maç sonu skorbordu', () => {
+  const oyuncu = (name: string, kills: number, deaths = 0) => ({
+    name,
+    kills,
+    deaths,
+    revives: 0,
+    teamkills: 0,
+    killstreak: 0,
+    damageDealt: 0,
+    damageTaken: 0,
+    weapons: {},
+  });
+
+  it('ilk üçü öldürmeye göre yazar', () => {
+    const g = macSonuGomusu(
+      mac({
+        players: [
+          oyuncu('Ali', 5, 3),
+          oyuncu('Veli', 12, 4),
+          oyuncu('Ayşe', 8, 2),
+          oyuncu('Mehmet', 1, 9),
+        ],
+      }),
+    );
+    const alan = g.fields?.find((f) => f.name === 'En çok öldüren');
+    expect(alan?.value).toBe('1. Veli — 12/4\n2. Ayşe — 8/2\n3. Ali — 5/3');
+  });
+
+  it('hiç öldürme yapmamışları listeye almaz', () => {
+    const g = macSonuGomusu(mac({ players: [oyuncu('Ali', 0), oyuncu('Veli', 2)] }));
+    expect(g.fields?.find((f) => f.name === 'En çok öldüren')?.value).toBe('1. Veli — 2/0');
+  });
+
+  it('skorbord yoksa alan hiç eklenmez', () => {
+    // Agent maç ortasında başlamış olabilir; uydurma bir liste göstermek
+    // olmayan bir maçı duyurmak olurdu.
+    const alanlar = macSonuGomusu(mac()).fields ?? [];
+    expect(alanlar.some((f) => f.name === 'En çok öldüren')).toBe(false);
+  });
+
+  it('herkes sıfır öldürmeyse alan eklenmez', () => {
+    const alanlar =
+      macSonuGomusu(mac({ players: [oyuncu('Ali', 0), oyuncu('Veli', 0)] })).fields ?? [];
+    expect(alanlar.some((f) => f.name === 'En çok öldüren')).toBe(false);
+  });
+});

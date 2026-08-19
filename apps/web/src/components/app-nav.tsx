@@ -27,6 +27,7 @@ interface Bolum {
 const BOLUMLER: Bolum[] = [
   { href: '/', etiket: 'Panel' },
   { href: '/oyuncular', etiket: 'Oyuncular' },
+  { href: '/siralama', etiket: 'Sıralama' },
   { href: '/kayitlar', etiket: 'Kayıtlar', izin: 'audit.read' },
   { href: '/yetkiler', etiket: 'Yetkiler', izin: 'admin_list.manage' },
   { href: '/klanlar', etiket: 'Klanlar', izin: 'plugin_config.write' },
