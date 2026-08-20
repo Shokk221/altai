@@ -151,7 +151,6 @@ export default class SquadServer extends EventEmitter {
 
       this.adminsInAdminCam[data.eosID] = data.time;
 
-      console.log(`[DEBUG-ADMINCAM] SquadServer POSSESSED | Player: ${data.player?.name || 'null'} | SteamID: ${data.player?.steamID || 'null'} | EosID: ${data.eosID} | PlayerObj: ${data.player ? 'EXISTS' : 'NULL'}`);
       this.emit('POSSESSED_ADMIN_CAMERA', data);
     });
 
@@ -177,30 +176,34 @@ export default class SquadServer extends EventEmitter {
       // 1. In-memory POSSESSED kaydı (en güvenilir)
       if (this.adminsInAdminCam[data.eosID]) {
         data.duration = data.time.getTime() - this.adminsInAdminCam[data.eosID].getTime();
-        console.log(`[DEBUG-ADMINCAM] SquadServer UNPOSSESSED | Duration from memory: ${Math.round(data.duration/60000)}min`);
       }
 
-      // 2. Bellekte yoksa → DB'den son POSSESSED kaydını bul (sunucu restart recovery)
-      //    TODO(Faz 6): admin_cam_logs tablosu Postgres'te henüz yok (plan
-      //    Bölüm 4/6, admin cam watchlist özelliğiyle birlikte gelecek).
-      //    O zamana kadar bu katman atlanır, layer 3 "kayıp session" olarak loglar.
+      // 2. Bellekte yoksa → DB'den kurtarma. BU KATMAN BURADA DEĞİL, api'de.
+      //
+      //    Agent Postgres'e dokunmuyor (plan Bölüm 3), dolayısıyla burada
+      //    bir DB sorgusu olamaz. Kurtarma api tarafında ve daha sağlam
+      //    yapılıyor: cam_exit olayı geldiğinde `handleAdminCam` o
+      //    sunucudaki AÇIK kalan satırı bulup kapatıyor, agent yeniden
+      //    başlamış olsa bile. Agent hiç `cam_exit` gönderemeden çökerse
+      //    de `reconcileStaleAdminCam` bir sonraki bağlantıda üst sınırla
+      //    kapatıyor.
+      //
+      //    Buradaki `duration` yalnızca olayın kendi yükünde taşınıyor ve
+      //    kaydın kaynağı DEĞİL; süre, veritabanındaki enteredAt/leftAt
+      //    farkından hesaplanıyor. İki ayrı süre kaynağı tutmak, ikisinin
+      //    ayrışacağı bir gelecek demekti.
 
-      // 3. Negatif veya sıfır duration → kayıp session olarak logla
-      if (data.duration <= 0) {
-        console.warn(`[DEBUG-ADMINCAM] SquadServer UNPOSSESSED | Duration=0 (kayıp session) | Player: ${data.player?.name || 'null'} | EosID: ${data.eosID}`);
-      }
+      // 3. Süre bellekten çıkarılamadı: olay yine gönderiliyor, çünkü
+      //    çıkışın KAYDI süresinden bağımsız olarak değerli ve api zaten
+      //    açık satırı kendi bulup kapatıyor.
 
       delete this.adminsInAdminCam[data.eosID];
 
-      // Loglama (seeding/training durumu bilgi amaçlı)
-      const isSeeding = this.a2sPlayerCount > 0 && this.a2sPlayerCount < 50;
-      const gamemode = (this.currentLayer?.gamemode || '').toLowerCase();
-      const isTraining = gamemode === 'training';
-      if (isSeeding || isTraining) {
-        console.log(`[DEBUG-ADMINCAM] SquadServer UNPOSSESSED | SEEDING/TRAINING (seeding=${isSeeding}, training=${isTraining}, gamemode=${gamemode}, players=${this.a2sPlayerCount}) | Player: ${data.player?.name || 'null'} | Duration: ${data.duration}ms (kaydediliyor)`);
-      } else {
-        console.log(`[DEBUG-ADMINCAM] SquadServer UNPOSSESSED | Player: ${data.player?.name || 'null'} | SteamID: ${data.player?.steamID || 'null'} | EosID: ${data.eosID} | Duration: ${data.duration}ms | PlayerObj: ${data.player ? 'EXISTS' : 'NULL'}`);
-      }
+      // Seed/training ayrımı ELENDİ. Eski kod bu iki durumu ayrı loglayıp
+      // "kaydediliyor" diye not düşüyordu ama davranış ikisinde de aynıydı;
+      // geriye yalnızca iki boş dal kalmıştı. Kaydın tutulup tutulmayacağı
+      // artık api'nin kararı ve orada da böyle bir ayrım yok: seed
+      // sırasında kamerada geçen süre de kamera süresidir.
       this.emit('UNPOSSESSED_ADMIN_CAMERA', data);
     });
 
@@ -318,7 +321,6 @@ export default class SquadServer extends EventEmitter {
         const duration = disconnectTime.getTime ? disconnectTime.getTime() - camStartTime.getTime() : Date.now() - camStartTime.getTime();
         delete this.adminsInAdminCam[data.eosID];
 
-        console.log(`[DEBUG-ADMINCAM] SquadServer DISCONNECT-WHILE-IN-CAM | Player: ${data.player?.name || data.eosID} | Duration: ${Math.round(duration/60000)}min | Creating synthetic UNPOSSESSED`);
 
         // Sentetik UNPOSSESSED event emit et → DB'ye kaydedilir
         this.emit('UNPOSSESSED_ADMIN_CAMERA', {
@@ -635,7 +637,6 @@ export default class SquadServer extends EventEmitter {
           const duration = now.getTime() - new Date(startTime).getTime();
           delete this.adminsInAdminCam[eosID];
 
-          console.log(`[DEBUG-ADMINCAM] STALE CAM CLEANUP | EosID: ${eosID} | Duration: ${Math.round(duration / 60000)}min | Player no longer in server`);
 
           // Sentetik UNPOSSESSED event oluştur → DB'ye kaydedilir
           this.emit('UNPOSSESSED_ADMIN_CAMERA', {

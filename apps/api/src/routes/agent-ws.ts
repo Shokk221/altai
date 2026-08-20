@@ -14,6 +14,7 @@ import { panelKomutuMu } from '../lib/panel-komut-izi.js';
 import {
   closeAllOpenSessions,
   createPersistenceWriter,
+  reconcileStaleAdminCam,
   reconcileStaleSessions,
 } from '../lib/persistence-writer.js';
 import { tazelemeyiBaslat } from '../lib/player-refresh.js';
@@ -250,6 +251,10 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
           try {
             const id = await resolveServerId(db, msg.serverSlug, msg.serverSlug);
             await reconcileStaleSessions(db, id);
+            // Kamera oturumları da aynı boşluğa düşüyor: agent kamera
+            // açıkken çökerse cam_exit hiç gelmiyor ve satır sonsuza
+            // kadar açık kalıyor.
+            await reconcileStaleAdminCam(db, id);
             serverId = id;
             ready = true;
             // Komut kanalına kaydol: bundan sonra api bu sunucuya kick/warn

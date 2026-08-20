@@ -11,6 +11,7 @@ import { registerRateLimit } from './plugins/rate-limit.js';
 import { registerWebsocket } from './plugins/websocket.js';
 import { accessAdminRoutes } from './routes/access-admin.js';
 import { activityRoutes } from './routes/activity.js';
+import { adminCamRoutes } from './routes/admin-cam.js';
 import { adminListRoutes } from './routes/admin-list.js';
 import { agentWsRoutes } from './routes/agent-ws.js';
 import { agentRoutes } from './routes/agents.js';
@@ -120,6 +121,7 @@ await app.register(
     await api.register(activityRoutes, { db });
     await api.register(clanRoutes, { db });
     await api.register(statsRoutes, { db });
+    await api.register(adminCamRoutes, { db });
   },
   { prefix: '/api' },
 );

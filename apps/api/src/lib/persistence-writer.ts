@@ -116,6 +116,68 @@ export function reconcilerKapanisZamani(joinedAt: Date, simdi: Date = new Date()
   return sinir < simdi ? sinir : simdi;
 }
 
+/**
+ * Açık kalmış bir admin kamera oturumunun üst sınırı.
+ *
+ * Oyun oturumundan (4 saat) çok daha kısa: kamera bir moderasyon aracı,
+ * içinde saatler geçirilmiyor. Eski verideki en uzun gerçek oturum bir
+ * saatin altında. Sınırı yüksek tutmak, agent çöktüğünde bir yetkiliye
+ * saatlerce kamera süresi yazmak olurdu ve bu süre denetimde kullanılıyor.
+ */
+const RECONCILER_MAX_CAM_MS = 60 * 60 * 1000; // 1 saat
+
+/**
+ * Açık kalmış bir kamera oturumunun kapanış zamanı.
+ *
+ * `reconcilerKapanisZamani` ile AYNI kural: ikisinin küçüğü. Sınırı tek
+ * başına uygulamak, 5 dakika önce kameraya girmiş birini "1 saat kaldı"
+ * diye kaydeder ve `left_at`'i geleceğe yazardı — oyun oturumlarında tam
+ * olarak bu hata yaşandı, aynısını burada tekrarlamıyoruz.
+ */
+export function kameraKapanisZamani(enteredAt: Date, simdi: Date = new Date()): Date {
+  const sinir = new Date(enteredAt.getTime() + RECONCILER_MAX_CAM_MS);
+  return sinir < simdi ? sinir : simdi;
+}
+
+/**
+ * Agent başlangıcında çağrılır: crash nedeniyle açık kalmış kamera
+ * oturumlarını kapatır.
+ *
+ * Oyun oturumlarındaki boşluğun aynısı burada da vardı: agent kamera
+ * açıkken çökerse `cam_exit` olayı hiç gelmiyor ve satır SONSUZA KADAR
+ * açık kalıyor. Açık satır iki şeyi birden bozuyor — o yetkilinin toplam
+ * kamera süresi hesaplanamıyor ve bir sonraki çıkış olayı yanlış satırı
+ * kapatıyor.
+ */
+export async function reconcileStaleAdminCam(db: Db, serverId: string) {
+  const acikOturumlar = await db
+    .select({
+      id: moderationSchema.adminCamLogs.id,
+      enteredAt: moderationSchema.adminCamLogs.enteredAt,
+    })
+    .from(moderationSchema.adminCamLogs)
+    .where(
+      and(
+        eq(moderationSchema.adminCamLogs.serverId, serverId),
+        isNull(moderationSchema.adminCamLogs.leftAt),
+      ),
+    );
+
+  for (const oturum of acikOturumlar) {
+    await db
+      .update(moderationSchema.adminCamLogs)
+      .set({ leftAt: kameraKapanisZamani(oturum.enteredAt) })
+      .where(eq(moderationSchema.adminCamLogs.id, oturum.id));
+  }
+
+  if (acikOturumlar.length > 0) {
+    logger.warn(
+      { serverId, count: acikOturumlar.length },
+      'reconciler: crash sonrası açık kalan kamera oturum(lar)ı kapatıldı',
+    );
+  }
+}
+
 // Agent başlangıcında çağrılır: bir önceki çalıştırmadan crash nedeniyle
 // açık kalmış session'ları (DISCONNECT eventi hiç gelmemiş) 4 saatlik üst
 // sınırla kapatır. Bkz. plan Bölüm 5.5-B.
@@ -593,6 +655,11 @@ export function createPersistenceWriter(db: Db): PersistenceWriter {
       .where(
         and(
           eq(moderationSchema.adminCamLogs.playerId, playerId),
+          // Sunucu filtresi ŞART: aynı yetkili iki sunucuda birden
+          // kameraya girebiliyor ve filtresiz sorgu, B sunucusundaki
+          // çıkışla A sunucusundaki oturumu kapatırdı. İki süre de
+          // yanlış çıkardı.
+          eq(moderationSchema.adminCamLogs.serverId, serverId),
           isNull(moderationSchema.adminCamLogs.leftAt),
         ),
       )

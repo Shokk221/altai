@@ -42,7 +42,6 @@ export default class SquadRcon extends Rcon {
       iterateIDs(matchPossessedAdminCam[1]).forEach((platform, id) => {
         result[lowerID(platform)] = id;
       });
-      console.log(`[DEBUG-ADMINCAM] RCON POSSESSED detected | Name: ${result.name} | SteamID: ${result.steamID || 'N/A'} | EosID: ${result.eosID || 'N/A'} | IDs raw: ${matchPossessedAdminCam[1]}`);
       this.emit('POSSESSED_ADMIN_CAMERA', result);
       return;
     }
@@ -60,7 +59,6 @@ export default class SquadRcon extends Rcon {
       iterateIDs(matchUnpossessedAdminCam[1]).forEach((platform, id) => {
         result[lowerID(platform)] = id;
       });
-      console.log(`[DEBUG-ADMINCAM] RCON UNPOSSESSED detected | Name: ${result.name} | SteamID: ${result.steamID || 'N/A'} | EosID: ${result.eosID || 'N/A'} | IDs raw: ${matchUnpossessedAdminCam[1]}`);
       this.emit('UNPOSSESSED_ADMIN_CAMERA', result);
       return;
     }
