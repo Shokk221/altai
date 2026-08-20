@@ -279,6 +279,13 @@ export class PluginHost {
           ...(eosId ? { eosId } : {}),
         })) as { bulundu: boolean; toplamSaniye: number; oturum: number } | null | undefined) ??
         null,
+      sesDurumu: async (steamId, eosId, maxAgeSeconds) =>
+        ((await this.opts.sorgu?.({
+          kind: 'discord_voice',
+          ...(steamId ? { steamId } : {}),
+          ...(eosId ? { eosId } : {}),
+          maxAgeSeconds: maxAgeSeconds ?? 90,
+        })) as Awaited<ReturnType<PluginContext['sesDurumu']>> | undefined) ?? null,
       oyuncuIstatistigi: async (steamId, eosId, days) =>
         ((await this.opts.sorgu?.({
           kind: 'player_stats',

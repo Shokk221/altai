@@ -1,6 +1,6 @@
 import type { AgentQuery } from '@altai/contracts';
 import type { Db } from '@altai/db';
-import { identitySchema, matchesSchema, moderationSchema } from '@altai/db';
+import { accessSchema, identitySchema, matchesSchema, moderationSchema } from '@altai/db';
 import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import {
   type OyuncuIstatistigi,
@@ -237,6 +237,72 @@ async function etiketliOyuncular(
   return [...sonuc.values()];
 }
 
+export interface SesDurumuYaniti {
+  /**
+   * Ses bilgisi güncel mi?
+   *
+   * `false` = BİLMİYORUZ (bot kapalı ya da senkron bayat). Bunu "seste
+   * değil" ile karıştırmak, botun kapalı olması yüzünden sunucudaki bütün
+   * yetkilileri cezalandırmak olurdu.
+   */
+  bilinen: boolean;
+  /** Oyuncunun aktif bir Discord bağı var mı? */
+  bagli: boolean;
+  seste: boolean;
+  /** Bulunduğu kanalın adı — plugin "X kanalına gir" diyebilsin diye. */
+  kanal: string | null;
+}
+
+/**
+ * Oyuncu şu an Discord ses kanalında mı?
+ *
+ * Üç ayrı "hayır" var ve üçü farklı davranış gerektiriyor:
+ *  - nabız bayat  -> bilinmiyor, hiçbir şey yapma
+ *  - bağ yok      -> oyuncuya "hesabını bağla" de
+ *  - bağ var, yok -> ses kuralını uygula
+ *
+ * Nabız ÖNCE kontrol ediliyor: bayatsa oyuncuyu hiç aramaya gerek yok ve
+ * "bağı yok" gibi yanlış bir cevap üretme riski de kalmıyor.
+ */
+async function sesDurumu(
+  db: Db,
+  query: Extract<AgentQuery, { kind: 'discord_voice' }>,
+): Promise<SesDurumuYaniti> {
+  const [nabiz] = await db
+    .select({ syncedAt: accessSchema.discordVoiceSync.syncedAt })
+    .from(accessSchema.discordVoiceSync)
+    .limit(1);
+
+  const taze =
+    nabiz !== undefined && Date.now() - nabiz.syncedAt.getTime() < query.maxAgeSeconds * 1000;
+  if (!taze) return { bilinen: false, bagli: false, seste: false, kanal: null };
+
+  const id = await oyuncuId(db, query.steamId, query.eosId);
+  if (!id) return { bilinen: true, bagli: false, seste: false, kanal: null };
+
+  const [bag] = await db
+    .select({ discordId: accessSchema.discordLinks.discordId })
+    .from(accessSchema.discordLinks)
+    .where(
+      and(eq(accessSchema.discordLinks.playerId, id), isNull(accessSchema.discordLinks.unlinkedAt)),
+    )
+    .limit(1);
+  if (!bag) return { bilinen: true, bagli: false, seste: false, kanal: null };
+
+  const [ses] = await db
+    .select({ kanal: accessSchema.discordVoiceStates.channelName })
+    .from(accessSchema.discordVoiceStates)
+    .where(eq(accessSchema.discordVoiceStates.discordId, bag.discordId))
+    .limit(1);
+
+  return {
+    bilinen: true,
+    bagli: true,
+    seste: ses !== undefined,
+    kanal: ses?.kanal ?? null,
+  };
+}
+
 export interface SteamTazelikYaniti {
   /** Bu oyuncu için hiç Steam kaydı var mı? */
   bulundu: boolean;
@@ -471,6 +537,10 @@ export async function sorguyuCoz(db: Db, query: AgentQuery, serverId?: string): 
 
   if (query.kind === 'leaderboard') {
     return siralama(db, query);
+  }
+
+  if (query.kind === 'discord_voice') {
+    return sesDurumu(db, query);
   }
 
   const id = await oyuncuId(db, query.steamId, query.eosId);

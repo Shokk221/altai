@@ -163,6 +163,26 @@ export interface PluginContext {
     kdr: number;
   }> | null>;
 
+  /**
+   * Oyuncu şu an Discord ses kanalında mı?
+   *
+   * Cevap ÜÇ DURUMLU ve üçü farklı davranış gerektiriyor:
+   *  - `null` ya da `bilinen: false` -> BİLMİYORUZ (api kopuk, bot kapalı
+   *    ya da ses senkronu bayat). Hiçbir yaptırım uygulanmamalı: botun
+   *    kapalı olması yetkililerin suçu değil.
+   *  - `bagli: false` -> oyuncunun Discord bağı yok. Ceza değil, yönlendirme
+   *    gerekiyor ("/baglan ile hesabını bağla").
+   *  - `bagli: true, seste: false` -> gerçekten seste değil, kural uygulanır.
+   *
+   * Üçünü tek bir boolean'a indirmek, bot kapalıyken sunucudaki bütün
+   * yetkilileri cezalandırmak demekti.
+   */
+  sesDurumu(
+    steamId?: string | null,
+    eosId?: string | null,
+    maxAgeSeconds?: number,
+  ): Promise<{ bilinen: boolean; bagli: boolean; seste: boolean; kanal: string | null } | null>;
+
   /** Oyuncunun toplam oynama süresi. Bilinmiyorsa null. */
   oyuncuSuresi(
     steamId?: string | null,
