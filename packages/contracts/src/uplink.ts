@@ -90,26 +90,6 @@ export const AgentQuery = z.discriminatedUnion('kind', [
     steamId: z.string().nullish(),
     eosId: z.string().nullish(),
   }),
-  /**
-   * Oyuncu şu an Discord ses kanalında mı?
-   *
-   * Yetkili kamerası denetiminin dayanağı. Cevap üç durumlu: bilinmiyor /
-   * Discord bağı yok / bağı var (seste ya da değil). Üçünü tek bir
-   * boolean'a indirmek, bot kapalıyken bütün yetkilileri "seste değil"
-   * sayıp cezalandırmak olurdu.
-   */
-  z.object({
-    kind: z.literal('discord_voice'),
-    steamId: z.string().nullish(),
-    eosId: z.string().nullish(),
-    /**
-     * Nabız kaç saniyeden eskiyse bilgi bayat sayılır.
-     *
-     * Eşiği SORAN taraf veriyor: botun nabız sıklığı ile plugin'in
-     * toleransı ayrı kararlar ve api'nin ikisini birden bilmesi gerekmiyor.
-     */
-    maxAgeSeconds: z.number().int().positive().max(3600),
-  }),
   /** Oyuncunun maç istatistikleri toplamı (Faz 4). */
   z.object({
     kind: z.literal('player_stats'),
