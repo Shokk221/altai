@@ -9,7 +9,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { players, users } from './identity';
+import { clans, players, users } from './identity';
 import { servers } from './presence';
 
 /**
@@ -166,5 +166,104 @@ export const ticketMessages = pgTable(
   (table) => [
     index('ticket_messages_ticket_idx').on(table.ticketId, table.sentAt),
     uniqueIndex('ticket_messages_discord_idx').on(table.discordMessageId),
+  ],
+);
+
+/**
+ * Klan savaşı — plan Faz 5 ("klan savaşları/lobi").
+ *
+ * Klan savaşı gecesi sunucu HERKESE AÇIK KALMAMALI: iki klan anlaşıp
+ * saat ayırıyor, araya giren üçüncü kişiler maçı bozuyor. Eski sistemde
+ * bu iş `clanwarenforcer` plugin'iyle yapılıyordu ve izinli oyuncu
+ * listesi plugin'in config dosyasına elle yazılıyordu — her maç öncesi
+ * dosya düzenlemek ve agent'ı yeniden başlatmak gerekiyordu.
+ *
+ * Burada liste veritabanında ve panelden yönetiliyor; plugin sorguyla
+ * okuyor.
+ *
+ * DURUM AKIŞI: planned -> lobby -> live -> finished. Yaptırım YALNIZCA
+ * `live` durumunda uygulanıyor; `lobby` kadroların toplandığı, kimsenin
+ * atılmadığı aşama.
+ */
+export const clanWars = pgTable(
+  'clan_wars',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    serverId: uuid('server_id')
+      .notNull()
+      .references(() => servers.id),
+    name: text('name').notNull(),
+    scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
+    /** 'planned' | 'lobby' | 'live' | 'finished' | 'cancelled'. */
+    status: text('status').notNull().default('planned'),
+    /**
+     * Kadro kilidi.
+     *
+     * Kilitten sonra kadroya ekleme yapılmıyor: maç başladıktan sonra
+     * "bir kişi daha ekleyelim" demek, karşı tarafın kabul etmediği bir
+     * değişiklik olurdu. Kilit ZAMANI tutuluyor çünkü tartışma çıktığında
+     * "kadro ne zaman kapandı" sorusunun cevabı gerekiyor.
+     */
+    lockedAt: timestamp('locked_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('clan_wars_server_idx').on(table.serverId, table.scheduledAt)],
+);
+
+/**
+ * Savaşa katılan klanlar ve hangi tarafta oldukları.
+ *
+ * `side` 1 ya da 2 — Squad'ın takım numaralarıyla aynı. Bir klanın
+ * hangi tarafta olduğu maç sırasında takım dengeleyiciyi de ilgilendiriyor.
+ */
+export const clanWarTeams = pgTable(
+  'clan_war_teams',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    warId: uuid('war_id')
+      .notNull()
+      .references(() => clanWars.id, { onDelete: 'cascade' }),
+    clanId: uuid('clan_id')
+      .notNull()
+      .references(() => clans.id),
+    side: integer('side').notNull(),
+  },
+  (table) => [
+    // Bir klan aynı savaşta iki kez yer alamaz.
+    uniqueIndex('clan_war_teams_unique').on(table.warId, table.clanId),
+    index('clan_war_teams_war_idx').on(table.warId),
+  ],
+);
+
+/**
+ * Kilitli kadro — savaşa girmesine izin verilen oyuncular.
+ *
+ * Klan ÜYELİĞİNDEN ayrı tutuluyor ve bu bilinçli. Klanın 60 üyesi olabilir
+ * ama savaşa 20'si çıkıyor; ayrıca üyelik maç gecesi değişebiliyor
+ * (birisi ayrılıyor, birisi katılıyor) ve yaptırımın dayandığı liste maç
+ * boyunca SABİT kalmalı. Üyelik listesine bakan bir yaptırım, maç
+ * ortasında klandan çıkarılan birini sunucudan attırırdı.
+ */
+export const clanWarRoster = pgTable(
+  'clan_war_roster',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    warId: uuid('war_id')
+      .notNull()
+      .references(() => clanWars.id, { onDelete: 'cascade' }),
+    clanId: uuid('clan_id')
+      .notNull()
+      .references(() => clans.id),
+    playerId: uuid('player_id')
+      .notNull()
+      .references(() => players.id),
+    addedAt: timestamp('added_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    // Aynı oyuncu aynı savaşta iki kadroda olamaz — iki klan da onu
+    // yazmışsa bu bir hata ve sessizce geçilmemeli.
+    uniqueIndex('clan_war_roster_unique').on(table.warId, table.playerId),
+    index('clan_war_roster_war_idx').on(table.warId),
   ],
 );

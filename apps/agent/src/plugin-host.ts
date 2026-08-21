@@ -279,6 +279,10 @@ export class PluginHost {
           ...(eosId ? { eosId } : {}),
         })) as { bulundu: boolean; toplamSaniye: number; oturum: number } | null | undefined) ??
         null,
+      klanSavasiKadrosu: async () =>
+        ((await this.opts.sorgu?.({ kind: 'clan_war_roster' })) as
+          | Awaited<ReturnType<PluginContext['klanSavasiKadrosu']>>
+          | undefined) ?? null,
       sunucuKurallari: async () =>
         ((await this.opts.sorgu?.({ kind: 'server_rules' })) as
           | Awaited<ReturnType<PluginContext['sunucuKurallari']>>
