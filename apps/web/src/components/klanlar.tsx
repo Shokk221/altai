@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -189,12 +190,23 @@ export function Klanlar({ apiUrl, klanlar }: { apiUrl: string; klanlar: Klan[] }
           </p>
         ) : (
           <>
-            <header className="mb-4">
-              <h2 className="display text-xl">{secili.name}</h2>
-              <p className="mt-1 text-sm text-fg-muted">
-                {secili.uyeSayisi} üye
-                {secili.tag ? ` · etiket ${secili.tag}` : ''}
-              </p>
+            <header className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+              <div>
+                <h2 className="display text-xl">{secili.name}</h2>
+                <p className="mt-1 text-sm text-fg-muted">
+                  {secili.uyeSayisi} üye
+                  {secili.tag ? ` · etiket ${secili.tag}` : ''}
+                </p>
+              </div>
+              {/* İstatistik AYRI sayfada: bu ekran kadro YÖNETİMİ için ve
+                  ağır bir toplama sorgusunu her klan seçiminde çalıştırmak,
+                  üye eklemeyi yavaşlatırdı. */}
+              <Link
+                href={`/klanlar/${secili.id}`}
+                className="text-xs font-semibold text-accent hover:underline"
+              >
+                İstatistik ve kadro →
+              </Link>
             </header>
 
             <div className="mb-6 space-y-2 rounded bg-surface p-4">
