@@ -34,6 +34,7 @@ const BOLUMLER: Bolum[] = [
   { href: '/klanlar', etiket: 'Klanlar', izin: 'plugin_config.write' },
   { href: '/kurallar', etiket: 'Kurallar', izin: 'rules.manage' },
   { href: '/talepler', etiket: 'Talepler', izin: 'ticket.manage' },
+  { href: '/klan-savaslari', etiket: 'Savaşlar', izin: 'clan.manage' },
 ];
 
 export function AppNav({

@@ -6,6 +6,7 @@ import {
   identitySchema,
   matchesSchema,
   moderationSchema,
+  savasKadrosu,
 } from '@altai/db';
 import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import {
@@ -603,6 +604,13 @@ export async function sorguyuCoz(db: Db, query: AgentQuery, serverId?: string): 
 
   if (query.kind === 'server_rules') {
     return sunucuKurallari(db, serverId);
+  }
+
+  if (query.kind === 'clan_war_roster') {
+    // Sunucu bilinmiyorsa yaptırım UYGULANMAMALI: hangi savaşın kadrosu
+    // olduğunu bilmeden liste vermek, yanlış sunucuda insan atmak olurdu.
+    if (!serverId) return { aktif: false, warId: null, name: null, steamIds: [], eosIds: [] };
+    return savasKadrosu(db, serverId);
   }
 
   const id = await oyuncuId(db, query.steamId, query.eosId);

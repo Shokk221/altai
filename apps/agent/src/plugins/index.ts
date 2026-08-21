@@ -8,6 +8,7 @@ import { autoTkWarn } from './auto-tk-warn.js';
 import { broadcasts } from './broadcasts.js';
 import { cblInfo } from './cbl-info.js';
 import { chatCommands } from './chat-commands.js';
+import { clanWarEnforcer } from './clan-war-enforcer.js';
 import { eliteCommander } from './elite-commander.js';
 import { fogOfWar } from './fog-of-war.js';
 import { myStats } from './my-stats.js';
@@ -62,6 +63,7 @@ export const PLUGINS: AnyPlugin[] = [
   roundScoreboard,
   adminCamVoice,
   rules,
+  clanWarEnforcer,
 ];
 
 export {
@@ -92,4 +94,5 @@ export {
   roundScoreboard,
   adminCamVoice,
   rules,
+  clanWarEnforcer,
 };

@@ -18,6 +18,7 @@ import { agentRoutes } from './routes/agents.js';
 import { authRoutes } from './routes/auth.js';
 import { banListRoutes } from './routes/ban-list.js';
 import { browserWsRoutes } from './routes/browser-ws.js';
+import { clanWarRoutes } from './routes/clan-wars.js';
 import { clanRoutes } from './routes/clans.js';
 import { healthRoutes } from './routes/health.js';
 import { liveActionRoutes } from './routes/live-actions.js';
@@ -126,6 +127,7 @@ await app.register(
     await api.register(adminCamRoutes, { db });
     await api.register(ruleRoutes, { db });
     await api.register(ticketRoutes, { db });
+    await api.register(clanWarRoutes, { db });
   },
   { prefix: '/api' },
 );

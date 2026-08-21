@@ -91,6 +91,16 @@ export const AgentQuery = z.discriminatedUnion('kind', [
     eosId: z.string().nullish(),
   }),
   /**
+   * Bu sunucuda yürüyen klan savaşının kadrosu (Faz 5).
+   *
+   * Yalnızca `live` durumundaki savaş sayılıyor. Cevaptaki `aktif`
+   * alanı kritik: boş kadro ile "savaş yok" karıştırılırsa yaptırım
+   * sunucudaki HERKESİ atardı.
+   */
+  z.object({
+    kind: z.literal('clan_war_roster'),
+  }),
+  /**
    * Sunucu kuralları (Faz 5).
    *
    * Yalnızca AKTİF kurallar, sıra numarasına göre. Sunucuya özel kurallar

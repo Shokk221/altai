@@ -184,6 +184,25 @@ export interface PluginContext {
   ): Promise<{ bilinen: boolean; bagli: boolean; seste: boolean; kanal: string | null } | null>;
 
   /**
+   * Bu sunucuda yürüyen klan savaşının kadrosu (Faz 5).
+   *
+   * `aktif: false` = yaptırım uygulanacak savaş YOK. Bunu boş bir kadro
+   * ile karıştırmak, sunucudaki HERKESİ atmak demekti — bu yüzden iki
+   * durum ayrı alanlarda taşınıyor.
+   *
+   * Bilinmiyorsa `null` (api kopuk): plugin hiçbir şey yapmamalı. Bir
+   * bağlantı kesintisi yüzünden maçtaki oyuncuları atmak, yaptırımın
+   * önlemeye çalıştığı şeyin ta kendisi olurdu.
+   */
+  klanSavasiKadrosu(): Promise<{
+    aktif: boolean;
+    warId: string | null;
+    name: string | null;
+    steamIds: string[];
+    eosIds: string[];
+  } | null>;
+
+  /**
    * Sunucu kuralları (Faz 5) — yalnızca aktif olanlar, sıra numarasına
    * göre.
    *
