@@ -4,6 +4,7 @@ import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireSession } from '../lib/auth-guard.js';
+import { klanIstatistigi, klanUyeleri } from '../lib/clan-stats.js';
 import { uyeCikar, uyeEkle } from '../lib/clans.js';
 
 /**
@@ -141,4 +142,37 @@ export async function clanRoutes(app: FastifyInstance, opts: { db: Db }) {
     const cikarilan = await uyeCikar(db, id.data, parsed.data.steamIds);
     return { cikarilan };
   });
+
+  /**
+   * Klan istatistiği ve kadro — plan Faz 5.
+   *
+   * `days` verilmezse tüm zamanlar. Üyelik ZAMANA BAĞLI hesaplanıyor:
+   * dün transfer olan bir oyuncunun eski klanındaki maçları buraya
+   * yazılmıyor (bkz. lib/clan-stats.ts).
+   */
+  app.get<{ Params: { id: string }; Querystring: { days?: string } }>(
+    '/clans/:id/stats',
+    { preHandler: guard },
+    async (req, reply) => {
+      const id = uuid.safeParse(req.params.id);
+      if (!id.success) return reply.code(400).send({ error: 'geçersiz id' });
+
+      const [klan] = await db
+        .select({ id: identitySchema.clans.id, name: identitySchema.clans.name })
+        .from(identitySchema.clans)
+        .where(eq(identitySchema.clans.id, id.data))
+        .limit(1);
+      if (!klan) return reply.code(404).send({ error: 'klan bulunamadı' });
+
+      const ham = Number(req.query.days);
+      const days = Number.isInteger(ham) && ham > 0 && ham <= 3650 ? ham : null;
+
+      const [stat, uyeler] = await Promise.all([
+        klanIstatistigi(db, id.data, days),
+        klanUyeleri(db, id.data, days),
+      ]);
+
+      return { clan: klan, days, stat, uyeler };
+    },
+  );
 }
