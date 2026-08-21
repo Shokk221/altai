@@ -1,10 +1,17 @@
 import { createDb } from '@altai/db';
 import { logger } from '@altai/shared';
-import { Client, GatewayIntentBits, SlashCommandBuilder, type TextChannel } from 'discord.js';
+import {
+  ChannelType,
+  Client,
+  GatewayIntentBits,
+  SlashCommandBuilder,
+  type TextChannel,
+} from 'discord.js';
 import { createOlayOkuyucu } from './event-reader.js';
 import { hesapBagla, hesapCoz } from './linking.js';
 import { adminCagrisiGomusu, macSonuGomusu, teamkillGomusu } from './render.js';
 import { guildiEsitle, uyeyiEsitle, uyeyiTemizle } from './role-sync.js';
+import { mesajiKaydet, talebiKapat, talebiUstlen, talepOlustur } from './tickets.js';
 import { type SesUyesi, sesDurumuDegisti, sesDurumunuEsitle, sesNabzi } from './voice.js';
 
 // Botun iki işi var:
@@ -66,10 +73,23 @@ const TAM_TARAMA_MS = 15 * 60 * 1000;
  */
 const SES_NABIZ_MS = 30 * 1000;
 
+/**
+ * Talep kanalı — thread'ler burada açılıyor. Verilmezse ticket sistemi
+ * sessizce kapalı (kanal kimliği olmadan nereye açılacağı bilinmiyor).
+ */
+const ticketKanali = process.env.DISCORD_TICKET_CHANNEL_ID;
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
+    // Transkript için thread mesajları okunuyor.
+    GatewayIntentBits.GuildMessages,
+    // AYRICALIKLI INTENT: Discord geliştirici panelinden acikca
+    // acilmali. Kapaliysa mesaj govdeleri BOS geliyor ve transkript
+    // sessizce ise yaramaz hale geliyor — bu yuzden acilista kontrol
+    // edilip uyariliyor (bkz. ready).
+    GatewayIntentBits.MessageContent,
     // Ses durumu ayrı bir intent ve Discord panelinden ayrıca açılması
     // gerekmiyor (ayrıcalıklı değil). Olmadan voiceStateUpdate hiç düşmez
     // ve ses denetimi sessizce çalışmaz.
@@ -206,6 +226,20 @@ client.once('ready', () => {
   if (olayOkuyucu) olayOkuyucu.baslat();
   else logger.info({}, 'olay render kanalı tanımlı değil — killfeed ve maç sonu kapalı');
 
+  if (ticketKanali) {
+    // MessageContent AYRICALIKLI bir intent ve Discord panelinden
+    // acilmasi gerekiyor. Kapaliysa gateway baglantisi yine kuruluyor
+    // ama mesaj govdeleri BOS geliyor: transkript satir satir doluyor
+    // ama icerigi olmuyor. Sessiz basarisizligin en kotu turu, cunku
+    // sorun ancak aylar sonra bir talebe geri donuldugunde fark edilir.
+    logger.info(
+      {},
+      'talep sistemi acik — transkript icin Discord panelinde MESSAGE CONTENT INTENT acik olmali',
+    );
+  } else {
+    logger.info({}, 'DISCORD_TICKET_CHANNEL_ID tanimli degil — talep sistemi kapali');
+  }
+
   void komutlariKaydet();
 });
 
@@ -213,6 +247,20 @@ client.on('guildMemberUpdate', (_eski, yeni) => {
   if (yeni.guild.id !== guildId) return;
   void uyeyiEsitle(db, yeni).catch((err) =>
     logger.error({ err, discordId: yeni.id }, 'üye rol senkronu başarısız'),
+  );
+});
+
+/**
+ * Talep thread'lerindeki her mesaj transkripte yazılıyor.
+ *
+ * Thread OLMAYAN mesajlar hızlıca eleniyor: sunucudaki bütün sohbeti
+ * veritabanına sormak, dakikada yüzlerce gereksiz sorgu demekti.
+ */
+client.on('messageCreate', (mesaj) => {
+  if (!ticketKanali) return;
+  if (!mesaj.channel.isThread()) return;
+  void mesajiKaydet(db, mesaj).catch((err) =>
+    logger.error({ err, mesaj: mesaj.id }, 'talep mesajı kaydedilemedi'),
   );
 });
 
@@ -259,6 +307,37 @@ async function komutlariKaydet() {
         .setName('bagikaldir')
         .setDescription('Steam hesabı bağını kaldırır')
         .toJSON(),
+      // Talep komutları yalnızca kanal tanımlıysa kaydediliyor: var olan
+      // ama çalışmayan bir komut, kullanıcıya sistemin bozuk olduğunu
+      // düşündürür.
+      ...(ticketKanali
+        ? [
+            new SlashCommandBuilder()
+              .setName('talep')
+              .setDescription('Yetkililere destek talebi açar')
+              .addStringOption((o) =>
+                o.setName('konu').setDescription('Kısa başlık').setRequired(true),
+              )
+              .addStringOption((o) =>
+                o
+                  .setName('kategori')
+                  .setDescription('Ban itirazı, şikayet, başvuru...')
+                  .setRequired(false),
+              )
+              .toJSON(),
+            new SlashCommandBuilder()
+              .setName('ustlen')
+              .setDescription('Bu talebi üstlenir (talep thread’inde çalışır)')
+              .toJSON(),
+            new SlashCommandBuilder()
+              .setName('kapat')
+              .setDescription('Bu talebi kapatır (talep thread’inde çalışır)')
+              .addStringOption((o) =>
+                o.setName('sebep').setDescription('Kapanış notu').setRequired(false),
+              )
+              .toJSON(),
+          ]
+        : []),
     ]);
     logger.info({}, 'slash komutları kaydedildi');
   } catch (err) {
@@ -292,6 +371,74 @@ client.on('interactionCreate', async (etkilesim) => {
               : 'Geçersiz SteamID. 17 haneli Steam64 kimliği ya da profil bağlantısı gönder.';
 
       await etkilesim.reply({ content: mesaj, ephemeral: true });
+      return;
+    }
+
+    if (etkilesim.commandName === 'talep') {
+      if (!ticketKanali) return;
+      const kanal = await client.channels.fetch(ticketKanali);
+      if (!kanal || kanal.type !== ChannelType.GuildText) {
+        await etkilesim.reply({ content: 'Talep kanalı bulunamadı.', ephemeral: true });
+        return;
+      }
+
+      // Talep açmak birkaç saniye sürebiliyor (thread + üye ekleme);
+      // Discord 3 saniyede cevap bekliyor ve o süre aşılırsa etkileşim
+      // "başarısız" görünüyordu.
+      await etkilesim.deferReply({ ephemeral: true });
+
+      const sonuc = await talepOlustur(db, kanal as TextChannel, {
+        discordId: etkilesim.user.id,
+        kullaniciAdi: etkilesim.user.username,
+        subject: etkilesim.options.getString('konu', true),
+        category: etkilesim.options.getString('kategori'),
+      });
+
+      if ('hata' in sonuc) {
+        await etkilesim.editReply(
+          'Talep kaydedildi ama thread açılamadı. Yetkililer panelden görecek.',
+        );
+        return;
+      }
+      await etkilesim.editReply(`Talebin açıldı: ${sonuc.thread} (#${sonuc.number})`);
+      return;
+    }
+
+    if (etkilesim.commandName === 'ustlen') {
+      if (!etkilesim.channel?.isThread()) {
+        await etkilesim.reply({ content: 'Bu komut talep thread’inde çalışır.', ephemeral: true });
+        return;
+      }
+      const sonuc = await talebiUstlen(db, etkilesim.channel.id, etkilesim.user.id);
+      await etkilesim.reply({
+        content: sonuc.ok
+          ? `Talep #${sonuc.number} sende.`
+          : sonuc.mevcut
+            ? `Bu talebi zaten <@${sonuc.mevcut}> üstlendi.`
+            : 'Bu thread bir talebe bağlı değil ya da talep kapalı.',
+        // Üstlenme HERKESE görünür: talep sahibinin de kiminle
+        // konuştuğunu bilmesi gerekiyor.
+        ephemeral: !sonuc.ok,
+      });
+      return;
+    }
+
+    if (etkilesim.commandName === 'kapat') {
+      if (!etkilesim.channel?.isThread()) {
+        await etkilesim.reply({ content: 'Bu komut talep thread’inde çalışır.', ephemeral: true });
+        return;
+      }
+      // Geçmiş taraması yüzünden uzun sürebiliyor.
+      await etkilesim.deferReply();
+      const sonuc = await talebiKapat(db, etkilesim.channel, {
+        discordId: etkilesim.user.id,
+        reason: etkilesim.options.getString('sebep'),
+      });
+      await etkilesim.editReply(
+        sonuc.ok
+          ? `Talep kapatıldı. Transkript panele işlendi (${sonuc.tarandi} mesaj tarandı).`
+          : 'Bu thread bir talebe bağlı değil ya da talep zaten kapalı.',
+      );
       return;
     }
 
