@@ -51,9 +51,11 @@ function ilkHata(err: z.ZodError): string {
 
 export async function clanWarRoutes(app: FastifyInstance, opts: { db: Db }) {
   const { db } = opts;
-  // Klan savaşı sunucuya kimin girebileceğini belirliyor — sunucu
-  // kontrolü yetkisi, klan yönetimiyle aynı seviye.
-  const guard = requireSession(db, 'clan.manage');
+  // Klan yönetimiyle AYNI izinler: iki ekran birbirini çağırıyor
+  // (savaş sayfası klan listesini doldurmak için /clans'e gidiyor) ve
+  // ayrı izinlere bağlamak, birini görüp diğerini göremeyen bir
+  // kullanıcı üretiyordu.
+  const guard = requireSession(db, ['clan.manage', 'plugin_config.write']);
 
   app.get('/clan-wars', { preHandler: guard }, async () => {
     const savaslar = await db
