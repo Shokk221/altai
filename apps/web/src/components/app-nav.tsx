@@ -33,6 +33,7 @@ const BOLUMLER: Bolum[] = [
   { href: '/yetkiler', etiket: 'Yetkiler', izin: 'admin_list.manage' },
   { href: '/klanlar', etiket: 'Klanlar', izin: 'plugin_config.write' },
   { href: '/kurallar', etiket: 'Kurallar', izin: 'rules.manage' },
+  { href: '/talepler', etiket: 'Talepler', izin: 'ticket.manage' },
 ];
 
 export function AppNav({

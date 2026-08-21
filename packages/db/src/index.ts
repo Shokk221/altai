@@ -9,6 +9,7 @@ export * as activitySchema from './schema/activity.js';
 export * as teamChangeSchema from './schema/team-change.js';
 export * as opsSchema from './schema/ops.js';
 export * as communitySchema from './schema/community.js';
+export * from './queries/tickets.js';
 // Tip yeniden dışa aktarımı: activity_log'a yazan her yer (api kancası,
 // süreç içi olaylar) bu birleşimleri kullanıyor.
 export type { ActivityCategory, ActorType } from './schema/activity.js';

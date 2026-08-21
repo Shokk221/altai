@@ -27,6 +27,7 @@ import { pluginConfigRoutes } from './routes/plugin-configs.js';
 import { ruleRoutes } from './routes/rules.js';
 import { serverStatusRoutes } from './routes/server-status.js';
 import { statsRoutes } from './routes/stats.js';
+import { ticketRoutes } from './routes/tickets.js';
 
 const config = loadConfig();
 const db = createDb(config.DATABASE_URL);
@@ -124,6 +125,7 @@ await app.register(
     await api.register(statsRoutes, { db });
     await api.register(adminCamRoutes, { db });
     await api.register(ruleRoutes, { db });
+    await api.register(ticketRoutes, { db });
   },
   { prefix: '/api' },
 );
