@@ -14,6 +14,7 @@ import { myStats } from './my-stats.js';
 import { nameEnforcer } from './name-enforcer.js';
 import { playtimeSquadGuard } from './playtime-squad-guard.js';
 import { roundScoreboard } from './round-scoreboard.js';
+import { rules } from './rules.js';
 import { seedTracker } from './seed-tracker.js';
 import { seedingMode } from './seeding-mode.js';
 import { slBanEnforcer } from './sl-ban-enforcer.js';
@@ -60,6 +61,7 @@ export const PLUGINS: AnyPlugin[] = [
   myStats,
   roundScoreboard,
   adminCamVoice,
+  rules,
 ];
 
 export {
@@ -89,4 +91,5 @@ export {
   myStats,
   roundScoreboard,
   adminCamVoice,
+  rules,
 };

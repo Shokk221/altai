@@ -24,6 +24,7 @@ import { liveActionRoutes } from './routes/live-actions.js';
 import { moderationRoutes } from './routes/moderation.js';
 import { playerRoutes } from './routes/players.js';
 import { pluginConfigRoutes } from './routes/plugin-configs.js';
+import { ruleRoutes } from './routes/rules.js';
 import { serverStatusRoutes } from './routes/server-status.js';
 import { statsRoutes } from './routes/stats.js';
 
@@ -122,6 +123,7 @@ await app.register(
     await api.register(clanRoutes, { db });
     await api.register(statsRoutes, { db });
     await api.register(adminCamRoutes, { db });
+    await api.register(ruleRoutes, { db });
   },
   { prefix: '/api' },
 );

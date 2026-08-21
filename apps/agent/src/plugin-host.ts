@@ -279,6 +279,10 @@ export class PluginHost {
           ...(eosId ? { eosId } : {}),
         })) as { bulundu: boolean; toplamSaniye: number; oturum: number } | null | undefined) ??
         null,
+      sunucuKurallari: async () =>
+        ((await this.opts.sorgu?.({ kind: 'server_rules' })) as
+          | Awaited<ReturnType<PluginContext['sunucuKurallari']>>
+          | undefined) ?? null,
       sesDurumu: async (steamId, eosId, maxAgeSeconds) =>
         ((await this.opts.sorgu?.({
           kind: 'discord_voice',

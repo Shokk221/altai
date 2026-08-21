@@ -183,6 +183,23 @@ export interface PluginContext {
     maxAgeSeconds?: number,
   ): Promise<{ bilinen: boolean; bagli: boolean; seste: boolean; kanal: string | null } | null>;
 
+  /**
+   * Sunucu kuralları (Faz 5) — yalnızca aktif olanlar, sıra numarasına
+   * göre.
+   *
+   * Kurallar panelden yönetiliyor ve plugin ayarında KOPYASI tutulmuyor:
+   * eski sistemde kural metni hem Discord'da hem plugin config'inde
+   * duruyordu ve biri güncellenince diğeri unutuluyordu.
+   *
+   * Bilinmiyorsa `null` — boş liste "sunucunun kuralı yok" demek olurdu.
+   */
+  sunucuKurallari(): Promise<Array<{
+    position: number;
+    title: string;
+    body: string;
+    category: string | null;
+  }> | null>;
+
   /** Oyuncunun toplam oynama süresi. Bilinmiyorsa null. */
   oyuncuSuresi(
     steamId?: string | null,

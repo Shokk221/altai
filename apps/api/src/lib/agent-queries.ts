@@ -1,7 +1,13 @@
 import type { AgentQuery } from '@altai/contracts';
 import type { Db } from '@altai/db';
-import { accessSchema, identitySchema, matchesSchema, moderationSchema } from '@altai/db';
-import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import {
+  accessSchema,
+  communitySchema,
+  identitySchema,
+  matchesSchema,
+  moderationSchema,
+} from '@altai/db';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import {
   type OyuncuIstatistigi,
   type SiralamaSatiri,
@@ -235,6 +241,58 @@ async function etiketliOyuncular(
   }
 
   return [...sonuc.values()];
+}
+
+export interface KuralSatiri {
+  position: number;
+  title: string;
+  body: string;
+  category: string | null;
+}
+
+/**
+ * Aktif sunucu kuralları — sıra numarasına göre.
+ *
+ * Sunucuya özel kurallar VE genel kurallar (server_id null) birlikte
+ * dönüyor: genel bir kuralı oyun içi listede göstermemek, o kuralın orada
+ * geçersiz olduğu izlenimi verirdi.
+ *
+ * `serverId` bilinmiyorsa yalnızca genel kurallar dönüyor — uydurma bir
+ * sunucu eşleşmesi yapmaktansa eksik liste vermek yeğ.
+ */
+async function sunucuKurallari(db: Db, serverId: string | undefined): Promise<KuralSatiri[]> {
+  const kosullar = [eq(communitySchema.serverRules.active, true)];
+  kosullar.push(
+    serverId
+      ? (or(
+          eq(communitySchema.serverRules.serverId, serverId),
+          isNull(communitySchema.serverRules.serverId),
+        ) as never)
+      : (isNull(communitySchema.serverRules.serverId) as never),
+  );
+
+  const rows = await db
+    .select({
+      position: communitySchema.serverRules.position,
+      title: communitySchema.serverRules.title,
+      body: communitySchema.serverRules.body,
+      category: communitySchema.serverRules.category,
+    })
+    .from(communitySchema.serverRules)
+    .where(and(...kosullar))
+    // GENEL kurallar önce, sunucuya özel olanlar sonra. `position` her
+    // kapsam için ayrı sayıyor (genel 0,1,2 — sunucuya özel de 0'dan
+    // başlıyor), dolayısıyla yalnızca position'a göre sıralamak ikisini
+    // birbirine karıştırıp sunucuya özel bir kuralı listenin başına
+    // atabiliyordu. Gerçek veriyle görüldü: "Seed kuralı" genel
+    // kuralların önüne geçti.
+    .orderBy(
+      asc(sql`(${communitySchema.serverRules.serverId} is not null)`),
+      asc(communitySchema.serverRules.position),
+      asc(communitySchema.serverRules.title),
+    );
+
+  return rows;
 }
 
 export interface SesDurumuYaniti {
@@ -541,6 +599,10 @@ export async function sorguyuCoz(db: Db, query: AgentQuery, serverId?: string): 
 
   if (query.kind === 'discord_voice') {
     return sesDurumu(db, query);
+  }
+
+  if (query.kind === 'server_rules') {
+    return sunucuKurallari(db, serverId);
   }
 
   const id = await oyuncuId(db, query.steamId, query.eosId);

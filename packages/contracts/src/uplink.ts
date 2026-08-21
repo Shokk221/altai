@@ -91,6 +91,16 @@ export const AgentQuery = z.discriminatedUnion('kind', [
     eosId: z.string().nullish(),
   }),
   /**
+   * Sunucu kuralları (Faz 5).
+   *
+   * Yalnızca AKTİF kurallar, sıra numarasına göre. Sunucuya özel kurallar
+   * ve genel kurallar birlikte dönüyor: genel bir kuralı oyun içi listede
+   * göstermemek, o kuralın orada geçersiz olduğu izlenimi verirdi.
+   */
+  z.object({
+    kind: z.literal('server_rules'),
+  }),
+  /**
    * Oyuncu şu an Discord ses kanalında mı?
    *
    * Yetkili kamerası denetiminin dayanağı. Cevap üç durumlu: bilinmiyor /
