@@ -19,13 +19,20 @@ export default async function KlanlarPage() {
 
   // Klan üyeliği takım dengelemesini etkiliyor — sunucu kontrolü yetkisi,
   // moderasyon değil. api ucu da aynı izni arıyor.
-  const yetkili = me.permissions.includes('plugin_config.write') || me.systemRole === 'super_admin';
+  // İKİ izinden biri yetiyor — api tarafındaki guard ile aynı kural.
+  // Ayrışırlarsa, uçtan veri alabilen ama sayfayı göremeyen bir kullanıcı
+  // ortaya çıkıyor.
+  const yetkili =
+    me.permissions.includes('plugin_config.write') ||
+    me.permissions.includes('clan.manage') ||
+    me.systemRole === 'super_admin';
   if (!yetkili) {
     return (
       <main className="mx-auto w-full max-w-md px-5 py-16 text-center">
         <h1 className="display text-2xl">Yetkiniz yok</h1>
         <p className="mt-2 text-sm text-fg-muted">
-          Klanları yönetmek için <code>plugin_config.write</code> izni gerekiyor.
+          Klanları yönetmek için <code>plugin_config.write</code> ya da <code>clan.manage</code>{' '}
+          izni gerekiyor.
         </p>
         <Link href="/oyuncular" className="mt-5 inline-block text-sm font-semibold text-accent">
           Oyunculara dön
