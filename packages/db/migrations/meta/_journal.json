@@ -176,6 +176,13 @@
       "when": 1787268646704,
       "tag": "0024_discord_voice",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1787315347963,
+      "tag": "0025_server_rules",
+      "breakpoints": true
     }
   ]
 }
