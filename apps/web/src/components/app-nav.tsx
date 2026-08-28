@@ -20,8 +20,12 @@ import { useState } from 'react';
 interface Bolum {
   href: string;
   etiket: string;
-  /** Bu izin yoksa bölüm hiç gösterilmiyor. */
-  izin?: string;
+  /**
+   * Bu izin yoksa bölüm hiç gösterilmiyor. Dizi verilirse HERHANGİ BİRİ
+   * yetiyor — api tarafındaki guard ile aynı kural. İkisi ayrışırsa menüde
+   * görünmeyen ama erişilebilen (ya da tersi) bir sayfa ortaya çıkıyor.
+   */
+  izin?: string | string[];
 }
 
 const BOLUMLER: Bolum[] = [
@@ -31,10 +35,10 @@ const BOLUMLER: Bolum[] = [
   { href: '/kayitlar', etiket: 'Kayıtlar', izin: 'audit.read' },
   { href: '/kamera', etiket: 'Kamera', izin: 'audit.read' },
   { href: '/yetkiler', etiket: 'Yetkiler', izin: 'admin_list.manage' },
-  { href: '/klanlar', etiket: 'Klanlar', izin: 'plugin_config.write' },
+  { href: '/klanlar', etiket: 'Klanlar', izin: ['plugin_config.write', 'clan.manage'] },
   { href: '/kurallar', etiket: 'Kurallar', izin: 'rules.manage' },
   { href: '/talepler', etiket: 'Talepler', izin: 'ticket.manage' },
-  { href: '/klan-savaslari', etiket: 'Savaşlar', izin: 'clan.manage' },
+  { href: '/klan-savaslari', etiket: 'Savaşlar', izin: ['clan.manage', 'plugin_config.write'] },
 ];
 
 export function AppNav({
@@ -51,7 +55,11 @@ export function AppNav({
   const yol = usePathname();
   const [cikiyor, setCikiyor] = useState(false);
 
-  const gorunur = BOLUMLER.filter((b) => !b.izin || superAdmin || izinler.includes(b.izin));
+  const gorunur = BOLUMLER.filter((b) => {
+    if (!b.izin || superAdmin) return true;
+    const gerekli = Array.isArray(b.izin) ? b.izin : [b.izin];
+    return gerekli.some((p) => izinler.includes(p));
+  });
 
   async function cikis() {
     setCikiyor(true);

@@ -13,7 +13,17 @@ export const SESSION_COOKIE = 'altai_session';
  * demekti — eski BM panelinin herkese kapatılmış olmasının sebebi de buydu.
  * Gerçek kurulumda doğrulandı (curl ile 200 döndü), sonra bu koruma yazıldı.
  */
-export function requireSession(db: Db, permission?: Permission) {
+export function requireSession(db: Db, permission?: Permission | Permission[]) {
+  // Birden fazla izin verilirse HERHANGİ BİRİ yetiyor.
+  //
+  // Bunu tek izinli hâlde bırakmak sessiz bir hataya yol açmıştı: klan
+  // yönetimi `plugin_config.write`, klan savaşları `clan.manage`
+  // istiyordu. İkinci izne sahip biri savaş sayfasını açabiliyor ama
+  // sayfanın doldurduğu klan listesi 403 dönüyordu — açılır menü boş
+  // kalıyor ve kullanıcı neden taraf ekleyemediğini anlamıyordu.
+  const izinler =
+    permission === undefined ? [] : Array.isArray(permission) ? permission : [permission];
+
   return async (req: FastifyRequest, reply: FastifyReply) => {
     const token = req.cookies[SESSION_COOKIE];
     if (!token) {
@@ -28,11 +38,13 @@ export function requireSession(db: Db, permission?: Permission) {
     }
 
     if (
-      permission &&
-      !session.permissions.includes(permission) &&
+      izinler.length > 0 &&
+      !izinler.some((p) => session.permissions.includes(p)) &&
       session.systemRole !== 'super_admin'
     ) {
-      await reply.code(403).send({ error: 'forbidden', required: permission });
+      // `required` dizi olarak dönüyor: hangi izinlerden birinin
+      // yeteceğini görmek, tek bir ad görmekten daha kullanışlı.
+      await reply.code(403).send({ error: 'forbidden', required: izinler });
       return reply;
     }
 

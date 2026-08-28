@@ -41,7 +41,10 @@ function ilkHata(err: z.ZodError): string {
 export async function clanRoutes(app: FastifyInstance, opts: { db: Db }) {
   const { db } = opts;
   // Klan üyeliği takım dengelemesini etkiliyor — sunucu kontrolü yetkisi.
-  const guard = requireSession(db, 'plugin_config.write');
+  // `clan.manage` de kabul ediliyor: klan savaşı sayfası bu ucu klan
+  // listesini doldurmak için çağırıyor ve tek izne bağlamak, savaşları
+  // yönetebilen ama klan listesini göremeyen bir kullanıcı üretiyordu.
+  const guard = requireSession(db, ['plugin_config.write', 'clan.manage']);
 
   app.get('/clans', { preHandler: guard }, async () => {
     const satirlar = await db
