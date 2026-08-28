@@ -163,24 +163,33 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
           });
 
           // Günlüğe YALNIZCA panelden geçmeyenler yazılıyor; panelin kendi
-          // komutu zaten player.warn / player.kick olarak kayıtlı ve yankısı
-          // ikinci bir satır olsaydı aynı işlem iki kez sayılırdı.
-          // Yalnızca panelin de gönderebildiği üç işlem için yankı
-          // kontrolü yapılıyor; duyuru ve admin kamerası panelden hiç
-          // gönderilmiyor, dolayısıyla yankı olamazlar.
+          // komutu zaten player.warn / player.kick / server.broadcast olarak
+          // kayıtlı ve yankısı ikinci bir satır olsaydı aynı işlem iki kez
+          // sayılırdı. Panelin gönderebildiği dört işlem için yankı kontrolü
+          // yapılıyor; admin kamerası panelden hiç gönderilmiyor,
+          // dolayısıyla yankı olamaz.
+          //
+          // Duyuruda eşleşme oyuncu adıyla değil MESAJLA yapılıyor: duyurunun
+          // hedef oyuncusu yok, ama yankıdaki metin gönderdiğimizin aynısı.
           const panelinKendisi =
-            (event.action === 'warn' || event.action === 'kick' || event.action === 'ban') &&
-            panelKomutuMu(serverSlug, event.action, event.playerName ?? null);
-          // Sunucudaki eklentiler (manga uyarısı, TK özür sistemi, hoş
-          // geldin mesajı) insan yetkiliyle AYNI kanaldan yazıyor ve
-          // ölçüldüğünde günlüğün %65'ini kaplıyorlardı. Ayrı eylem adına
-          // alınıyorlar: düşürülmüyor ama moderasyon kırılımını
-          // boğmuyorlar.
-          const otomatik =
-            (event.action === 'warn' || event.action === 'broadcast') &&
-            otomatikMi(serverSlug, event.message);
+            event.action === 'broadcast'
+              ? panelKomutuMu(serverSlug, 'broadcast', event.message ?? null)
+              : (event.action === 'warn' || event.action === 'kick' || event.action === 'ban') &&
+                panelKomutuMu(serverSlug, event.action, event.playerName ?? null);
 
           if (!panelinKendisi) {
+            // Sunucudaki eklentiler (manga uyarısı, TK özür sistemi, hoş
+            // geldin mesajı) insan yetkiliyle AYNI kanaldan yazıyor ve
+            // ölçüldüğünde günlüğün %65'ini kaplıyorlardı. Ayrı eylem adına
+            // alınıyorlar: düşürülmüyor ama moderasyon kırılımını
+            // boğmuyorlar.
+            //
+            // Tekrar sayacı YALNIZCA oyundan gelenleri sayıyor: panelden
+            // gönderilen duyuru zaten günlüğe girmiyor, onu da saymak
+            // eklenti kalıplarının eşiğini yanlış yerden doldururdu.
+            const otomatik =
+              (event.action === 'warn' || event.action === 'broadcast') &&
+              otomatikMi(serverSlug, event.message);
             kaydet({
               actorType: 'game_server',
               actorLabel: serverSlug,

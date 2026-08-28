@@ -74,6 +74,10 @@ const EYLEM_ADI: Record<string, string> = {
   'flag.remove': 'etiketi kaldırdı',
   'player.kick': 'sunucudan attı',
   'player.warn': 'uyardı',
+  // Panelden gönderilen duyuru. Oyundan gelen `ingame.broadcast` ile
+  // AYNI şey değil: orası eklentinin zamanlanmış mesajı da olabilir,
+  // burası her zaman bir insanın kararı.
+  'server.broadcast': 'sunucuya duyuru yaptı',
   'role_mapping.upsert': 'rol eşlemesi yazdı',
   'role_mapping.delete': 'rol eşlemesini sildi',
   'ingame.warn': 'oyun içinden uyardı',

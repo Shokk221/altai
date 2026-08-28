@@ -24,14 +24,23 @@ export type AuditAction =
   | 'role_mapping.delete'
   /** Canlı ekrandan yapılan, kalıcı kayıt bırakmayan eylemler. */
   | 'player.kick'
-  | 'player.warn';
+  | 'player.warn'
+  /**
+   * Sunucu geneli duyuru. Hedefi tek bir oyuncu değil, o an sunucuda olan
+   * herkes — bu yüzden `player_records`'a satır yazılmıyor, ama denetime
+   * yazılıyor: ekranında yazı beliren yüz kişi "bunu kim yazdı" diye
+   * soracak ve cevabın bir yerde durması gerekiyor.
+   */
+  | 'server.broadcast';
 
 export type AuditTargetType =
   | 'player'
   | 'ban'
   | 'player_record'
   | 'flag_assignment'
-  | 'role_mapping';
+  | 'role_mapping'
+  /** Hedef bir oyuncu değil sunucunun kendisi (duyuru gibi). */
+  | 'server';
 
 export interface AuditEntry {
   actorUserId: string | null;
@@ -59,6 +68,11 @@ type TxLike = Pick<Db, 'insert'>;
  *
  * Rol eşlemeleri moderasyon değil erişim konusu: "kim ban attı" ile "kim
  * kime yetki verdi" ayrı sorular ve ekranda ayrı sekmelerde aranıyorlar.
+ *
+ * Panelden gönderilen duyuru `moderasyon` sayılıyor — oyundan gelen duyuru
+ * yankısının `sistem` olmasına rağmen. Fark bilinçli: oradaki kayıt bir
+ * eklentinin zamanlanmış mesajı olabilir, buradaki her zaman bir insanın
+ * kararı ve "bugün hangi yetkili ne yaptı" listesinde görünmeli.
  */
 function kategori(action: AuditAction): ActivityCategory {
   return action.startsWith('role_mapping.') ? 'erisim' : 'moderasyon';
