@@ -35,6 +35,9 @@ export default async function HomePage() {
         kickYetkisi={yetki('player.kick')}
         warnYetkisi={yetki('player.warn')}
         takimYetkisi={yetki('player.team_change')}
+        // Duyuru "herkese giden uyarı": uyarı verebilen moderatör de
+        // yapabilmeli, ayrıca sunucu kontrolü olan herkes.
+        duyuruYetkisi={yetki('server.control') || yetki('player.warn')}
       />
     );
   }

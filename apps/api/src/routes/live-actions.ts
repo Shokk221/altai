@@ -58,6 +58,21 @@ const TakimGovdesi = z.object({
   mesaj: z.string().trim().max(200).optional(),
 });
 
+/**
+ * Sunucu geneli duyuru.
+ *
+ * Hedef yok: `AdminBroadcast` o an sunucuda olan HERKESİN ekranına yazıyor.
+ * Bu yüzden `Govde`'yi yeniden kullanmıyoruz — steamId zorunlu orada ve
+ * duyuruda öyle bir şey yok.
+ *
+ * Sınır 200: Squad duyuruyu ekranın üstünde tek blok hâlinde gösteriyor ve
+ * uzun metin oyunun görüşünü kapatıyor. Uyarıdaki 300 tek bir oyuncuya
+ * gidiyor, duyuru herkese — burada dar olmak doğru taraf.
+ */
+const DuyuruGovdesi = z.object({
+  mesaj: z.string().trim().min(1).max(200),
+});
+
 export async function liveActionRoutes(app: FastifyInstance, opts: { db: Db }) {
   const { db } = opts;
 
@@ -286,6 +301,65 @@ export async function liveActionRoutes(app: FastifyInstance, opts: { db: Db }) {
         return reply.code(502).send({ error: 'komut_basarisiz', detay: sonuc.durum });
       }
       return { ok: true, kayit: Boolean(oyuncu) };
+    },
+  );
+
+  /**
+   * Sunucu geneli duyuru — herkesin ekranına yazar.
+   *
+   * Tek oyuncuya giden uyarıdan ayrı bir uç, çünkü aslında ayrı bir eylem:
+   * "sen şunu yapma" ile "birazdan yeniden başlıyoruz" farklı şeyler ve
+   * ikincisinin hedefi yok. Uyarı ucunu hedefsiz de çalışır hâle getirmek
+   * (steamId opsiyonel) daha az kod olurdu ama tehlikeli: gövdedeki bir
+   * yazım hatası tek kişiye gidecek uyarıyı sessizce herkese gönderirdi.
+   *
+   * `player_records`'a satır YAZILMIYOR: kayıt oyuncu profilinde görünüyor
+   * ve duyurunun profili yok. İz denetim kaydında duruyor.
+   *
+   * İzin: `server.control` ya da `player.warn`. İkincisi kapsam dâhilinde
+   * çünkü kullanıcının kafasındaki iş "herkese giden uyarı"; uyarı
+   * verebilen moderatörün duyuru yapamaması yapay bir ayrım olurdu.
+   */
+  app.post<{ Params: { slug: string }; Body: unknown }>(
+    '/live/:slug/duyuru',
+    { preHandler: requireSession(db, ['server.control', 'player.warn']) },
+    async (req, reply) => {
+      const parsed = DuyuruGovdesi.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: 'gecersiz_girdi', detay: ilkHata(parsed.error) });
+      }
+      const slug = req.params.slug;
+      if (!agentBagliMi(slug)) return reply.code(503).send({ error: 'agent_bagli_degil' });
+
+      const actor = req.authSession;
+      const mesaj = parsed.data.mesaj;
+
+      // Oyun duyuruyu sohbet kanalından geri yayınlıyor; iz bırakmazsak
+      // aynı duyuru günlüğe iki kez düşerdi (bkz. panel-komut-izi.ts).
+      // Duyuruda eşleşme anahtarı mesajın kendisi.
+      panelKomutuIsaretle(slug, 'broadcast', mesaj);
+
+      const sonuc = await komutGonder(slug, 'broadcast', { message: mesaj }, actor?.id ?? 'panel');
+
+      const sunucuId = await sunucuIdBul(slug);
+
+      await db.transaction(async (tx) => {
+        await writeAudit(tx, {
+          actorUserId: actor?.id ?? null,
+          actorLabel: actor?.discordUsername ?? null,
+          requestId: String(req.id),
+          action: 'server.broadcast',
+          targetType: 'server',
+          targetId: sunucuId,
+          targetLabel: slug,
+          payload: { mesaj, sunucu: slug, sonuc: sonuc.durum },
+        });
+      });
+
+      if (sonuc.durum !== 'ok') {
+        return reply.code(502).send({ error: 'komut_basarisiz', detay: sonuc.durum });
+      }
+      return { ok: true };
     },
   );
 }

@@ -15,6 +15,10 @@
  *
  * Eşleşme İSİMLE yapılıyor çünkü Squad uyarı yankısında kimlik vermiyor,
  * yalnızca oyuncunun o anki adını yazıyor.
+ *
+ * Duyuruda (`broadcast`) hedef oyuncu yok; orada anahtar MESAJIN KENDİSİ.
+ * Yankı metni birebir gönderdiğimiz metin olduğu için bu güvenilir bir
+ * eşleşme ve mekanizmanın geri kalanı aynı kalıyor.
  */
 
 /** Yankının gelmesi için beklenen en uzun süre. RCON turu milisaniyeler. */
@@ -22,12 +26,17 @@ const PENCERE_MS = 20_000;
 /** İz birikmesin: eşleşmeyen kayıtlar bu sayıdan sonra temizleniyor. */
 const TAVAN = 200;
 
-type Islem = 'warn' | 'kick' | 'ban';
+type Islem = 'warn' | 'kick' | 'ban' | 'broadcast';
 
 const izler = new Map<string, number>();
 
-function anahtar(slug: string, islem: Islem, isim: string): string {
-  return `${slug}|${islem}|${isim.trim().toLowerCase()}`;
+/**
+ * Eşleşme anahtarı: warn/kick/ban'de oyuncunun adı, duyuruda mesaj metni.
+ * Uzunluk kırpması duyuru için: Squad yankıda metni olduğu gibi veriyor
+ * ama anahtarın sınırsız büyümesine gerek yok.
+ */
+function anahtar(slug: string, islem: Islem, deger: string): string {
+  return `${slug}|${islem}|${deger.trim().toLowerCase().slice(0, 200)}`;
 }
 
 function eskileriAt(simdi: number) {
@@ -36,21 +45,21 @@ function eskileriAt(simdi: number) {
   }
 }
 
-/** Panel komutu gönderdi. İsim bilinmiyorsa iz bırakılmıyor. */
-export function panelKomutuIsaretle(slug: string, islem: Islem, isim: string | null) {
-  if (!isim) return;
+/** Panel komutu gönderdi. Anahtar bilinmiyorsa iz bırakılmıyor. */
+export function panelKomutuIsaretle(slug: string, islem: Islem, deger: string | null) {
+  if (!deger) return;
   const simdi = Date.now();
   if (izler.size > TAVAN) eskileriAt(simdi);
-  izler.set(anahtar(slug, islem, isim), simdi);
+  izler.set(anahtar(slug, islem, deger), simdi);
 }
 
 /**
  * Oyundan gelen yankı panelin kendi komutu mu? Evetse iz tüketilir —
  * aynı iz ikinci bir yankıyı da bastırmasın.
  */
-export function panelKomutuMu(slug: string, islem: Islem, isim: string | null): boolean {
-  if (!isim) return false;
-  const k = anahtar(slug, islem, isim);
+export function panelKomutuMu(slug: string, islem: Islem, deger: string | null): boolean {
+  if (!deger) return false;
+  const k = anahtar(slug, islem, deger);
   const t = izler.get(k);
   if (t === undefined) return false;
   izler.delete(k);
