@@ -62,3 +62,40 @@ describe('panel komut izi', () => {
     expect(panelKomutuMu('squad-01', 'warn', null)).toBe(false);
   });
 });
+
+/**
+ * Duyuruda anahtar oyuncu adı değil MESAJ.
+ *
+ * Duyurunun hedef oyuncusu yok; isimle eşleştirmeye kalksaydık anahtar
+ * her zaman null olur, hiçbir yankı tanınmaz ve panelden gönderilen her
+ * duyuru günlüğe iki kez düşerdi.
+ */
+describe('duyuru izi', () => {
+  it('panelin gönderdiği duyurunun yankısını mesajla tanır', () => {
+    panelKomutuIsaretle('squad-01', 'broadcast', 'Sunucu 5 dakika sonra yeniden başlıyor');
+    expect(panelKomutuMu('squad-01', 'broadcast', 'Sunucu 5 dakika sonra yeniden başlıyor')).toBe(
+      true,
+    );
+  });
+
+  it('başka bir metinli duyuruyu panelinki sanmaz', () => {
+    // Eklentinin zamanlanmış duyurusu tam da bu sırada geçebilir;
+    // günlükte kaybolmamalı.
+    panelKomutuIsaretle('squad-01', 'broadcast', 'Sunucu yeniden başlıyor');
+    expect(panelKomutuMu('squad-01', 'broadcast', 'Discord: altai.gg')).toBe(false);
+  });
+
+  it('aynı metinli uyarı ile duyuru karışmaz', () => {
+    panelKomutuIsaretle('squad-01', 'broadcast', 'Kurallara uyun');
+    expect(panelKomutuMu('squad-01', 'warn', 'Kurallara uyun')).toBe(false);
+    expect(panelKomutuMu('squad-01', 'broadcast', 'Kurallara uyun')).toBe(true);
+  });
+
+  it('duyuru izi de tüketiliyor — aynı metni ikinci kez bastırmıyor', () => {
+    // Eklenti gerçekten aynı metni yayınlıyor olabilir; tek bir panel
+    // komutu sonsuza kadar kalkan olmamalı.
+    panelKomutuIsaretle('squad-01', 'broadcast', 'Seed bitti, iyi oyunlar');
+    expect(panelKomutuMu('squad-01', 'broadcast', 'Seed bitti, iyi oyunlar')).toBe(true);
+    expect(panelKomutuMu('squad-01', 'broadcast', 'Seed bitti, iyi oyunlar')).toBe(false);
+  });
+});
