@@ -77,7 +77,7 @@ supervisorctl status || true   # bot tokensizken EXITED doner, set -e script i k
 echo
 cat <<'EOF'
 Doğrulama:
-  curl -fsS localhost:3001/health     # api ayakta mı
+  curl -fsS localhost:3001/api/health # api ayakta mı
   curl -fsSI localhost:3000 | head -1 # web cevap veriyor mu
   supervisorctl tail -f api           # canlı log
 EOF

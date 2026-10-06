@@ -84,7 +84,7 @@ DNS (`panel.altaisquad.com → 178.63.113.47`) eklenene kadar dışarıdan
 erişilemez, ama konteyner içinden test edilebilir:
 
 ```bash
-curl -fsS localhost:3001/health
+curl -fsS localhost:3001/api/health
 curl -fsSI localhost:3000 | head -1
 psql "$DATABASE_URL" -c '\dt'        # 14 tablo görünmeli
 ```
