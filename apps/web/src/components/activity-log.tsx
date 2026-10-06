@@ -229,7 +229,7 @@ export function ActivityLog({
               type="button"
               onClick={() => setKategori(s.deger)}
               className={cn(
-                'rounded-full px-3 py-1.5 text-[13px] transition-colors',
+                'rounded-full px-3 py-1.5 text-footnote transition-colors',
                 kategori === s.deger
                   ? 'bg-surface-2 text-fg'
                   : 'text-fg-muted hover:bg-surface hover:text-fg',
@@ -244,7 +244,7 @@ export function ActivityLog({
           <select
             value={aktor}
             onChange={(e) => setAktor(e.target.value)}
-            className="rounded-full border border-border bg-surface px-3 py-1.5 text-[13px] text-fg-muted focus:border-accent focus:outline-none"
+            className="rounded-full border border-border bg-surface px-3 py-1.5 text-footnote text-fg-muted focus:border-accent focus:outline-none"
           >
             <option value="">Herkes</option>
             {aktorler.map((a) => (
@@ -257,7 +257,7 @@ export function ActivityLog({
             value={arama}
             onChange={(e) => setArama(e.target.value)}
             placeholder="Ara: isim, eylem, adres"
-            className="w-56 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none"
+            className="w-56 rounded-full border border-border bg-surface px-3.5 py-1.5 text-footnote text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none"
           />
         </div>
       </div>
@@ -277,14 +277,14 @@ export function ActivityLog({
               return (
                 <li key={k.id}>
                   {gunBasligi ? (
-                    <div className="border-b border-border bg-surface-sunken px-4 py-1.5 text-[11px] font-medium uppercase tracking-wide text-fg-faint">
+                    <div className="border-b border-border bg-surface-sunken px-4 py-1.5 text-2xs font-medium uppercase tracking-wide text-fg-faint">
                       {buGun}
                     </div>
                   ) : null}
                   <button
                     type="button"
                     onClick={() => setAcik(secili ? null : k.id)}
-                    className="flex w-full items-baseline gap-3 border-b border-border px-4 py-2 text-left text-[13px] hover:bg-surface-2"
+                    className="flex w-full items-baseline gap-3 border-b border-border px-4 py-2 text-left text-footnote hover:bg-surface-2"
                   >
                     <span
                       className={cn(
@@ -306,7 +306,7 @@ export function ActivityLog({
                   </button>
 
                   {secili ? (
-                    <div className="border-b border-border bg-surface-sunken px-4 py-3 text-[12px]">
+                    <div className="border-b border-border bg-surface-sunken px-4 py-3 text-xs">
                       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-fg-muted">
                         <Satir ad="Eylem kodu" deger={k.action} />
                         <Satir ad="Kategori" deger={k.category} />
@@ -325,7 +325,7 @@ export function ActivityLog({
                         <Satir ad="Zaman" deger={new Date(k.at).toLocaleString('tr-TR')} />
                       </dl>
                       {k.payload ? (
-                        <pre className="mt-2 max-h-64 overflow-auto rounded bg-surface p-2.5 text-[11px] leading-relaxed text-fg-muted">
+                        <pre className="mt-2 max-h-64 overflow-auto rounded bg-surface p-2.5 text-2xs leading-relaxed text-fg-muted">
                           {JSON.stringify(k.payload, null, 2)}
                         </pre>
                       ) : null}
@@ -352,7 +352,7 @@ export function ActivityLog({
             type="button"
             disabled={yukleniyor}
             onClick={() => void getir(imlec, { kategori, aktor, arama })}
-            className="rounded-full border border-border px-4 py-1.5 text-[13px] text-fg-muted transition-colors hover:text-fg disabled:opacity-40"
+            className="rounded-full border border-border px-4 py-1.5 text-footnote text-fg-muted transition-colors hover:text-fg disabled:opacity-40"
           >
             {yukleniyor ? '…' : 'Daha eski'}
           </button>

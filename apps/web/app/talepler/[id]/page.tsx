@@ -4,7 +4,7 @@ import { tarihSaat } from '@/lib/format';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-export const metadata = { title: 'Talep — Altai' };
+export const metadata = { title: 'Talep - Altai' };
 
 /**
  * Tek talebin transkripti — plan Faz 5.
@@ -78,7 +78,7 @@ export default async function TalepPage({ params }: { params: Promise<{ id: stri
             #{ticket.number} · {ticket.subject}
           </h1>
           <span
-            className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+            className={`rounded px-1.5 py-0.5 text-2xs font-medium ${
               kapali ? 'bg-surface-2 text-fg-faint' : 'bg-accent-weak text-accent-2'
             }`}
           >
@@ -114,7 +114,7 @@ export default async function TalepPage({ params }: { params: Promise<{ id: stri
           {ticket.closedAt ? (
             <div>
               Kapanış: {tarihSaat(ticket.closedAt)}
-              {ticket.closeReason ? ` — ${ticket.closeReason}` : ''}
+              {ticket.closeReason ? ` · ${ticket.closeReason}` : ''}
             </div>
           ) : null}
         </div>
@@ -138,7 +138,7 @@ export default async function TalepPage({ params }: { params: Promise<{ id: stri
               <li key={m.id} className="rounded border border-border bg-surface px-4 py-2.5">
                 <div className="flex flex-wrap items-baseline gap-x-2">
                   <span className="text-sm font-semibold">{m.authorName ?? m.authorDiscordId}</span>
-                  <span className="text-[11px] text-fg-faint">{tarihSaat(m.sentAt)}</span>
+                  <span className="text-2xs text-fg-faint">{tarihSaat(m.sentAt)}</span>
                 </div>
                 {m.body ? (
                   <p className="mt-1 whitespace-pre-wrap text-sm">{m.body}</p>

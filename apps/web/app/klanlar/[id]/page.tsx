@@ -3,7 +3,7 @@ import { sayi } from '@/lib/format';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-export const metadata = { title: 'Klan — Altai' };
+export const metadata = { title: 'Klan - Altai' };
 
 /**
  * Klan istatistiği ve kadro — plan Faz 5.
@@ -56,7 +56,7 @@ function Deger({ baslik, deger }: { baslik: string; deger: string }) {
   return (
     <div>
       <div className="display text-lg leading-tight">{deger}</div>
-      <div className="text-[11px] text-fg-faint">{baslik}</div>
+      <div className="text-2xs text-fg-faint">{baslik}</div>
     </div>
   );
 }
@@ -151,7 +151,7 @@ export default async function KlanPage({
         ) : (
           <div className="overflow-x-auto rounded border border-border bg-surface">
             <table className="w-full min-w-[32rem] text-sm">
-              <thead className="text-[11px] text-fg-faint">
+              <thead className="text-2xs text-fg-faint">
                 <tr className="border-border border-b">
                   <th className="px-4 py-2 text-left font-medium">Oyuncu</th>
                   <th className="px-4 py-2 text-right font-medium">Maç</th>

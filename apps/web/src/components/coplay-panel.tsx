@@ -50,7 +50,7 @@ export function CoplayPanel({ apiUrl, playerId }: { apiUrl: string; playerId: st
         >
           Birlikte oynadıklarını göster
         </button>
-        <p className="mt-2 text-[11px] text-fg-muted">son 90 gün · 1 saatten uzun</p>
+        <p className="mt-2 text-2xs text-fg-muted">son 90 gün · 1 saatten uzun</p>
       </div>
     );
   }
@@ -77,10 +77,10 @@ export function CoplayPanel({ apiUrl, playerId }: { apiUrl: string; playerId: st
         <li key={a.playerId}>
           <Link
             href={`/oyuncular/${a.playerId}`}
-            className="flex items-baseline justify-between gap-3 rounded-sm px-1 py-1.5 text-[13px] transition-colors hover:bg-surface-2"
+            className="flex items-baseline justify-between gap-3 rounded-sm px-1 py-1.5 text-footnote transition-colors hover:bg-surface-2"
           >
             <span className="truncate">{a.name}</span>
-            <span className="shrink-0 num text-[11px] text-fg-faint">{sure(a.birlikteSaniye)}</span>
+            <span className="shrink-0 num text-2xs text-fg-faint">{sure(a.birlikteSaniye)}</span>
           </Link>
         </li>
       ))}

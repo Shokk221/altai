@@ -85,7 +85,7 @@ export function Duyuru({
         // kopuksa geri gelmesini bekler, komut başarısızsa tekrar dener.
         setHata(
           govde.error === 'agent_bagli_degil'
-            ? 'Sunucuya bağlı değiliz — duyuru gitmedi'
+            ? 'Sunucuya bağlı değiliz, duyuru gitmedi'
             : govde.error === 'komut_basarisiz'
               ? `Komut sunucuya ulaşmadı (${govde.detay ?? '?'})`
               : govde.error === 'forbidden'
@@ -113,7 +113,7 @@ export function Duyuru({
         onClick={() => setAcik((o) => !o)}
         disabled={sunucular.length === 0}
         className={cn(
-          'rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors',
+          'rounded-full border px-2.5 py-1 text-2xs font-semibold transition-colors',
           'disabled:pointer-events-none disabled:opacity-40',
           acik
             ? 'border-accent-line bg-accent-weak text-accent'
@@ -125,8 +125,8 @@ export function Duyuru({
       </button>
 
       {acik ? (
-        <div className="absolute left-0 top-7 z-40 w-80 rounded-sm border border-border-strong bg-surface p-3 shadow-lift">
-          <p className="text-[11px] text-fg-faint">
+        <div className="absolute left-0 top-7 z-40 w-80 origin-top-left animate-pop-in rounded border border-border-strong bg-surface p-3 shadow-lift">
+          <p className="text-2xs text-fg-faint">
             {/* Kaç kişinin göreceği yazıyor: "herkese gidiyor" soyut, "43
                 kişi görecek" değil. */}
             Sunucudaki herkesin ekranına yazılır
@@ -143,7 +143,7 @@ export function Duyuru({
                   type="button"
                   onClick={() => setSlug(s.serverSlug)}
                   className={cn(
-                    'rounded-full px-2 py-0.5 text-[11px] transition-colors',
+                    'rounded-full px-2 py-0.5 text-2xs transition-colors',
                     s.serverSlug === secili?.serverSlug
                       ? 'bg-accent-weak text-accent'
                       : 'text-fg-muted hover:text-fg',
@@ -172,34 +172,31 @@ export function Duyuru({
             rows={3}
             maxLength={SINIR * 2}
             placeholder="Duyuru metni"
-            className="mt-2 w-full resize-none rounded-sm border border-border-strong bg-surface-sunken px-2.5 py-1.5 text-[13px] text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none"
+            className="mt-2 w-full resize-none rounded-sm border border-border-strong bg-surface-sunken px-2.5 py-1.5 text-footnote text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none"
           />
 
           <div className="mt-1 flex items-center justify-between">
             {/* Sayaç sınıra yaklaşınca renk değiştiriyor: uç 200'ü aşan
                 metni reddediyor ve bunu göndermeden önce bilmek gerek. */}
             <span
-              className={cn(
-                'num text-[11px]',
-                metin.length > SINIR ? 'text-danger' : 'text-fg-faint',
-              )}
+              className={cn('num text-2xs', metin.length > SINIR ? 'text-danger' : 'text-fg-faint')}
             >
               {metin.length}/{SINIR}
             </span>
             <div className="flex items-center gap-2">
-              {gitti ? <span className="text-[11px] text-success">gönderildi</span> : null}
+              {gitti ? <span className="text-2xs text-success">gönderildi</span> : null}
               <button
                 type="button"
                 onClick={() => void gonder()}
                 disabled={!gonderilebilir}
-                className="rounded-full bg-ink px-3 py-1 text-[12px] font-medium text-ink-fg disabled:opacity-40"
+                className="rounded-full bg-ink px-3 py-1 text-xs font-medium text-ink-fg disabled:opacity-40"
               >
                 {bekliyor ? '…' : 'Gönder'}
               </button>
             </div>
           </div>
 
-          {hata ? <p className="mt-1.5 text-[12px] text-danger">{hata}</p> : null}
+          {hata ? <p className="mt-1.5 text-xs text-danger">{hata}</p> : null}
         </div>
       ) : null}
     </div>

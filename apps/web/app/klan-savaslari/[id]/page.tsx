@@ -9,7 +9,7 @@ import { getJson, getMe, publicApiUrl } from '@/lib/api';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-export const metadata = { title: 'Klan savaşı — Altai' };
+export const metadata = { title: 'Klan savaşı - Altai' };
 
 export default async function KlanSavasiPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

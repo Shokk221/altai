@@ -109,26 +109,24 @@ export function RoleMappings({ apiUrl, veri }: { apiUrl: string; veri: Veri }) {
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <span className="font-semibold">{ROL_ETIKET[m.systemRole] ?? m.systemRole}</span>
                 {m.squadGroup ? (
-                  <span className="rounded-full bg-accent-weak px-2.5 py-0.5 text-[11px] font-medium text-accent-2">
+                  <span className="rounded-full bg-accent-weak px-2.5 py-0.5 text-2xs font-medium text-accent-2">
                     oyun: {m.squadGroup}
                   </span>
                 ) : (
-                  <span className="text-[11px] text-fg-faint">oyun içi yetki yok</span>
+                  <span className="text-2xs text-fg-faint">oyun içi yetki yok</span>
                 )}
-                <span className="text-[11px] text-fg-faint">
+                <span className="text-2xs text-fg-faint">
                   {m.panelPermissions.length} panel izni
                 </span>
                 <span
                   className={cn(
-                    'text-[11px] font-semibold',
+                    'text-2xs font-semibold',
                     m.uyeSayisi > 0 ? 'text-info' : 'text-fg-muted',
                   )}
                 >
                   {m.uyeSayisi} kişi taşıyor
                 </span>
-                <span className="ml-auto font-mono text-[11px] text-fg-faint">
-                  {m.discordRoleId}
-                </span>
+                <span className="ml-auto font-mono text-2xs text-fg-faint">{m.discordRoleId}</span>
               </div>
               <div className="mt-3 flex gap-2">
                 <Button size="sm" variant="soft" onClick={() => setDuzenlenen(m)}>
@@ -229,14 +227,14 @@ function Form({
 
         <label className="flex flex-col gap-1.5 sm:col-span-2">
           <span className="text-xs font-semibold text-fg-muted">
-            Oyun içi grup (Admins.cfg) — boş bırakılırsa oyunda yetki vermez
+            Oyun içi grup (Admins.cfg), boş bırakılırsa oyunda yetki vermez
           </span>
           <select
             value={squadGroup}
             onChange={(e) => setSquadGroup(e.target.value)}
             className="min-h-11 rounded-sm border border-border-strong bg-surface-sunken px-3.5 text-sm text-fg"
           >
-            <option value="">— yok —</option>
+            <option value="">Yok</option>
             {veri.squadGroups.map((g) => (
               <option key={g.name} value={g.name}>
                 {g.name} ({g.grantMode === 'discord' ? 'yetkili' : 'whitelist'})
@@ -255,7 +253,7 @@ function Form({
               type="button"
               onClick={() => izinDegistir(p)}
               className={cn(
-                'rounded-full px-3 py-1.5 font-mono text-[11px] font-medium transition-colors',
+                'rounded-full px-3 py-1.5 font-mono text-2xs font-medium transition-colors',
                 izinler.includes(p)
                   ? 'bg-accent-weak text-accent-2'
                   : 'bg-surface-2 text-fg-muted hover:text-fg',

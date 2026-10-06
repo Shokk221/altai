@@ -2,7 +2,7 @@ import { getJson, getMe } from '@/lib/api';
 import { tarihSaat } from '@/lib/format';
 import Link from 'next/link';
 
-export const metadata = { title: 'Klan savaşları — Altai' };
+export const metadata = { title: 'Klan savaşları - Altai' };
 
 /**
  * Klan savaşları listesi — plan Faz 5.
@@ -78,7 +78,7 @@ export default async function KlanSavaslariPage() {
                   {s.name}
                 </Link>
                 <span
-                  className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                  className={`rounded px-1.5 py-0.5 text-2xs font-semibold ${
                     s.status === 'live'
                       ? 'bg-danger text-danger-fg'
                       : 'bg-accent-weak text-accent-2'
@@ -86,10 +86,8 @@ export default async function KlanSavaslariPage() {
                 >
                   {DURUM_ETIKET[s.status] ?? s.status}
                 </span>
-                {s.lockedAt ? (
-                  <span className="text-[11px] text-fg-faint">kadro kilitli</span>
-                ) : null}
-                <span className="ml-auto text-[11px] text-fg-faint">
+                {s.lockedAt ? <span className="text-2xs text-fg-faint">kadro kilitli</span> : null}
+                <span className="ml-auto text-2xs text-fg-faint">
                   {s.scheduledAt ? tarihSaat(s.scheduledAt) : 'tarih yok'}
                 </span>
               </div>

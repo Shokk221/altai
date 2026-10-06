@@ -32,7 +32,7 @@ const API_HATALARI: Record<string, string> = {
 function mesaj(kod: unknown, detay?: unknown): string {
   const k = typeof kod === 'string' ? kod : '';
   const temel = API_HATALARI[k] ?? k ?? 'Beklenmeyen hata';
-  return typeof detay === 'string' && detay ? `${temel} — ${detay}` : temel;
+  return typeof detay === 'string' && detay ? `${temel}: ${detay}` : temel;
 }
 
 function useEylem(apiUrl: string) {
@@ -213,7 +213,7 @@ export function KaydiKapat({ apiUrl, recordId }: { apiUrl: string; recordId: str
         type="button"
         onClick={() => calistir(`/records/${recordId}/resolve`)}
         disabled={bekliyor}
-        className="text-[11px] font-medium text-fg-muted transition-colors hover:text-fg disabled:opacity-40"
+        className="text-2xs font-medium text-fg-muted transition-colors hover:text-fg disabled:opacity-40"
       >
         {bekliyor ? '…' : 'kapat'}
       </button>

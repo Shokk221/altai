@@ -25,7 +25,7 @@ const VARIANTS: Record<Variant, string> = {
 
 const SIZES: Record<Size, string> = {
   // Dokunma hedefi: mobilde parmakla basılabilir olmalı (plan Bölüm 8).
-  sm: 'min-h-8 px-3.5 text-[13px]',
+  sm: 'min-h-8 px-3.5 text-footnote',
   md: 'min-h-11 px-5 text-sm',
 };
 

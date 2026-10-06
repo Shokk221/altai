@@ -98,7 +98,7 @@ export function KlanSavasi({
         // cevap, neyin eksik olduğunu doğrudan söylüyor.
         setMesaj(
           j.error === 'kadro_bos'
-            ? 'Kadro boş — savaş başlatılamaz. Boş kadroyla herkes sunucudan atılırdı.'
+            ? 'Kadro boş, savaş başlatılamaz. Boş kadroyla herkes sunucudan atılırdı.'
             : j.error === 'kadro_kilitli'
               ? 'Kadro kilitli, ekleme yapılamaz.'
               : String(j.error ?? `hata (${r.status})`),
@@ -139,13 +139,13 @@ export function KlanSavasi({
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h2 className="display text-xl">{savas.name}</h2>
           <span
-            className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+            className={`rounded px-1.5 py-0.5 text-2xs font-semibold ${
               savas.status === 'live' ? 'bg-danger text-danger-fg' : 'bg-accent-weak text-accent-2'
             }`}
           >
             {DURUM_ETIKET[savas.status] ?? savas.status}
           </span>
-          {kilitli ? <span className="text-[11px] text-fg-faint">kadro kilitli</span> : null}
+          {kilitli ? <span className="text-2xs text-fg-faint">kadro kilitli</span> : null}
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2">
@@ -241,8 +241,7 @@ export function KlanSavasi({
 
         {kilitli ? (
           <p className="rounded border border-border bg-surface px-4 py-6 text-center text-sm text-fg-muted">
-            Kadro kilitli. Kilit, karşı tarafın kabul ettiği kadronun sabitlendiği an — ekleme
-            yapılamaz.
+            Kadro kilitli. Karşı taraf bu kadroyu kabul etti, artık ekleme yapılamaz.
           </p>
         ) : (
           <div className="space-y-2 rounded bg-surface p-3">

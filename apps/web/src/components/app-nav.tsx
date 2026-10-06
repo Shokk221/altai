@@ -3,7 +3,7 @@
 import { cn } from '@/lib/cn';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /**
  * Genel navigasyon.
@@ -54,12 +54,27 @@ export function AppNav({
 }) {
   const yol = usePathname();
   const [cikiyor, setCikiyor] = useState(false);
+  const serit = useRef<HTMLElement | null>(null);
 
   const gorunur = BOLUMLER.filter((b) => {
     if (!b.izin || superAdmin) return true;
     const gerekli = Array.isArray(b.izin) ? b.izin : [b.izin];
     return gerekli.some((p) => izinler.includes(p));
   });
+  // '/' her yolun öneki olduğu için tam eşleşme aranıyor; diğer bölümlerde
+  // alt sayfalar da (profil gibi) etkin sayılıyor.
+  const etkinMi = (href: string) => (href === '/' ? yol === '/' : yol.startsWith(href));
+  const etkinHref = gorunur.find((b) => etkinMi(b.href))?.href;
+
+  // Dar ekranda menü yana kayıyor; bölüm değişince etkin olan görünür
+  // alana getiriliyor. Yoksa "Talepler"deyken hangi sayfada olduğun
+  // şeridin kaymış dışında kalıyordu.
+  useEffect(() => {
+    if (!etkinHref) return;
+    serit.current
+      ?.querySelector(`a[href="${etkinHref}"]`)
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [etkinHref]);
 
   async function cikis() {
     setCikiyor(true);
@@ -71,22 +86,27 @@ export function AppNav({
     // Yapışkan ve saydam: Apple arayüzlerinde üst çubuk içerikle birlikte
     // kaymaz, içeriğin üstünde durur ve arkasını bulanıklaştırır.
     <header className="sticky top-0 z-50 border-b border-border bg-bg-blur backdrop-blur-xl backdrop-saturate-150">
-      <div className="mx-auto flex h-12 w-full max-w-[110rem] items-center gap-1 px-5">
-        <Link href="/" className="mr-4 text-[15px] font-semibold tracking-tight">
+      <div className="mx-auto flex h-12 w-full max-w-[110rem] items-center gap-1 px-4 sm:px-5">
+        <Link href="/" className="mr-3 shrink-0 text-subhead font-semibold sm:mr-4">
           Altai
         </Link>
 
-        <nav className="flex items-center gap-1">
+        {/* On bölüm dar ekrana sığmıyor. Önce taşan kısım `overflow-x:
+            hidden` altında görünmez oluyordu: telefonda Talepler'e ve
+            Savaşlar'a hiç ulaşılamıyordu. Artık şerit yana kayıyor. */}
+        <nav
+          ref={serit}
+          className="scrollbar-none -mx-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1"
+        >
           {gorunur.map((b) => {
-            // '/' her yolun öneki olduğu için tam eşleşme aranıyor; diğer
-            // bölümlerde alt sayfalar da (profil gibi) etkin sayılıyor.
-            const etkin = b.href === '/' ? yol === '/' : yol.startsWith(b.href);
+            const etkin = b.href === etkinHref;
             return (
               <Link
                 key={b.href}
                 href={b.href}
+                aria-current={etkin ? 'page' : undefined}
                 className={cn(
-                  'rounded-full px-3 py-1.5 text-[13px] transition-colors',
+                  'shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-footnote transition-colors',
                   etkin ? 'bg-surface-2 text-fg' : 'text-fg-muted hover:text-fg',
                 )}
               >
@@ -96,13 +116,13 @@ export function AppNav({
           })}
         </nav>
 
-        <div className="ml-auto flex items-center gap-3">
-          <span className="hidden text-[13px] text-fg-muted sm:inline">{kullanici}</span>
+        <div className="flex shrink-0 items-center gap-3 pl-2">
+          <span className="hidden text-footnote text-fg-muted sm:inline">{kullanici}</span>
           <button
             type="button"
             onClick={cikis}
             disabled={cikiyor}
-            className="rounded-full px-3 py-1.5 text-[13px] text-fg-muted transition-colors hover:text-fg disabled:opacity-40"
+            className="rounded-full px-3 py-1.5 text-footnote text-fg-muted transition-colors hover:text-fg disabled:opacity-40"
           >
             {cikiyor ? '…' : 'Çıkış'}
           </button>

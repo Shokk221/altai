@@ -65,7 +65,7 @@ export function TalepKapat({ apiUrl, talepId }: { apiUrl: string; talepId: strin
         value={sebep}
         onChange={(e) => setSebep(e.target.value)}
       />
-      <p className="text-[11px] text-fg-faint">
+      <p className="text-2xs text-fg-faint">
         Kayıt hemen kapanır. Discord thread'i bot tarafından arşivlenene kadar açık kalabilir.
       </p>
       <div className="flex items-center gap-2">

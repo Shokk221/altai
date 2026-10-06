@@ -88,33 +88,33 @@ export function BekleyenTakim({
       <button
         type="button"
         onClick={() => setAcik((o) => !o)}
-        className="rounded-full border border-warn-line px-2.5 py-1 text-[11px] font-semibold text-warn hover:bg-warn-weak"
+        className="rounded-full border border-warn-line px-2.5 py-1 text-2xs font-semibold text-warn hover:bg-warn-weak"
       >
         maç sonu: {liste.length}
       </button>
 
       {acik ? (
-        <div className="absolute left-0 top-7 z-40 w-72 rounded-sm border border-border-strong bg-surface p-1 shadow-lift">
-          <p className="px-2.5 py-1.5 text-[11px] text-fg-faint">Maç bitince takımı değişecekler</p>
+        <div className="absolute left-0 top-7 z-40 w-72 origin-top-left animate-pop-in rounded border border-border-strong bg-surface p-1.5 shadow-lift">
+          <p className="px-2.5 py-1.5 text-2xs text-fg-faint">Maç bitince takımı değişecekler</p>
           <ul className="max-h-64 overflow-y-auto">
             {liste.map((b) => (
               <li
                 key={b.id}
-                className="flex items-baseline gap-2 rounded-sm px-2.5 py-1.5 text-[13px] hover:bg-surface-2"
+                className="flex items-baseline gap-2 rounded-sm px-2.5 py-1.5 text-footnote hover:bg-surface-2"
               >
                 <span className="min-w-0 flex-1 truncate">
                   {b.playerName ?? b.steamId}
                   {b.targetTeam ? (
-                    <span className="ml-1.5 text-[11px] text-accent">→ T{b.targetTeam}</span>
+                    <span className="ml-1.5 text-2xs text-accent">→ T{b.targetTeam}</span>
                   ) : null}
                   {b.requestedByName ? (
-                    <span className="ml-1.5 text-[11px] text-fg-faint">{b.requestedByName}</span>
+                    <span className="ml-1.5 text-2xs text-fg-faint">{b.requestedByName}</span>
                   ) : null}
                 </span>
                 <button
                   type="button"
                   onClick={() => void iptal(b.id)}
-                  className="shrink-0 text-[12px] text-fg-muted hover:text-danger"
+                  className="shrink-0 text-xs text-fg-muted hover:text-danger"
                 >
                   iptal
                 </button>

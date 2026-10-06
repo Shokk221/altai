@@ -109,7 +109,7 @@ export function PlayerMenu({
         }}
         aria-label={`${isim} için işlemler`}
         className={cn(
-          'rounded px-1 text-[13px] leading-none text-fg-faint transition-colors hover:text-fg',
+          'rounded px-1 text-footnote leading-none text-fg-faint transition-colors hover:text-fg',
           acik && 'text-fg',
         )}
       >
@@ -117,12 +117,12 @@ export function PlayerMenu({
       </button>
 
       {acik ? (
-        <div className="absolute right-0 top-5 z-30 w-56 rounded-sm border border-border-strong bg-surface p-1 shadow-lift">
+        <div className="absolute right-0 top-5 z-30 w-56 origin-top-right animate-pop-in rounded border border-border-strong bg-surface p-1.5 shadow-lift">
           {eylem === null ? (
             <div className="flex flex-col">
               <Link
                 href={`/oyuncular?q=${steamId}`}
-                className="rounded-sm px-2.5 py-1.5 text-[13px] text-fg-muted hover:bg-surface-2 hover:text-fg"
+                className="rounded-sm px-2.5 py-1.5 text-footnote text-fg-muted hover:bg-surface-2 hover:text-fg"
               >
                 Profili aç
               </Link>
@@ -130,7 +130,7 @@ export function PlayerMenu({
                 <button
                   type="button"
                   onClick={() => setEylem('warn')}
-                  className="rounded-sm px-2.5 py-1.5 text-left text-[13px] text-fg-muted hover:bg-surface-2 hover:text-fg"
+                  className="rounded-sm px-2.5 py-1.5 text-left text-footnote text-fg-muted hover:bg-surface-2 hover:text-fg"
                 >
                   Uyar
                 </button>
@@ -149,7 +149,7 @@ export function PlayerMenu({
                           setAcik(false);
                           takimaAt(t);
                         }}
-                        className="rounded-sm px-2.5 py-1.5 text-left text-[13px] text-fg-muted hover:bg-surface-2 hover:text-fg"
+                        className="rounded-sm px-2.5 py-1.5 text-left text-footnote text-fg-muted hover:bg-surface-2 hover:text-fg"
                       >
                         Takım {t}'e al
                       </button>
@@ -159,7 +159,7 @@ export function PlayerMenu({
                 <button
                   type="button"
                   onClick={() => setEylem('kick')}
-                  className="rounded-sm px-2.5 py-1.5 text-left text-[13px] text-danger hover:bg-danger-weak"
+                  className="rounded-sm px-2.5 py-1.5 text-left text-footnote text-danger hover:bg-danger-weak"
                 >
                   Sunucudan at
                 </button>
@@ -170,15 +170,15 @@ export function PlayerMenu({
                   void navigator.clipboard?.writeText(steamId);
                   setAcik(false);
                 }}
-                className="rounded-sm px-2.5 py-1.5 text-left text-[13px] text-fg-muted hover:bg-surface-2 hover:text-fg"
+                className="rounded-sm px-2.5 py-1.5 text-left text-footnote text-fg-muted hover:bg-surface-2 hover:text-fg"
               >
                 SteamID kopyala
               </button>
             </div>
           ) : (
             <div className="p-1.5">
-              <p className="mb-1.5 text-[11px] text-fg-faint">
-                {eylem === 'kick' ? 'Atma sebebi' : 'Uyarı metni'} — {isim}
+              <p className="mb-1.5 text-2xs text-fg-faint">
+                {eylem === 'kick' ? 'Atma sebebi' : 'Uyarı metni'} · {isim}
               </p>
               <input
                 value={metin}
@@ -188,7 +188,7 @@ export function PlayerMenu({
                   if (e.key === 'Escape') setEylem(null);
                 }}
                 placeholder={eylem === 'kick' ? 'Oyuncuya gösterilir' : 'Ekranda görecek'}
-                className="w-full rounded-sm border border-border-strong bg-surface-sunken px-2.5 py-1.5 text-[13px] text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none"
+                className="w-full rounded-sm border border-border-strong bg-surface-sunken px-2.5 py-1.5 text-footnote text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none"
               />
               <div className="mt-2 flex gap-1.5">
                 <button
@@ -196,7 +196,7 @@ export function PlayerMenu({
                   onClick={gonder}
                   disabled={bekliyor || metin.trim().length === 0}
                   className={cn(
-                    'rounded-full px-3 py-1 text-[12px] font-medium disabled:opacity-40',
+                    'rounded-full px-3 py-1 text-xs font-medium disabled:opacity-40',
                     eylem === 'kick' ? 'bg-danger text-danger-fg' : 'bg-ink text-ink-fg',
                   )}
                 >
@@ -205,12 +205,12 @@ export function PlayerMenu({
                 <button
                   type="button"
                   onClick={() => setEylem(null)}
-                  className="rounded-full px-3 py-1 text-[12px] text-fg-muted hover:text-fg"
+                  className="rounded-full px-3 py-1 text-xs text-fg-muted hover:text-fg"
                 >
                   Geri
                 </button>
               </div>
-              {sonuc ? <p className="mt-1.5 text-[11px] text-danger">{sonuc}</p> : null}
+              {sonuc ? <p className="mt-1.5 text-2xs text-danger">{sonuc}</p> : null}
             </div>
           )}
         </div>

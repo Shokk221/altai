@@ -88,11 +88,44 @@
     letter-spacing: -0.01em;
   }
 
-  /* Klavye ile gezinenler için görünür odak. */
+  ::selection {
+    background: var(--accent-weak);
+    color: var(--fg);
+  }
+
+  /* Klavye ile gezinenler için görünür odak.
+
+     `outline` ile çiziliyor, gölgeyle değil: tarayıcılar outline'ı öğenin
+     kendi köşesine uyduruyor. Önceki kural odakta `border-radius`
+     dayatıyordu ve klavyeyle gelinen hap düğme odak alınca köşeli kutuya
+     dönüşüyordu — şekli değişen düğme, odak halkasından daha dikkat
+     dağıtıcı. */
   :focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 3.5px var(--accent-ring);
-    border-radius: 0.5rem;
+    outline: 3px solid var(--accent-ring);
+    outline-offset: 1px;
+  }
+
+  /* Basma geri bildirimi: Apple'da düğme basılınca hafifçe içeri çöker.
+     Tek tek düğmelere sınıf eklemek yerine burada: 33 ayrı düğmenin
+     yarısında unutuluyordu. Geçiş `transition-colors` içinde (bkz.
+     tailwind.config.ts transitionProperty). */
+  button:not(:disabled):active {
+    transform: scale(0.97);
+  }
+
+  /* "Hareketi azalt" açık olan cihazda animasyon yok, durum anında değişir.
+     Pencere girişleri ve basma küçülmesi dahil. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+    button:not(:disabled):active {
+      transform: none;
+    }
   }
 
   /* Kaydırma çubuğu: ince ve sessiz. Tarayıcı varsayılanı koyu zeminde
@@ -120,8 +153,9 @@
     background: transparent;
   }
 
-  /* Büyük sayılar. Apple'da büyük tipografi SIKI harflenir; gevşek
-     bırakılırsa dağınık görünüyor. */
+  /* Büyük sayılar ve başlıklar. Apple'da büyük tipografi SIKI harflenir;
+     boyutla gelen harf aralığı (tailwind.config.ts fontSize) bunu zaten
+     veriyor, buradaki değer boyut sınıfı olmayan öğe için yedek. */
   .display {
     @apply font-semibold;
     letter-spacing: -0.03em;
@@ -131,5 +165,17 @@
   /* Veri sütunları: rakamlar aynı genişlikte. */
   .num {
     font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  /* Yatay kayan şeritlerde çubuğu gizler (dar ekranda üst menü).
+     Kaydırma çalışmaya devam ediyor; yalnızca görsel çubuk yok — iOS'taki
+     yatay sekme şeritleri de böyle. */
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
   }
 }

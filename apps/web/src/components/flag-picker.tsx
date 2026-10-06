@@ -88,7 +88,7 @@ export function FlagPicker({
       <button
         type="button"
         onClick={() => setAcik(true)}
-        className="rounded-full bg-surface-2 px-2.5 py-1 text-[11px] font-medium text-fg-muted transition-colors hover:text-fg"
+        className="rounded-full bg-surface-2 px-2.5 py-1 text-2xs font-medium text-fg-muted transition-colors hover:text-fg"
       >
         + etiket
       </button>
@@ -100,9 +100,9 @@ export function FlagPicker({
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {flags === null ? (
-        <span className="text-[11px] text-fg-muted">yükleniyor…</span>
+        <span className="text-2xs text-fg-muted">yükleniyor…</span>
       ) : secilebilir.length === 0 ? (
-        <span className="text-[11px] text-fg-muted">atanabilecek etiket kalmadı</span>
+        <span className="text-2xs text-fg-muted">atanabilecek etiket kalmadı</span>
       ) : (
         secilebilir.map((f) => (
           <button
@@ -111,7 +111,7 @@ export function FlagPicker({
             onClick={() => ata(f.id)}
             disabled={bekleyen !== null}
             title={f.description ?? undefined}
-            className="rounded-full bg-surface-2 px-2.5 py-1 text-[11px] font-medium text-fg transition-colors hover:bg-accent-weak hover:text-accent-2 disabled:opacity-40"
+            className="rounded-full bg-surface-2 px-2.5 py-1 text-2xs font-medium text-fg transition-colors hover:bg-accent-weak hover:text-accent-2 disabled:opacity-40"
           >
             {bekleyen === f.id ? '…' : f.name}
           </button>
@@ -120,7 +120,7 @@ export function FlagPicker({
       <Button variant="ghost" size="sm" onClick={() => setAcik(false)}>
         kapat
       </Button>
-      {hata ? <span className="text-[11px] font-medium text-danger">{hata}</span> : null}
+      {hata ? <span className="text-2xs font-medium text-danger">{hata}</span> : null}
     </div>
   );
 }

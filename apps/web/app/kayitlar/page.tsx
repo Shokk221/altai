@@ -2,7 +2,7 @@ import { ActivityLog, type Sayfa } from '@/components/activity-log';
 import { getJson, getMe, publicApiUrl } from '@/lib/api';
 import Link from 'next/link';
 
-export const metadata = { title: 'Kayıtlar — Altai' };
+export const metadata = { title: 'Kayıtlar - Altai' };
 
 /**
  * Sistem günlüğü sayfası.
@@ -53,7 +53,7 @@ export default async function KayitlarPage() {
         <h1 className="display text-3xl">Kayıtlar</h1>
         <p className="mt-1 text-sm text-fg-muted">
           Panelde ve sunucuda olan her şey. Kim giriş yaptı, kim kime baktı, kim ban attı, agent ne
-          zaman koptu — hepsi burada.
+          zaman koptu. Hepsi burada.
         </p>
       </header>
 
@@ -84,7 +84,7 @@ export default async function KayitlarPage() {
 function Sayac({ ad, deger, vurgu }: { ad: string; deger: number; vurgu?: boolean }) {
   return (
     <div className="rounded-lg border border-border bg-surface px-3.5 py-3">
-      <p className="text-[11px] uppercase tracking-wide text-fg-faint">{ad}</p>
+      <p className="text-2xs uppercase tracking-wide text-fg-faint">{ad}</p>
       <p className={`num mt-0.5 text-xl ${vurgu ? 'text-accent' : 'text-fg'}`}>
         {deger.toLocaleString('tr-TR')}
       </p>

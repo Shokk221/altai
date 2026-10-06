@@ -2,7 +2,7 @@ import { type Kural, Kurallar } from '@/components/kurallar';
 import { getJson, getMe, publicApiUrl } from '@/lib/api';
 import Link from 'next/link';
 
-export const metadata = { title: 'Kurallar — Altai' };
+export const metadata = { title: 'Kurallar - Altai' };
 
 /**
  * Kural yönetimi — plan Faz 5.
@@ -33,7 +33,7 @@ export default async function KurallarPage() {
       <header className="mb-5">
         <h1 className="display text-3xl">Kurallar</h1>
         <p className="mt-1 text-sm text-fg-muted">
-          Buradaki metin tek kaynak — oyun içi <code>!kurallar</code> komutu da bunu gösteriyor.
+          Buradaki metin tek kaynak. Oyun içi <code>!kurallar</code> komutu da bunu gösteriyor.
           Kaldırılan kural silinmez, pasife alınır: geçmiş moderasyon kayıtları kurallara atıfta
           bulunuyor.
         </p>

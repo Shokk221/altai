@@ -86,7 +86,7 @@ export function PlayerSearch({ apiUrl, ilkSorgu = '' }: { apiUrl: string; ilkSor
       <Input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Oyuncu ara — isim, SteamID veya EOS ID"
+        placeholder="İsim, SteamID ya da EOS ID ile ara"
         autoComplete="off"
         spellCheck={false}
         aria-label="Oyuncu ara"
@@ -107,7 +107,7 @@ export function PlayerSearch({ apiUrl, ilkSorgu = '' }: { apiUrl: string; ilkSor
       {state.kind === 'done' && state.results.length === 0 ? (
         <EmptyState
           title="Eşleşen oyuncu yok"
-          hint="Farklı bir yazım deneyin — arama isim geçmişini de kapsıyor."
+          hint="Farklı bir yazım deneyin. Arama isim geçmişini de kapsıyor."
         />
       ) : null}
 
@@ -142,7 +142,7 @@ function PlayerRow({ result }: { result: Result }) {
       >
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="truncate text-[15px] font-semibold">{result.name}</span>
+            <span className="truncate text-subhead font-semibold">{result.name}</span>
             {result.hasActiveBan ? <Badge tone="danger">banlı</Badge> : null}
             {result.flags.slice(0, 4).map((f) => (
               <Badge key={f} tone="info">
@@ -150,18 +150,18 @@ function PlayerRow({ result }: { result: Result }) {
               </Badge>
             ))}
             {result.flags.length > 4 ? (
-              <span className="text-[11px] text-fg-faint">+{result.flags.length - 4}</span>
+              <span className="text-2xs text-fg-faint">+{result.flags.length - 4}</span>
             ) : null}
           </span>
 
-          <span className="mt-1.5 block truncate font-mono text-[11.5px] text-fg-faint">
+          <span className="mt-1.5 block truncate font-mono text-xs text-fg-faint">
             {result.steamId ?? 'Steam yok'} · {result.eosId ?? 'EOS yok'}
           </span>
 
           {/* Aranan isim güncelden farklıysa göstermek şart: admin bu
               sonucun neden çıktığını anlamalı. */}
           {result.matchedName && result.matchedName !== result.name ? (
-            <span className="mt-1 block truncate text-[12.5px] text-fg-muted">
+            <span className="mt-1 block truncate text-footnote text-fg-muted">
               eşleşen: <span className="font-medium text-fg">{result.matchedName}</span>
             </span>
           ) : null}
@@ -174,17 +174,17 @@ function PlayerRow({ result }: { result: Result }) {
               {result.eskiIsimler.map((n) => (
                 <span
                   key={n.name}
-                  className="flex items-baseline justify-between gap-3 py-[3px] text-[12.5px]"
+                  className="flex items-baseline justify-between gap-3 py-[3px] text-footnote"
                 >
                   <span className="truncate text-fg-muted">{n.name}</span>
-                  <span className="num shrink-0 text-[11px] text-fg-faint">
+                  <span className="num shrink-0 text-2xs text-fg-faint">
                     {tarih(n.lastSeen)}
                     <span className="ml-1.5">{gecenSure(n.lastSeen)}</span>
                   </span>
                 </span>
               ))}
               {result.knownNames > result.eskiIsimler.length + 1 ? (
-                <span className="mt-0.5 block text-[11px] text-fg-faint">
+                <span className="mt-0.5 block text-2xs text-fg-faint">
                   +{result.knownNames - result.eskiIsimler.length - 1} isim daha
                 </span>
               ) : null}
@@ -193,10 +193,10 @@ function PlayerRow({ result }: { result: Result }) {
         </span>
 
         <span className="shrink-0 text-right">
-          <span className="num block text-[12.5px] text-fg-muted">{tarih(result.sonGorulme)}</span>
+          <span className="num block text-footnote text-fg-muted">{tarih(result.sonGorulme)}</span>
           {/* Mutlak tarih hangi gün olduğunu, göreli ne kadar eski olduğunu
               söylüyor; ikisi de gerekiyor. */}
-          <span className="block text-[11px] text-fg-faint">{gecenSure(result.sonGorulme)}</span>
+          <span className="block text-2xs text-fg-faint">{gecenSure(result.sonGorulme)}</span>
         </span>
       </Link>
     </li>

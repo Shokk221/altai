@@ -2,7 +2,7 @@ import { getJson, getMe } from '@/lib/api';
 import { sure, tarihSaat } from '@/lib/format';
 import Link from 'next/link';
 
-export const metadata = { title: 'Yetkili kamerası — Altai' };
+export const metadata = { title: 'Yetkili kamerası - Altai' };
 
 /**
  * Yetkili kamerası kullanımı — plan Faz 6.
@@ -128,7 +128,7 @@ export default async function KameraPage({
         ) : (
           <div className="overflow-x-auto rounded border border-border bg-surface">
             <table className="w-full min-w-[32rem] text-sm">
-              <thead className="text-[11px] text-fg-faint">
+              <thead className="text-2xs text-fg-faint">
                 <tr className="border-border border-b">
                   <th className="px-4 py-2 text-left font-medium">Yetkili</th>
                   <th className="px-4 py-2 text-right font-medium">Oturum</th>
@@ -147,7 +147,7 @@ export default async function KameraPage({
                         {y.name ?? '(isim yok)'}
                       </Link>
                       {y.acik > 0 ? (
-                        <span className="ml-2 rounded bg-accent-weak px-1.5 py-0.5 text-[10px] font-semibold text-accent-2">
+                        <span className="ml-2 rounded bg-accent-weak px-1.5 py-0.5 text-2xs font-semibold text-accent-2">
                           kamerada
                         </span>
                       ) : null}
@@ -174,7 +174,7 @@ export default async function KameraPage({
         ) : (
           <div className="overflow-x-auto rounded border border-border bg-surface">
             <table className="w-full min-w-[36rem] text-sm">
-              <thead className="text-[11px] text-fg-faint">
+              <thead className="text-2xs text-fg-faint">
                 <tr className="border-border border-b">
                   <th className="px-4 py-2 text-left font-medium">Yetkili</th>
                   <th className="px-4 py-2 text-left font-medium">Sunucu</th>
@@ -197,9 +197,7 @@ export default async function KameraPage({
                     <td className="px-4 py-2 text-xs text-fg-muted">{tarihSaat(o.enteredAt)}</td>
                     <td className="num px-4 py-2 text-right">
                       {sure(o.saniye)}
-                      {o.acik ? (
-                        <span className="ml-1 text-[10px] text-accent-2">sürüyor</span>
-                      ) : null}
+                      {o.acik ? <span className="ml-1 text-2xs text-accent-2">sürüyor</span> : null}
                     </td>
                   </tr>
                 ))}

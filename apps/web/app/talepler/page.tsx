@@ -2,7 +2,7 @@ import { getJson, getMe } from '@/lib/api';
 import { tarihSaat } from '@/lib/format';
 import Link from 'next/link';
 
-export const metadata = { title: 'Talepler — Altai' };
+export const metadata = { title: 'Talepler - Altai' };
 
 /**
  * Destek talepleri — web aynası (plan Faz 5).
@@ -83,7 +83,7 @@ export default async function TaleplerPage({
         <h1 className="display text-3xl">Talepler</h1>
         <p className="mt-1 text-sm text-fg-muted">
           Konuşma Discord thread'inde geçiyor; burası aynası. Transkript canlı yazılıyor, kapanışta
-          değil — bot kapalıyken bile kayıt kaybolmasın diye.
+          değil. Böylece bot kapalıyken bile kayıt kaybolmuyor.
         </p>
       </header>
 
@@ -116,7 +116,7 @@ export default async function TaleplerPage({
                   #{t.number} · {t.subject}
                 </Link>
                 <span
-                  className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                  className={`rounded px-1.5 py-0.5 text-2xs font-medium ${
                     t.status === 'closed'
                       ? 'bg-surface-2 text-fg-faint'
                       : 'bg-accent-weak text-accent-2'
@@ -124,10 +124,8 @@ export default async function TaleplerPage({
                 >
                   {DURUM_ETIKET[t.status] ?? t.status}
                 </span>
-                {t.category ? (
-                  <span className="text-[11px] text-fg-muted">{t.category}</span>
-                ) : null}
-                <span className="ml-auto text-[11px] text-fg-faint">
+                {t.category ? <span className="text-2xs text-fg-muted">{t.category}</span> : null}
+                <span className="ml-auto text-2xs text-fg-faint">
                   {t.mesajSayisi} mesaj · {tarihSaat(t.createdAt)}
                 </span>
               </div>

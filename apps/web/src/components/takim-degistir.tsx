@@ -111,7 +111,7 @@ export function TakimDegistirKutusu({
       // kilidi). Sessizce "oldu" demek yanlış bilgi olurdu.
       if (govde.dogrulanamayan && govde.dogrulanamayan > 0) {
         setHata(
-          `${govde.dogrulanamayan} oyuncu hâlâ eski takımında — Squad denge kilidi reddetmiş olabilir`,
+          `${govde.dogrulanamayan} oyuncu hâlâ eski takımında. Squad denge kilidi reddetmiş olabilir.`,
         );
         return;
       }
@@ -126,17 +126,17 @@ export function TakimDegistirKutusu({
   return (
     // Örtü: arkadaki listeye tıklamayı engelliyor ve odağı kutuya veriyor.
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-[2px]"
+      className="fixed inset-0 z-50 flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-[2px]"
       onMouseDown={(e) => {
         if (!kutu.current?.contains(e.target as Node)) kapat();
       }}
     >
       <div
         ref={kutu}
-        className="w-full max-w-sm rounded-lg border border-border-strong bg-surface p-4 shadow-lift"
+        className="w-full max-w-sm animate-sheet-in rounded-lg border border-border-strong bg-surface p-5 shadow-lift"
       >
-        <h2 className="text-[15px] font-semibold">Takım {hedefTakim}'e al</h2>
-        <p className="mt-1 text-[13px] text-fg-muted">
+        <h2 className="text-subhead font-semibold">Takım {hedefTakim}'e al</h2>
+        <p className="mt-1 text-footnote text-fg-muted">
           {istek.baslik ? `${istek.baslik} · ` : ''}
           {cok ? `${istek.adaylar.length} oyuncu` : istek.adaylar[0]?.name}
           {zatenOrada > 0 ? (
@@ -147,7 +147,7 @@ export function TakimDegistirKutusu({
         </p>
 
         {cok ? (
-          <ul className="mt-2 max-h-28 overflow-y-auto rounded-sm bg-surface-sunken px-2.5 py-1.5 text-[12px]">
+          <ul className="mt-2 max-h-28 overflow-y-auto rounded-sm bg-surface-sunken px-2.5 py-1.5 text-xs">
             {istek.adaylar.map((a) => (
               <li
                 key={a.steamId}
@@ -173,7 +173,7 @@ export function TakimDegistirKutusu({
           </Secenek>
         </div>
 
-        <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
+        <p className="mt-2 text-2xs leading-relaxed text-fg-faint">
           {zaman === 'simdi'
             ? `Takım ${hedefTakim}'de olmayanlar hemen alınır; geçmeden önce uyarı görürler.`
             : 'Oyuncular şimdi uyarılır, geçiş maç bitince yapılır. O ana kadar iptal edilebilir.'}
@@ -185,17 +185,17 @@ export function TakimDegistirKutusu({
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !bekliyor) void gonder();
           }}
-          placeholder="Sebep (isteğe bağlı) — oyuncuya gösterilir"
-          className="mt-3 w-full rounded-sm border border-border-strong bg-surface-sunken px-2.5 py-1.5 text-[13px] text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none"
+          placeholder="Sebep (isteğe bağlı, oyuncuya gösterilir)"
+          className="mt-3 w-full rounded-sm border border-border-strong bg-surface-sunken px-2.5 py-1.5 text-footnote text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none"
         />
 
-        {hata ? <p className="mt-2 text-[12px] text-danger">{hata}</p> : null}
+        {hata ? <p className="mt-2 text-xs text-danger">{hata}</p> : null}
 
         <div className="mt-4 flex justify-end gap-2">
           <button
             type="button"
             onClick={kapat}
-            className="rounded-full px-3.5 py-1.5 text-[13px] text-fg-muted hover:text-fg"
+            className="rounded-full px-3.5 py-1.5 text-footnote text-fg-muted hover:text-fg"
           >
             Vazgeç
           </button>
@@ -203,7 +203,7 @@ export function TakimDegistirKutusu({
             type="button"
             onClick={gonder}
             disabled={bekliyor}
-            className="rounded-full bg-ink px-3.5 py-1.5 text-[13px] font-medium text-ink-fg disabled:opacity-40"
+            className="rounded-full bg-ink px-3.5 py-1.5 text-footnote font-medium text-ink-fg disabled:opacity-40"
           >
             {bekliyor
               ? '…'
@@ -231,7 +231,7 @@ function Secenek({
       type="button"
       onClick={onClick}
       className={cn(
-        'rounded-full py-1.5 text-[13px] transition-colors',
+        'rounded-full py-1.5 text-footnote transition-colors',
         etkin ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg',
       )}
     >

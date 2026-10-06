@@ -2,7 +2,7 @@ import { type Klan, Klanlar } from '@/components/klanlar';
 import { getJson, getMe, publicApiUrl } from '@/lib/api';
 import Link from 'next/link';
 
-export const metadata = { title: 'Klanlar — Altai' };
+export const metadata = { title: 'Klanlar - Altai' };
 
 export default async function KlanlarPage() {
   const me = await getMe();

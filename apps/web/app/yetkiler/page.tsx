@@ -2,7 +2,7 @@ import { RoleMappings, type Veri } from '@/components/role-mappings';
 import { getJson, getMe, publicApiUrl } from '@/lib/api';
 import Link from 'next/link';
 
-export const metadata = { title: 'Yetkiler — Altai' };
+export const metadata = { title: 'Yetkiler - Altai' };
 
 export default async function YetkilerPage() {
   const me = await getMe();

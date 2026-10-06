@@ -43,7 +43,7 @@ export default async function HomePage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center gap-6 px-5 py-12">
+    <main className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col items-center justify-center gap-6 px-5 py-12">
       <div className="text-center">
         <h1 className="display text-4xl">Altai</h1>
         <p className="mt-2 text-sm text-fg-muted">Sunucu yönetim paneli</p>

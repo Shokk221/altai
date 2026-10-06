@@ -112,7 +112,7 @@ export function Kurallar({ apiUrl, kurallar }: { apiUrl: string; kurallar: Kural
             onChange={(e) => setTaslak({ ...taslak, body: e.target.value })}
           />
           <Input
-            placeholder="Kategori (isteğe bağlı — Genel, Manga, Yetkili...)"
+            placeholder="Kategori (isteğe bağlı: Genel, Manga, Yetkili…)"
             value={taslak.category}
             onChange={(e) => setTaslak({ ...taslak, category: e.target.value })}
           />
@@ -160,13 +160,11 @@ export function Kurallar({ apiUrl, kurallar }: { apiUrl: string; kurallar: Kural
                         <div className="flex flex-wrap items-baseline gap-2">
                           <h3 className="text-sm font-semibold">{k.title}</h3>
                           {k.category ? (
-                            <span className="rounded bg-accent-weak px-1.5 py-0.5 text-[10px] font-medium text-accent-2">
+                            <span className="rounded bg-accent-weak px-1.5 py-0.5 text-2xs font-medium text-accent-2">
                               {k.category}
                             </span>
                           ) : null}
-                          {k.active ? null : (
-                            <span className="text-[10px] text-fg-faint">pasif</span>
-                          )}
+                          {k.active ? null : <span className="text-2xs text-fg-faint">pasif</span>}
                         </div>
                         <p className="mt-1 whitespace-pre-wrap text-xs text-fg-muted">{k.body}</p>
                       </>
@@ -224,7 +222,7 @@ function MiniBtn({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="rounded border border-border px-2 py-1 text-[11px] text-fg-muted hover:text-fg disabled:opacity-40"
+      className="rounded border border-border px-2 py-1 text-2xs text-fg-muted hover:text-fg disabled:opacity-40"
     >
       {children}
     </button>

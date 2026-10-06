@@ -12,6 +12,9 @@ import './globals.css';
  * Yükseklik zinciri: çubuk sabit, altındaki alan kalanı dolduruyor.
  * Kontrol paneli ve profil kendi içlerinde kayan paneller kullandığı için
  * bu zincir olmadan taşıyorlardı.
+ *
+ * `100dvh`, `h-screen` değil: iOS Safari'de `100vh` adres çubuğu gizliyken
+ * ölçülüyor ve çubuk görünürken alt kısım ekranın dışında kalıyordu.
  */
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const me = await getMe();
@@ -19,7 +22,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="tr">
       <body>
-        <div className="flex h-screen flex-col">
+        <div className="flex h-[100dvh] flex-col">
           {me ? (
             <AppNav
               apiUrl={publicApiUrl()}

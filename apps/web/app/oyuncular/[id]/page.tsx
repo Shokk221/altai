@@ -10,7 +10,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 
-export const metadata = { title: 'Oyuncu — Altai' };
+export const metadata = { title: 'Oyuncu - Altai' };
 
 /**
  * Oyuncu profili.
@@ -93,7 +93,7 @@ function Deger({ baslik, deger }: { baslik: string; deger: string }) {
   return (
     <div>
       <div className="display text-lg leading-tight">{deger}</div>
-      <div className="text-[11px] text-fg-faint">{baslik}</div>
+      <div className="text-2xs text-fg-faint">{baslik}</div>
     </div>
   );
 }
@@ -208,7 +208,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
               atanmisIdler={aktifEtiketler.map((f) => f.flagId)}
             />
           ) : null}
-          <span className="ml-auto font-mono text-[11px] text-fg-faint">
+          <span className="ml-auto font-mono text-2xs text-fg-faint">
             {player.steamId ?? 'Steam yok'} · {player.eosId ?? 'EOS yok'}
           </span>
         </div>
@@ -229,7 +229,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
           )}
           <Deger baslik="ban" deger={sayi(profil.bans.length)} />
           <Deger baslik="açık kayıt" deger={sayi(acikKayit)} />
-          <div className="ml-auto text-right text-[11px] leading-relaxed text-fg-faint">
+          <div className="ml-auto text-right text-2xs leading-relaxed text-fg-faint">
             <div>ilk görülme {tarih(oyun.ilkGorulme)}</div>
             <div>son görülme {tarih(oyun.sonGorulme)}</div>
           </div>
@@ -265,21 +265,19 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
                   <span className="min-w-0">
                     <span
                       className={cn(
-                        'block truncate text-[13px]',
-                        k.tur === 'İsim' ? '' : 'font-mono text-[11.5px]',
+                        'block truncate text-footnote',
+                        k.tur === 'İsim' ? '' : 'font-mono text-xs',
                       )}
                     >
                       {k.deger}
                     </span>
-                    <span className="text-[10.5px] uppercase tracking-wider text-fg-faint">
-                      {k.tur}
-                    </span>
+                    <span className="text-2xs uppercase tracking-wider text-fg-faint">{k.tur}</span>
                   </span>
                   <span className="shrink-0 text-right">
-                    <span className="num block text-[11.5px] text-fg-muted">{tarih(k.zaman)}</span>
+                    <span className="num block text-xs text-fg-muted">{tarih(k.zaman)}</span>
                     {/* Mutlak tarihin yanında göreli: biri hangi gün
                         olduğunu, diğeri ne kadar eski olduğunu söylüyor. */}
-                    <span className="block text-[10.5px] text-fg-faint">{gecenSure(k.zaman)}</span>
+                    <span className="block text-2xs text-fg-faint">{gecenSure(k.zaman)}</span>
                   </span>
                 </li>
               ))}
@@ -305,14 +303,14 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
                     ) : (
                       <Badge tone="neutral">doldu</Badge>
                     )}
-                    <span className="text-[11px] text-fg-faint">
+                    <span className="text-2xs text-fg-faint">
                       {tarih(b.createdAt)} → {banBitis(b.expiresAt)}
                     </span>
                   </div>
-                  <p className="mt-1.5 text-[13px] leading-snug">
+                  <p className="mt-1.5 text-footnote leading-snug">
                     {banSebebi(b.reason, b.expiresAt)}
                   </p>
-                  <p className="mt-1 text-[11px] text-fg-faint">
+                  <p className="mt-1 text-2xs text-fg-faint">
                     {b.issuedByName ?? 'bilinmiyor'}
                     {b.source !== 'altai' ? ` · ${b.source}` : ''}
                   </p>
@@ -345,14 +343,16 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
                         <Badge tone={k.kind === 'warning' ? 'accent' : 'neutral'}>
                           {KAYIT_ETIKET[k.kind]}
                         </Badge>
-                        <span className="text-[11px] text-fg-faint">{tarihSaat(k.createdAt)}</span>
+                        <span className="text-2xs text-fg-faint">{tarihSaat(k.createdAt)}</span>
                       </div>
                       {!k.resolvedAt && notYazabilir ? (
                         <KaydiKapat apiUrl={apiUrl} recordId={k.id} />
                       ) : null}
                     </div>
-                    <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-snug">{k.body}</p>
-                    <p className="mt-1 text-[11px] text-fg-faint">
+                    <p className="mt-1.5 whitespace-pre-wrap text-footnote leading-snug">
+                      {k.body}
+                    </p>
+                    <p className="mt-1 text-2xs text-fg-faint">
                       {k.authorName ?? 'bilinmiyor'}
                       {k.resolvedAt ? ' · kapatıldı' : ''}
                     </p>

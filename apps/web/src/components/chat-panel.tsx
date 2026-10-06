@@ -140,7 +140,7 @@ export function ChatPanel({
           value={arama}
           onChange={(e) => setArama(e.target.value)}
           placeholder="Mesajlarda ara…"
-          className="min-h-9 px-3.5 text-[13px]"
+          className="min-h-9 px-3.5 text-footnote"
         />
         <div className="flex flex-wrap gap-1">
           <Cip etkin={secili === null} onClick={() => setSecili(null)}>
@@ -172,9 +172,9 @@ export function ChatPanel({
               key={m.id}
               // Canlı akışla aynı ızgara: uzun mesaj sarınca zamanın altına
               // kaymasın, içerik sütununda hizalı kalsın.
-              className="grid grid-cols-[4.2rem_1fr] gap-x-2 px-1.5 text-[13px] hover:bg-surface-2"
+              className="grid grid-cols-[4.2rem_1fr] gap-x-2 px-1.5 text-footnote hover:bg-surface-2"
             >
-              <span className="num pt-[7px] text-right text-[11px] text-fg-faint">
+              <span className="num pt-[7px] text-right text-2xs text-fg-faint">
                 {saatDakika(m.sentAt)}
               </span>
               {/* Çizgi zaman sütunundan SONRA başlıyor (iOS tablo kalıbı):
@@ -229,7 +229,7 @@ function Cip({
       type="button"
       onClick={onClick}
       className={cn(
-        'rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors',
+        'rounded-full px-2.5 py-1 text-2xs font-medium transition-colors',
         etkin ? 'bg-accent-weak text-accent-2' : cn('hover:bg-surface-2', renk ?? 'text-fg-muted'),
       )}
     >

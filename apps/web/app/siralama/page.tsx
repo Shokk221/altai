@@ -2,7 +2,7 @@ import { getJson, getMe } from '@/lib/api';
 import { sayi } from '@/lib/format';
 import Link from 'next/link';
 
-export const metadata = { title: 'Sıralama — Altai' };
+export const metadata = { title: 'Sıralama - Altai' };
 
 /**
  * Oyuncu sıralaması — plan Faz 4 (istatistik/leaderboard).
@@ -96,8 +96,8 @@ export default async function SiralamaPage({
       <header className="mb-5">
         <h1 className="display text-3xl">Sıralama</h1>
         <p className="mt-1 text-sm text-fg-muted">
-          Maç sonu skorbordlarından. K/D sıralamasında en az 10 maç oynamış oyuncular listeleniyor —
-          tek maçlık bir oran, sıralamanın tepesini anlamsız kılardı.
+          Maç sonu skorbordlarından. K/D sıralamasında en az 10 maç oynamış oyuncular listeleniyor.
+          Tek maçlık bir oran, sıralamanın tepesini anlamsız kılardı.
         </p>
       </header>
 
@@ -127,7 +127,7 @@ export default async function SiralamaPage({
       ) : (
         <div className="overflow-x-auto rounded border border-border bg-surface">
           <table className="w-full min-w-[34rem] text-sm">
-            <thead className="text-[11px] text-fg-faint">
+            <thead className="text-2xs text-fg-faint">
               <tr className="border-border border-b">
                 <th className="px-4 py-2 text-left font-medium">#</th>
                 <th className="px-4 py-2 text-left font-medium">Oyuncu</th>

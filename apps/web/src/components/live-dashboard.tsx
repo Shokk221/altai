@@ -368,7 +368,7 @@ export function LiveDashboard({
           <button
             type="button"
             onClick={secimiTemizle}
-            className="rounded-full border border-accent-line bg-accent-weak px-2.5 py-1 text-[11px] font-semibold text-accent hover:bg-surface-2"
+            className="rounded-full border border-accent-line bg-accent-weak px-2.5 py-1 text-2xs font-semibold text-accent hover:bg-surface-2"
             title="Seçimi bırak (Esc)"
           >
             {secili.size} seçili ×
@@ -473,10 +473,10 @@ export function LiveDashboard({
                       'hover:bg-surface-2',
                       // Sistem olayları sohbetle yarışmamalı: sohbet okunmak
                       // için, giriş/çıkış göz ucuyla taranmak için.
-                      o.tur === 'chat' || o.tur === 'admin' ? 'text-[13px]' : 'text-[12px]',
+                      o.tur === 'chat' || o.tur === 'admin' ? 'text-footnote' : 'text-xs',
                     )}
                   >
-                    <span className="num pt-[7px] text-right text-[11px] text-fg-faint">
+                    <span className="num pt-[7px] text-right text-2xs text-fg-faint">
                       {saat(o.timestamp)}
                     </span>
                     {/* Çizgi zaman sütunundan SONRA başlıyor (iOS tablo
@@ -616,7 +616,7 @@ function TakimPaneli({
             value={arama ?? ''}
             onChange={(e) => setArama(e.target.value)}
             placeholder="İsim, SteamID, EOS ya da manga…"
-            className="min-h-9 px-3.5 text-[13px]"
+            className="min-h-9 px-3.5 text-footnote"
           />
         ) : (
           // İkinci panelde kutu yok ama hizanın bozulmaması için aynı
@@ -730,13 +730,13 @@ function Manga({
       >
         <span
           className={cn(
-            'truncate text-[11px] font-semibold uppercase tracking-wide',
+            'truncate text-2xs font-semibold uppercase tracking-wide',
             sonuk ? 'text-fg-faint' : 'text-fg-muted',
           )}
         >
           {baslik}
         </span>
-        <span className="num shrink-0 text-[11px] text-fg-faint">{uyeler.length}</span>
+        <span className="num shrink-0 text-2xs text-fg-faint">{uyeler.length}</span>
       </div>
       <ul className="flex flex-col">
         {sirali.map((p) => (
@@ -788,17 +788,17 @@ function Manga({
                 e.preventDefault();
                 seciliDegistir(p.steamId, p.name, takim);
               }}
-              className="flex min-w-0 flex-1 items-baseline justify-between gap-2 py-[3px] text-[13px]"
+              className="flex min-w-0 flex-1 items-baseline justify-between gap-2 py-[3px] text-footnote"
             >
               <span className="min-w-0 truncate">
                 {p.isLeader ? (
-                  <span className="mr-1.5 text-[10px] font-semibold text-accent">SL</span>
+                  <span className="mr-1.5 text-2xs font-semibold text-accent">SL</span>
                 ) : null}
                 {p.name}
               </span>
               {/* Rol ve ne kadardır içeride: ikisi de moderasyonda bakılan
                   şeyler, yan yana sığıyor. */}
-              <span className="num shrink-0 text-[11px] text-fg-faint">
+              <span className="num shrink-0 text-2xs text-fg-faint">
                 {rolKisalt(p.role)}
                 <span className="ml-1.5 opacity-70">{suredir(p.joinedAt)}</span>
               </span>
@@ -933,7 +933,7 @@ function Cip({
       type="button"
       onClick={onClick}
       className={cn(
-        'rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors',
+        'rounded-full px-2.5 py-1 text-2xs font-medium transition-colors',
         etkin ? 'bg-accent-weak text-accent-2' : 'text-fg-muted hover:bg-surface-2',
       )}
     >
