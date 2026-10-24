@@ -1,8 +1,8 @@
 import type { Db } from '@altai/db';
-import { accessSchema } from '@altai/db';
+import { accessSchema, eslenmisRolIdleri, uyeRolleriniYaz } from '@altai/db';
 import { logger } from '@altai/shared';
 import type { GuildMember } from 'discord.js';
-import { and, eq, inArray, lt, notInArray } from 'drizzle-orm';
+import { and, eq, inArray, lt } from 'drizzle-orm';
 
 /**
  * Discord rol senkronu — yetki zincirinin son halkası.
@@ -20,65 +20,19 @@ import { and, eq, inArray, lt, notInArray } from 'drizzle-orm';
  * düşmedi" durumunu üretir — tam da eski sistemin sorunuydu.
  */
 
-/** İzlenecek roller: yalnızca role_mappings'te tanımlı olanlar. */
-async function eslenmisRoller(db: Db): Promise<string[]> {
-  const rows = await db
-    .select({ id: accessSchema.roleMappings.discordRoleId })
-    .from(accessSchema.roleMappings);
-  return rows.map((r) => r.id);
-}
-
 /**
  * Tek bir üyenin rollerini eşitler — `guildMemberUpdate` bunu çağırır.
  *
- * Ekleme ve silme tek transaction'da: yarıda kalırsa üye ne fazla ne eksik
- * yetkili kalsın.
+ * Kuralın kendisi packages/db'de (`uyeRolleriniYaz`): api de girişte aynı
+ * tabloyu yazıyor ve iki kopyanın ayrışmaması gerekiyor.
  */
 export async function uyeyiEsitle(db: Db, member: GuildMember, izlenenListe?: string[]) {
-  const izlenen = izlenenListe ?? (await eslenmisRoller(db));
-  if (izlenen.length === 0) return;
-
-  const izlenenKume = new Set(izlenen);
-  const uyeninRolleri = member.roles.cache.map((r) => r.id).filter((id) => izlenenKume.has(id));
-  const simdi = new Date();
-
-  await db.transaction(async (tx) => {
-    if (uyeninRolleri.length > 0) {
-      await tx
-        .insert(accessSchema.discordMemberRoles)
-        .values(
-          uyeninRolleri.map((discordRoleId) => ({
-            discordId: member.id,
-            discordRoleId,
-            syncedAt: simdi,
-          })),
-        )
-        // Zaten varsa syncedAt tazelensin: admin listesi ucu bu alana bakıp
-        // "liste bayat mı" diye karar veriyor.
-        .onConflictDoUpdate({
-          target: [
-            accessSchema.discordMemberRoles.discordId,
-            accessSchema.discordMemberRoles.discordRoleId,
-          ],
-          set: { syncedAt: simdi },
-        });
-    }
-
-    // Bu üyenin artık taşımadığı İZLENEN roller silinir.
-    //
-    // Silmeyi izlenen rollerle sınırlıyoruz: eşlemesi kaldırılmış bir rolün
-    // kayıtlarına dokunmuyoruz ki o rol yeniden eşlendiğinde veri geri gelsin.
-    await tx.delete(accessSchema.discordMemberRoles).where(
-      and(
-        eq(accessSchema.discordMemberRoles.discordId, member.id),
-        inArray(accessSchema.discordMemberRoles.discordRoleId, izlenen),
-        // Üyede hiç izlenen rol kalmadıysa hepsi gider.
-        uyeninRolleri.length > 0
-          ? notInArray(accessSchema.discordMemberRoles.discordRoleId, uyeninRolleri)
-          : undefined,
-      ),
-    );
-  });
+  await uyeRolleriniYaz(
+    db,
+    member.id,
+    member.roles.cache.map((r) => r.id),
+    izlenenListe,
+  );
 }
 
 /**
@@ -89,7 +43,7 @@ export async function uyeyiEsitle(db: Db, member: GuildMember, izlenenListe?: st
  * bot her yeniden başladığında veri sessizce bayatlardı.
  */
 export async function guildiEsitle(db: Db, uyeler: Map<string, GuildMember>) {
-  const izlenen = await eslenmisRoller(db);
+  const izlenen = await eslenmisRolIdleri(db);
   if (izlenen.length === 0) {
     logger.warn('role_mappings boş — senkronlanacak rol yok, tarama atlandı');
     return { uye: 0, kayit: 0, silinen: 0 };
@@ -147,7 +101,7 @@ export async function guildiEsitle(db: Db, uyeler: Map<string, GuildMember>) {
  * yerine niyeti doğrudan ifade ediyor. Ayrılan biri Admins.cfg'de kalmamalı.
  */
 export async function uyeyiTemizle(db: Db, discordId: string) {
-  const izlenen = await eslenmisRoller(db);
+  const izlenen = await eslenmisRolIdleri(db);
   if (izlenen.length === 0) return;
   await db
     .delete(accessSchema.discordMemberRoles)

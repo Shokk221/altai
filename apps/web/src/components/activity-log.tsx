@@ -80,6 +80,8 @@ const EYLEM_ADI: Record<string, string> = {
   'server.broadcast': 'sunucuya duyuru yaptı',
   'role_mapping.upsert': 'rol eşlemesi yazdı',
   'role_mapping.delete': 'rol eşlemesini sildi',
+  'squad_group.upsert': 'oyun içi grubu düzenledi',
+  'squad_group.delete': 'oyun içi grubu sildi',
   'ingame.warn': 'oyun içinden uyardı',
   'ingame.kick': 'oyun içinden attı',
   'ingame.ban': 'oyun içinden banladı',

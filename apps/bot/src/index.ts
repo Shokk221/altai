@@ -1,4 +1,4 @@
-import { createDb } from '@altai/db';
+import { createDb, eslenmisRolIdleri } from '@altai/db';
 import { logger } from '@altai/shared';
 import {
   ChannelType,
@@ -63,6 +63,16 @@ const db = createDb(databaseUrl);
  * arasında bir denge.
  */
 const TAM_TARAMA_MS = 15 * 60 * 1000;
+
+/**
+ * Eşleme izleme aralığı.
+ *
+ * Bot yalnızca EŞLENMİŞ rolleri yazıyor. Panelden yeni bir rol eşlendiğinde
+ * o rolü taşıyanlar tabloda henüz yok ve tam taramayı beklemek 15 dakika
+ * "rol verdim ama yetki gelmedi" demekti. Eşleme kümesi değişince tarama
+ * hemen yapılıyor; kontrolün kendisi tek ve küçük bir sorgu.
+ */
+const ESLEME_IZLEME_MS = 30 * 1000;
 
 /**
  * Ses nabız aralığı.
@@ -143,6 +153,28 @@ async function tamTarama(sebep: string) {
   }
 }
 
+/** Son görülen eşleme kümesi; null = henüz okunmadı (ilk tur yalnızca kaydeder). */
+let bilinenEslemeler: string | null = null;
+
+/**
+ * Eşlenmiş rol kümesi değiştiyse tam tarama yapar.
+ *
+ * Yalnızca KÜME izleniyor, izinler değil: bir eşlemenin panel izinleri ya
+ * da oyun grubu değişince tabloya yazılacak yeni bir şey yok — api ve admin
+ * listesi eşlemeyi her seferinde baştan okuyor. Yeni bir ROL eşlendiğinde
+ * ise o rolü taşıyanların satırları ancak tarama ile geliyor.
+ */
+async function eslemeleriIzle() {
+  try {
+    const simdiki = (await eslenmisRolIdleri(db)).sort().join(',');
+    const degisti = bilinenEslemeler !== null && simdiki !== bilinenEslemeler;
+    bilinenEslemeler = simdiki;
+    if (degisti) await tamTarama('esleme-degisti');
+  } catch (err) {
+    logger.error({ err }, 'rol eşlemeleri okunamadı');
+  }
+}
+
 /**
  * Guild'deki ses durumunu baştan yazar.
  *
@@ -218,6 +250,10 @@ client.once('ready', () => {
   void tamTarama('acilis');
   const zamanlayici = setInterval(() => void tamTarama('periyodik'), TAM_TARAMA_MS);
   zamanlayici.unref?.();
+
+  void eslemeleriIzle();
+  const eslemeZamanlayici = setInterval(() => void eslemeleriIzle(), ESLEME_IZLEME_MS);
+  eslemeZamanlayici.unref?.();
 
   void sesTaramasi('acilis');
   const sesZamanlayici = setInterval(() => void sesTaramasi('periyodik'), SES_NABIZ_MS);

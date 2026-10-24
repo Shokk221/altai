@@ -1,6 +1,6 @@
 import { PERMISSIONS } from '@altai/contracts';
 import type { Db } from '@altai/db';
-import { identitySchema } from '@altai/db';
+import { identitySchema, uyeRolleriniYaz } from '@altai/db';
 import type { AppConfig } from '@altai/shared';
 import { verifyPassword } from '@altai/shared';
 import { eq } from 'drizzle-orm';
@@ -73,6 +73,12 @@ export async function authRoutes(app: FastifyInstance, opts: { db: Db; config: A
       { headers: { Authorization: `Bot ${config.DISCORD_BOT_TOKEN}` } },
     );
     const roleIds = memberRes.ok ? ((await memberRes.json()) as DiscordGuildMember).roles : [];
+
+    // Discord'dan okunan roller aynaya da yazılıyor: yetki her istekte o
+    // tablodan okunuyor ve bot kapalı ya da geride olsa bile giren kişinin
+    // yetkisi doğru olmalı. Okuma BAŞARISIZSA yazılmıyor — boş liste "hiç
+    // rolü yok" demek olur ve kişinin bütün yetkisini silerdi.
+    if (memberRes.ok) await uyeRolleriniYaz(db, discordUser.id, roleIds);
 
     // 3. Discord rolleri -> sistem rolü + izinler (tek yetki zinciri, Bölüm 8)
     const resolved = await resolveRoles(db, roleIds);

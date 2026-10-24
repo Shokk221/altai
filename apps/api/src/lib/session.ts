@@ -3,6 +3,7 @@ import type { Permission, SystemRole } from '@altai/contracts';
 import type { Db } from '@altai/db';
 import { identitySchema } from '@altai/db';
 import { eq } from 'drizzle-orm';
+import { canliYetki } from './roles.js';
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 gün
 
@@ -49,11 +50,25 @@ export async function verifySession(db: Db, token: string) {
 
   if (!user) return null;
 
+  // Yetki OTURUMDAN değil, Discord rollerinden — her istekte. Oturum yalnızca
+  // "bu kişi kim" sorusunu cevaplıyor; "ne yapabilir" sorusu Discord'un şu
+  // anki hâline bağlı. Oturumdaki kopya, girişteki durumun kaydı olarak
+  // duruyor.
+  //
+  // Break-glass İSTİSNA: Discord'dan bağımsız acil giriş, Discord kesintisinde
+  // de çalışmak zorunda. Yetkisi girişte sabitleniyor.
+  const yetki = session.isBreakGlass
+    ? {
+        systemRole: session.systemRole as SystemRole,
+        permissions: session.permissions as Permission[],
+      }
+    : await canliYetki(db, user.discordId);
+
   return {
     id: user.id,
     discordUsername: user.discordUsername,
-    systemRole: session.systemRole as SystemRole,
-    permissions: session.permissions as Permission[],
+    systemRole: yetki.systemRole,
+    permissions: yetki.permissions,
     isBreakGlass: session.isBreakGlass,
   };
 }

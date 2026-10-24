@@ -119,7 +119,7 @@ await app.register(
     await api.register(pluginConfigRoutes, { db });
     await api.register(moderationRoutes, { db });
     await api.register(agentRoutes, { db });
-    await api.register(accessAdminRoutes, { db });
+    await api.register(accessAdminRoutes, { db, config });
     await api.register(liveActionRoutes, { db });
     await api.register(activityRoutes, { db });
     await api.register(clanRoutes, { db });

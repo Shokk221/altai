@@ -22,6 +22,9 @@ export type AuditAction =
   | 'flag.remove'
   | 'role_mapping.upsert'
   | 'role_mapping.delete'
+  /** Oyun içi grup (Admins.cfg `Group=` satırı) tanımı. */
+  | 'squad_group.upsert'
+  | 'squad_group.delete'
   /** Canlı ekrandan yapılan, kalıcı kayıt bırakmayan eylemler. */
   | 'player.kick'
   | 'player.warn'
@@ -39,6 +42,7 @@ export type AuditTargetType =
   | 'player_record'
   | 'flag_assignment'
   | 'role_mapping'
+  | 'squad_group'
   /** Hedef bir oyuncu değil sunucunun kendisi (duyuru gibi). */
   | 'server';
 
@@ -66,8 +70,9 @@ type TxLike = Pick<Db, 'insert'>;
 /**
  * Eylemin sistem günlüğündeki kırılımı.
  *
- * Rol eşlemeleri moderasyon değil erişim konusu: "kim ban attı" ile "kim
- * kime yetki verdi" ayrı sorular ve ekranda ayrı sekmelerde aranıyorlar.
+ * Rol eşlemeleri ve oyun grupları moderasyon değil erişim konusu: "kim ban
+ * attı" ile "kim kime yetki verdi" ayrı sorular ve ekranda ayrı sekmelerde
+ * aranıyorlar.
  *
  * Panelden gönderilen duyuru `moderasyon` sayılıyor — oyundan gelen duyuru
  * yankısının `sistem` olmasına rağmen. Fark bilinçli: oradaki kayıt bir
@@ -75,7 +80,9 @@ type TxLike = Pick<Db, 'insert'>;
  * kararı ve "bugün hangi yetkili ne yaptı" listesinde görünmeli.
  */
 function kategori(action: AuditAction): ActivityCategory {
-  return action.startsWith('role_mapping.') ? 'erisim' : 'moderasyon';
+  return action.startsWith('role_mapping.') || action.startsWith('squad_group.')
+    ? 'erisim'
+    : 'moderasyon';
 }
 
 /**
