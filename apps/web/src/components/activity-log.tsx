@@ -78,6 +78,8 @@ const EYLEM_ADI: Record<string, string> = {
   // AYNI şey değil: orası eklentinin zamanlanmış mesajı da olabilir,
   // burası her zaman bir insanın kararı.
   'server.broadcast': 'sunucuya duyuru yaptı',
+  'server.layer': 'haritayı değiştirdi',
+  'server.restart_match': 'maçı yeniden başlattı',
   'role_mapping.upsert': 'rol eşlemesi yazdı',
   'role_mapping.delete': 'rol eşlemesini sildi',
   'squad_group.upsert': 'oyun içi grubu düzenledi',

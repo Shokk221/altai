@@ -2,6 +2,7 @@
 
 import { BekleyenTakim } from '@/components/bekleyen-takim';
 import { Duyuru } from '@/components/duyuru';
+import { Harita } from '@/components/harita';
 import { PlayerMenu } from '@/components/player-menu';
 import { type Istek, TakimDegistirKutusu } from '@/components/takim-degistir';
 import { Input } from '@/components/ui/input';
@@ -159,6 +160,7 @@ export function LiveDashboard({
   warnYetkisi,
   takimYetkisi,
   duyuruYetkisi,
+  haritaYetkisi,
 }: {
   wsUrl: string;
   apiUrl: string;
@@ -166,6 +168,7 @@ export function LiveDashboard({
   warnYetkisi: boolean;
   takimYetkisi: boolean;
   duyuruYetkisi: boolean;
+  haritaYetkisi: boolean;
 }) {
   const [sunucular, setSunucular] = useState<Record<string, LiveServerState>>({});
   const [olaylar, setOlaylar] = useState<CanliOlay[]>([]);
@@ -382,6 +385,7 @@ export function LiveDashboard({
         {/* Duyuru: hedefi tek bir oyuncu değil sunucunun kendisi olduğu
             için oyuncu menüsünde değil, üst çubukta. */}
         <Duyuru apiUrl={apiUrl} sunucular={sunucuListesi} yetki={duyuruYetkisi} />
+        <Harita apiUrl={apiUrl} sunucular={sunucuListesi} yetki={haritaYetkisi} />
         {/* Bölüm bağlantıları üst çubukta; burada tekrarlamıyoruz. */}
       </header>
 

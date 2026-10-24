@@ -34,7 +34,10 @@ export type AuditAction =
    * yazılıyor: ekranında yazı beliren yüz kişi "bunu kim yazdı" diye
    * soracak ve cevabın bir yerde durması gerekiyor.
    */
-  | 'server.broadcast';
+  | 'server.broadcast'
+  /** Harita değiştirme (şimdi ya da sıradaki) ve maçı yeniden başlatma. */
+  | 'server.layer'
+  | 'server.restart_match';
 
 export type AuditTargetType =
   | 'player'

@@ -1,6 +1,7 @@
-import type { AgentCommand } from '@altai/contracts';
+import { type AgentCommand, KATMAN_ADI } from '@altai/contracts';
 import { logger } from '@altai/shared';
 import type { SquadJSEngine } from '@altai/squad';
+import { haritaBilgisiAyikla, katmanlariAyikla } from './harita.js';
 
 /**
  * api'den gelen komutları RCON çağrılarına çevirir.
@@ -104,11 +105,39 @@ export async function komutCalistir(
         return { ok: true };
       }
 
-      // Sessizce başarılı dönmüyoruz: panelde "yapıldı" yazıp hiçbir şey
-      // olmaması, hata döndürmekten daha kötü.
-      case 'setLayer':
-      case 'restart':
-        return { ok: false, error: 'henuz_desteklenmiyor' };
+      /**
+       * Harita değiştirme.
+       *
+       * Katman adı RCON'a argüman olarak gidiyor; kalıba uymayan ad (boşluk,
+       * satır sonu) ikinci bir komut enjekte edebilirdi. api de aynı kalıbı
+       * denetliyor ama son savunma burada.
+       */
+      case 'setLayer': {
+        const layer = tekSatir(p.layer, 80);
+        if (!KATMAN_ADI.test(layer)) return { ok: false, error: 'gecersiz_katman' };
+        const komut = p.zaman === 'simdi' ? 'AdminChangeLayer' : 'AdminSetNextLayer';
+        const cevap = await engine.rconExecute(`${komut} ${layer}`);
+        logger.info({ komut, layer, cevap: cevap.slice(0, 120) }, 'harita komutu çalıştı');
+        return { ok: true };
+      }
+
+      case 'restart': {
+        const cevap = await engine.rconExecute('AdminRestartMatch');
+        logger.info({ cevap: cevap.slice(0, 120) }, 'maç yeniden başlatıldı');
+        return { ok: true };
+      }
+
+      // Oyuna dokunmayan sorgular.
+      case 'mapInfo': {
+        const simdiki = await engine.rconExecute('ShowCurrentMap');
+        const sonraki = await engine.rconExecute('ShowNextMap');
+        return { ok: true, data: haritaBilgisiAyikla(simdiki, sonraki) };
+      }
+
+      case 'listLayers': {
+        const cevap = await engine.rconExecute('ListLayers');
+        return { ok: true, data: { layers: katmanlariAyikla(cevap) } };
+      }
 
       default: {
         const _exhaustive: never = command.action;

@@ -38,6 +38,9 @@ export default async function HomePage() {
         // Duyuru "herkese giden uyarı": uyarı verebilen moderatör de
         // yapabilmeli, ayrıca sunucu kontrolü olan herkes.
         duyuruYetkisi={yetki('server.control') || yetki('player.warn')}
+        // Harita ve maçı yeniden başlatma maçın kendisini etkiliyor:
+        // yalnızca sunucu kontrolü olanlar.
+        haritaYetkisi={yetki('server.control')}
       />
     );
   }

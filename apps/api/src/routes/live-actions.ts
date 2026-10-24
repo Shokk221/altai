@@ -1,3 +1,4 @@
+import { HaritaBilgisi, KATMAN_ADI, KatmanListesi } from '@altai/contracts';
 import type { Db } from '@altai/db';
 import { identitySchema, moderationSchema, presenceSchema } from '@altai/db';
 import { eq } from 'drizzle-orm';
@@ -72,6 +73,25 @@ const TakimGovdesi = z.object({
 const DuyuruGovdesi = z.object({
   mesaj: z.string().trim().min(1).max(200),
 });
+
+const HaritaGovdesi = z.object({
+  layer: z.string().trim().regex(KATMAN_ADI, 'geçerli bir katman adı olmalı'),
+  /**
+   * Varsayılan YOK: "şimdi" maçı o an bitiriyor. Panel her zaman açıkça
+   * gönderiyor; eksik alan sessizce bir tarafa düşmesin, reddedilsin.
+   */
+  zaman: z.enum(['simdi', 'sonraki']),
+});
+
+/**
+ * Sunucunun tanıdığı katman listesi, sunucu başına.
+ *
+ * Liste yalnızca sunucu güncellenince ya da mod eklenince değişiyor; her
+ * pencere açılışında RCON'a sormak gereksiz. Yine de süreli: güncelleme
+ * sonrası yeni haritalar bir saat gizli kalmasın.
+ */
+const KATMAN_ONBELLEK_MS = 10 * 60_000;
+const katmanOnbellegi = new Map<string, { zaman: number; layers: string[] }>();
 
 export async function liveActionRoutes(app: FastifyInstance, opts: { db: Db }) {
   const { db } = opts;
@@ -353,6 +373,131 @@ export async function liveActionRoutes(app: FastifyInstance, opts: { db: Db }) {
           targetId: sunucuId,
           targetLabel: slug,
           payload: { mesaj, sunucu: slug, sonuc: sonuc.durum },
+        });
+      });
+
+      if (sonuc.durum !== 'ok') {
+        return reply.code(502).send({ error: 'komut_basarisiz', detay: sonuc.durum });
+      }
+      return { ok: true };
+    },
+  );
+
+  /**
+   * Harita bilgisi: şu anki, sıradaki ve sunucunun tanıdığı katmanlar.
+   *
+   * İki ayrı sorgu ve ikisi de düşebilir (eski bir agent bu eylemleri
+   * tanımıyor, cevap vermiyor). Biri düşerse diğeri yine dönüyor. Liste
+   * gelmezse panel elle katman adı yazdırıyor; Squad'ın ListLayers çıktısı
+   * sürümle değişirse özellik tamamen kilitlenmesin diye.
+   */
+  app.get<{ Params: { slug: string } }>(
+    '/live/:slug/harita',
+    { preHandler: requireSession(db, 'server.control') },
+    async (req, reply) => {
+      const slug = req.params.slug;
+      if (!agentBagliMi(slug)) return reply.code(503).send({ error: 'agent_bagli_degil' });
+      const issuedBy = req.authSession?.id ?? 'panel';
+
+      const onceki = katmanOnbellegi.get(slug);
+      const listeTaze = onceki !== undefined && Date.now() - onceki.zaman < KATMAN_ONBELLEK_MS;
+
+      const [bilgiSonuc, listeSonuc] = await Promise.all([
+        komutGonder(slug, 'mapInfo', {}, issuedBy),
+        listeTaze ? null : komutGonder(slug, 'listLayers', {}, issuedBy),
+      ]);
+
+      const bilgi = bilgiSonuc.durum === 'ok' ? HaritaBilgisi.safeParse(bilgiSonuc.data) : null;
+      if (listeSonuc?.durum === 'ok') {
+        const l = KatmanListesi.safeParse(listeSonuc.data);
+        // Boş liste önbelleğe girmiyor: ayrıştırma bir sürüm değişikliğinde
+        // hiçbir şey bulamazsa on dakika boyunca "harita yok" denmesin.
+        if (l.success && l.data.layers.length > 0) {
+          katmanOnbellegi.set(slug, { zaman: Date.now(), layers: l.data.layers });
+        }
+      }
+      const layers = katmanOnbellegi.get(slug)?.layers ?? null;
+
+      return {
+        bilgi: bilgi?.success ? bilgi.data : null,
+        layers,
+        // İkisi de gelmediyse en olası sebep agent'ın bu sürümde olmaması.
+        hata: bilgi?.success || layers ? null : bilgiSonuc.durum,
+      };
+    },
+  );
+
+  /**
+   * Haritayı değiştir: şimdi (maç o an biter) ya da sıradaki.
+   *
+   * Sunucunun listesi biliniyorsa katman ONA göre denetleniyor. Bilinmeyen
+   * bir katmanla AdminChangeLayer maçı boşuna bitirebilir ya da sessizce
+   * yok sayılır; ikisi de yetkilinin "değişti" sanmasıyla biter. Liste
+   * yoksa yalnızca biçim denetleniyor (bkz. GET ucundaki gerekçe).
+   */
+  app.post<{ Params: { slug: string }; Body: unknown }>(
+    '/live/:slug/harita',
+    { preHandler: requireSession(db, 'server.control') },
+    async (req, reply) => {
+      const parsed = HaritaGovdesi.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: 'gecersiz_girdi', detay: ilkHata(parsed.error) });
+      }
+      const slug = req.params.slug;
+      if (!agentBagliMi(slug)) return reply.code(503).send({ error: 'agent_bagli_degil' });
+      const { layer, zaman } = parsed.data;
+
+      const liste = katmanOnbellegi.get(slug)?.layers;
+      if (liste && !liste.includes(layer)) {
+        return reply.code(400).send({ error: 'bilinmeyen_katman', detay: layer });
+      }
+
+      const actor = req.authSession;
+      const sonuc = await komutGonder(slug, 'setLayer', { layer, zaman }, actor?.id ?? 'panel');
+      const sunucuId = await sunucuIdBul(slug);
+
+      await db.transaction(async (tx) => {
+        await writeAudit(tx, {
+          actorUserId: actor?.id ?? null,
+          actorLabel: actor?.discordUsername ?? null,
+          requestId: String(req.id),
+          action: 'server.layer',
+          targetType: 'server',
+          targetId: sunucuId,
+          targetLabel: slug,
+          payload: { katman: layer, zaman, sunucu: slug, sonuc: sonuc.durum },
+        });
+      });
+
+      if (sonuc.durum !== 'ok') {
+        return reply.code(502).send({ error: 'komut_basarisiz', detay: sonuc.durum });
+      }
+      return { ok: true };
+    },
+  );
+
+  /** Maçı baştan başlat (AdminRestartMatch). Sunucu sürecine dokunmuyor. */
+  app.post<{ Params: { slug: string } }>(
+    '/live/:slug/mac-yeniden',
+    { preHandler: requireSession(db, 'server.control') },
+    async (req, reply) => {
+      const slug = req.params.slug;
+      if (!agentBagliMi(slug)) return reply.code(503).send({ error: 'agent_bagli_degil' });
+
+      const actor = req.authSession;
+      const sonuc = await komutGonder(slug, 'restart', {}, actor?.id ?? 'panel');
+      const sunucuId = await sunucuIdBul(slug);
+
+      await db.transaction(async (tx) => {
+        await writeAudit(tx, {
+          actorUserId: actor?.id ?? null,
+          actorLabel: actor?.discordUsername ?? null,
+          requestId: String(req.id),
+          action: 'server.restart_match',
+          targetType: 'server',
+          targetId: sunucuId,
+          targetLabel: slug,
+          payload: { sunucu: slug, sonuc: sonuc.durum },
         });
       });
 

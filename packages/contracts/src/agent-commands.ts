@@ -20,8 +20,19 @@ export const AgentCommand = z.object({
     // Oyuncuyu karşı takıma alır (AdminForceTeamChange). Squad'da hedef
     // takım SEÇİLEMİYOR — komut yalnızca "diğer tarafa geçir" diyor.
     'forceTeamChange',
+    // Harita: payload { layer, zaman: 'simdi' | 'sonraki' }.
+    //   simdi   -> AdminChangeLayer  (maç o an biter)
+    //   sonraki -> AdminSetNextLayer (maç bitince geçer)
     'setLayer',
+    // Maçı baştan başlatır (AdminRestartMatch). Sunucu SÜRECİNİ değil:
+    // onu barındırma sağlayıcısı yönetiyor ve RCON'dan kapatılırsa geri
+    // açacak bir şey yok.
     'restart',
+    // Oyuna dokunmayan sorgular: şu anki/sıradaki harita ve sunucunun
+    // tanıdığı harita listesi. Panel listeden seçtiriyor; elle yazılan
+    // bir yazım hatası AdminChangeLayer'da maçı boşuna bitirirdi.
+    'mapInfo',
+    'listLayers',
   ]),
   payload: z.record(z.unknown()),
   issuedBy: z.string(), // system role user id
@@ -50,5 +61,23 @@ export const OnlinePlayer = z.object({
   isLeader: z.boolean(),
 });
 export const OnlinePlayers = z.object({ players: z.array(OnlinePlayer) });
+
+/**
+ * Squad katman (layer) adı: `Narva_RAAS_v1`, `GooseBay_Seed_v1`.
+ *
+ * Harf, rakam, alt çizgi ve en az bir alt çizgi. RCON komutuna argüman
+ * olarak gidiyor; boşluk ya da satır sonu ikinci bir komut enjekte ederdi.
+ */
+export const KATMAN_ADI = /^[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+$/;
+
+/** mapInfo'nun döndürdüğü biçim. Bilinmeyen alan null. */
+export const HaritaBilgisi = z.object({
+  simdiki: z.object({ level: z.string().nullable(), layer: z.string().nullable() }),
+  sonraki: z.object({ level: z.string().nullable(), layer: z.string().nullable() }),
+});
+export type HaritaBilgisi = z.infer<typeof HaritaBilgisi>;
+
+/** listLayers'ın döndürdüğü biçim. */
+export const KatmanListesi = z.object({ layers: z.array(z.string()) });
 export type OnlinePlayer = z.infer<typeof OnlinePlayer>;
 export type AgentCommandResult = z.infer<typeof AgentCommandResult>;
