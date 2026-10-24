@@ -1,8 +1,10 @@
 name: CI
 
+# Dal `master`: önce `main` yazıyordu ve depoda öyle bir dal yok, push'larda
+# CI hiç çalışmıyordu.
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
 
 jobs:
@@ -11,9 +13,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Sürüm package.json'daki `packageManager` alanından okunuyor. Burada
+      # ayrıca `version` verilince action-setup@v4 "birden fazla sürüm"
+      # hatasıyla ilk adımda düşüyordu; CI bu yüzden hiç koşmamıştı.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - uses: actions/setup-node@v4
         with:
