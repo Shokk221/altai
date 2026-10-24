@@ -1,7 +1,6 @@
 'use client';
 
 import { cn } from '@/lib/cn';
-import { KATMAN_ADI } from '@altai/contracts';
 import { useEffect, useRef, useState } from 'react';
 
 /**
@@ -37,6 +36,16 @@ interface Veri {
 
 /** Listede bir anda gösterilen en fazla satır; arama daraltıyor. */
 const GORUNEN = 80;
+
+/**
+ * Katman adı biçimi — `@altai/contracts`'taki KATMAN_ADI'nin kopyası.
+ *
+ * Paketten içe aktarılmıyor: contracts derlenmemiş TypeScript olarak
+ * paylaşılıyor ve Next tarayıcı paketinde onun `./x.js` importlarını
+ * çözemiyor (derleme kırılmıştı). Burada yalnızca düğmeyi açıp kapatıyor;
+ * asıl denetim api'de ve agent'ta, paketteki kalıpla.
+ */
+const KATMAN_ADI = /^[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+$/;
 
 const HATALAR: Record<string, string> = {
   agent_bagli_degil: 'Sunucuya bağlı değiliz',
