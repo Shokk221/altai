@@ -176,7 +176,12 @@ async function at(slug: string, ban: BanliOyuncu) {
   }
   // Zorlayıcının attığı oyuncu da oyundan yankı olarak geri geliyor;
   // günlükte "yetkili attı" diye ikinci kez görünmesin.
-  panelKomutuIsaretle(slug, 'kick', ban.steamId ? oyuncuAdi(slug, ban.steamId) : null);
+  //
+  // `sebep` de ize konuyor: Squad'ın kick yankısı sebep taşımadığı için
+  // akışta çıplak bir "sunucudan atıldı" satırı kalıyordu. Buradaki metin
+  // oyuncunun gördüğünün aynısı (yer tutucuları açılmış hâli), yani akış
+  // ile oyun ekranı aynı şeyi söylüyor.
+  panelKomutuIsaretle(slug, 'kick', ban.steamId ? oyuncuAdi(slug, ban.steamId) : null, sebep);
   const sonuc = await komutGonder(
     slug,
     'kick',

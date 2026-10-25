@@ -9,6 +9,7 @@ import {
 } from '@altai/squad';
 import { komutCalistir } from './commands.js';
 import { loadAgentConfig } from './config.js';
+import { kickSebebiAl } from './kick-sebebi.js';
 import { PluginHost } from './plugin-host.js';
 import { PLUGINS } from './plugins/index.js';
 import { createSpool } from './spool.js';
@@ -141,10 +142,22 @@ const adapter = createSquadJSAdapter({
   serverSlug: config.SERVER_SLUG,
   engine,
   onEvent: (event) => {
-    uplink.send(event);
+    // Eklentinin attığı oyuncunun sebebi burada olaya ekleniyor. Oyun
+    // sebebi geri vermiyor; eklenti ise onu `ctx.rcon.kick` çağrısında
+    // biliyordu (bkz. kick-sebebi.ts). Zenginleştirme uplink'ten ÖNCE,
+    // yoksa api'ye yine sebepsiz giderdi.
+    const zengin =
+      event.type === 'ADMIN_ACTION' && event.action === 'kick' && !event.message
+        ? (() => {
+            const sebep = kickSebebiAl(event.steamId, event.eosId);
+            return sebep ? { ...event, message: sebep } : event;
+          })()
+        : event;
+
+    uplink.send(zengin);
     // Plugin'ler ham SquadJS değil, adapter'dan geçmiş tipli olayı görüyor:
     // SquadJS sürümü değişince plugin'ler değil yalnızca adapter etkilenir.
-    void pluginHost?.handleEvent(event);
+    void pluginHost?.handleEvent(zengin);
   },
   onUnmatchedPlayer: (eosId, eventType) => {
     logger.debug({ eosId, eventType }, 'oyuncu RCON listesinde henüz yok, event atlandı');

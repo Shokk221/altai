@@ -10,6 +10,7 @@ import type {
   SquadJSEngine,
 } from '@altai/squad';
 import { AdminRegistry } from './admin-registry.js';
+import { kickSebebiKaydet } from './kick-sebebi.js';
 
 /**
  * PluginHost — plugin'leri açar, kapatır ve ayar değişince yeniden kurar.
@@ -226,6 +227,11 @@ export class PluginHost {
         await engine.rconExecute(`AdminWarn ${playerId} ${tekSatir(message)}`);
       },
       kick: async (playerId, reason) => {
+        // Sebep ize bırakılıyor: oyundan dönen kick yankısı sebep
+        // taşımıyor ve panelin akışında çıplak bir "sunucudan atıldı"
+        // satırı kalıyordu. Kayıt RCON çağrısından ÖNCE, çünkü yankı
+        // komut dönmeden de gelebiliyor.
+        kickSebebiKaydet(playerId, reason);
         await engine.rconExecute(`AdminKick ${playerId} ${tekSatir(reason)}`);
       },
       broadcast: async (message) => {

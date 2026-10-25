@@ -131,7 +131,10 @@ export async function liveActionRoutes(app: FastifyInstance, opts: { db: Db }) {
 
       // Oyun bu komutu sohbet kanalından geri yayınlıyor; iz bırakmazsak
       // aynı işlem günlüğe iki kez düşerdi (bkz. panel-komut-izi.ts).
-      panelKomutuIsaretle(slug, 'kick', oyuncuAdi(slug, parsed.data.steamId));
+      // Sebep de ize konuyor: Squad'ın kick yankısı sebep taşımıyor, yani
+      // "neden atıldı" bilgisi yalnızca burada var. İz olmadan akışta
+      // çıplak bir "sunucudan atıldı" satırı kalıyordu.
+      panelKomutuIsaretle(slug, 'kick', oyuncuAdi(slug, parsed.data.steamId), parsed.data.mesaj);
 
       const sonuc = await komutGonder(
         slug,

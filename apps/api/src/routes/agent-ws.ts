@@ -10,7 +10,7 @@ import { sorguyuCoz } from '../lib/agent-queries.js';
 import { girisAninda, kipiAyarla, taramayiBaslat } from '../lib/ban-enforcer.js';
 import { olayYayinla } from '../lib/live-feed.js';
 import { otomatikMi } from '../lib/otomatik-mesaj.js';
-import { panelKomutuMu } from '../lib/panel-komut-izi.js';
+import { panelKomutSebebi, panelKomutuMu } from '../lib/panel-komut-izi.js';
 import {
   closeAllOpenSessions,
   createPersistenceWriter,
@@ -151,13 +151,24 @@ export async function agentWsRoutes(app: FastifyInstance, opts: { db: Db; config
           // Oyun içinden yapılan yetkili işlemleri. Akışta her zaman
           // görünüyor: panelden gönderilmiş olsa bile "komut oyuna ulaştı"
           // teyidi değerli.
+          // Kick'te sebep oyundan GELMİYOR: Squad'ın RCON yanıtı
+          // `Kicked player 12. [Online IDs=...] Ad` ve sebep alanı yok.
+          // Sebebi bilen tek taraf komutu gönderen; panel ve ban uygulaması
+          // onu ize bırakıyor, burada geri alıyoruz. İz TÜKETİLMİYOR —
+          // aşağıdaki yankı kontrolü ona bakmaya devam ediyor.
+          const izSebebi =
+            !event.message && event.action === 'kick'
+              ? panelKomutSebebi(serverSlug, 'kick', event.playerName ?? null)
+              : null;
+          const aciklama = event.message ?? izSebebi;
+
           olayYayinla({
             tur: 'admin',
             serverSlug,
             steamId: event.steamId ?? null,
             name: event.playerName ?? null,
             adminIslem: event.action,
-            ...(event.message ? { message: event.message } : {}),
+            ...(aciklama ? { message: aciklama } : {}),
             ...(event.interval ? { sure: event.interval } : {}),
             timestamp: event.timestamp,
           });

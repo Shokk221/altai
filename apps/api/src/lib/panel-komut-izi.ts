@@ -28,7 +28,22 @@ const TAVAN = 200;
 
 type Islem = 'warn' | 'kick' | 'ban' | 'broadcast';
 
-const izler = new Map<string, number>();
+/**
+ * İz artık zamanın yanında SEBEBİ de taşıyor.
+ *
+ * Sebep buraya konuyor çünkü oyundan geri gelmiyor: Squad'ın kick yanıtı
+ * `Kicked player 12. [Online IDs=...] Ad` biçiminde ve sebep alanı YOK
+ * (bkz. vendor/squad-server/rcon.js). Yani "neden atıldı" sorusunun
+ * cevabı yalnızca komutu GÖNDERENDE var; akışa taşınacaksa buradan
+ * taşınmalı. Uyarı ve duyuruda metin yankıda zaten geliyor, orada
+ * gerekmiyor.
+ */
+interface Iz {
+  zaman: number;
+  sebep?: string;
+}
+
+const izler = new Map<string, Iz>();
 
 /**
  * Eşleşme anahtarı: warn/kick/ban'de oyuncunun adı, duyuruda mesaj metni.
@@ -40,17 +55,38 @@ function anahtar(slug: string, islem: Islem, deger: string): string {
 }
 
 function eskileriAt(simdi: number) {
-  for (const [k, t] of izler) {
-    if (simdi - t > PENCERE_MS) izler.delete(k);
+  for (const [k, iz] of izler) {
+    if (simdi - iz.zaman > PENCERE_MS) izler.delete(k);
   }
 }
 
 /** Panel komutu gönderdi. Anahtar bilinmiyorsa iz bırakılmıyor. */
-export function panelKomutuIsaretle(slug: string, islem: Islem, deger: string | null) {
+export function panelKomutuIsaretle(
+  slug: string,
+  islem: Islem,
+  deger: string | null,
+  sebep?: string | null,
+) {
   if (!deger) return;
   const simdi = Date.now();
   if (izler.size > TAVAN) eskileriAt(simdi);
-  izler.set(anahtar(slug, islem, deger), simdi);
+  const temiz = sebep?.trim();
+  izler.set(anahtar(slug, islem, deger), { zaman: simdi, ...(temiz ? { sebep: temiz } : {}) });
+}
+
+/**
+ * İzdeki sebebi okur — İZİ TÜKETMEDEN.
+ *
+ * Tüketmemesi şart: çağıran akışa satırı yazdıktan SONRA `panelKomutuMu`
+ * ile izi tüketiyor. Burada tüketseydik o kontrol boşa düşer ve panelden
+ * gelen her komut sistem günlüğüne ikinci kez yazılırdı — iz
+ * mekanizmasının engellemek için var olduğu şey tam olarak bu.
+ */
+export function panelKomutSebebi(slug: string, islem: Islem, deger: string | null): string | null {
+  if (!deger) return null;
+  const iz = izler.get(anahtar(slug, islem, deger));
+  if (!iz || Date.now() - iz.zaman > PENCERE_MS) return null;
+  return iz.sebep ?? null;
 }
 
 /**
@@ -60,10 +96,10 @@ export function panelKomutuIsaretle(slug: string, islem: Islem, deger: string | 
 export function panelKomutuMu(slug: string, islem: Islem, deger: string | null): boolean {
   if (!deger) return false;
   const k = anahtar(slug, islem, deger);
-  const t = izler.get(k);
-  if (t === undefined) return false;
+  const iz = izler.get(k);
+  if (iz === undefined) return false;
   izler.delete(k);
-  return Date.now() - t <= PENCERE_MS;
+  return Date.now() - iz.zaman <= PENCERE_MS;
 }
 
 /** Sadece testler için. */

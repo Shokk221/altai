@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   panelKomutIzleriniSifirla,
+  panelKomutSebebi,
   panelKomutuIsaretle,
   panelKomutuMu,
 } from '../src/lib/panel-komut-izi.js';
@@ -97,5 +98,52 @@ describe('duyuru izi', () => {
     panelKomutuIsaretle('squad-01', 'broadcast', 'Seed bitti, iyi oyunlar');
     expect(panelKomutuMu('squad-01', 'broadcast', 'Seed bitti, iyi oyunlar')).toBe(true);
     expect(panelKomutuMu('squad-01', 'broadcast', 'Seed bitti, iyi oyunlar')).toBe(false);
+  });
+});
+
+/**
+ * Kick sebebinin ize taşınması.
+ *
+ * Squad'ın kick yankısı sebep TAŞIMIYOR; "neden atıldı" bilgisi yalnızca
+ * komutu gönderende var. Bu iz olmadan panelin canlı akışında çıplak bir
+ * "sunucudan atıldı" satırı kalıyordu.
+ */
+describe('kick sebebi', () => {
+  it('panelin bıraktığı sebebi döndürür', () => {
+    panelKomutuIsaretle('squad-01', 'kick', 'Berkay', 'Takım öldürme');
+    expect(panelKomutSebebi('squad-01', 'kick', 'Berkay')).toBe('Takım öldürme');
+  });
+
+  it('sebebi okumak izi TÜKETMEZ — yankı kontrolü hâlâ çalışır', () => {
+    // Tüketseydi aşağıdaki kontrol false dönerdi ve panelden gelen her
+    // komut sistem günlüğüne ikinci kez yazılırdı. İz mekanizmasının
+    // engellemek için var olduğu şey tam olarak bu.
+    panelKomutuIsaretle('squad-01', 'kick', 'Berkay', 'Takım öldürme');
+    expect(panelKomutSebebi('squad-01', 'kick', 'Berkay')).toBe('Takım öldürme');
+    expect(panelKomutuMu('squad-01', 'kick', 'Berkay')).toBe(true);
+  });
+
+  it('sebepsiz bırakılan iz null döner ama yankı yine tanınır', () => {
+    // Sebep opsiyonel: takım değişimi gibi yerler iz bırakırken sebep
+    // vermiyor ve bu, yankı bastırmayı bozmamalı.
+    panelKomutuIsaretle('squad-01', 'kick', 'Berkay');
+    expect(panelKomutSebebi('squad-01', 'kick', 'Berkay')).toBeNull();
+    expect(panelKomutuMu('squad-01', 'kick', 'Berkay')).toBe(true);
+  });
+
+  it('izi olmayan oyuncu için sebep uydurmaz', () => {
+    // Oyun içinden elle atılan oyuncunun sebebi bizde yok.
+    expect(panelKomutSebebi('squad-01', 'kick', 'BaskaOyuncu')).toBeNull();
+  });
+
+  it('pencere dolduktan sonra sebebi kullanmaz', () => {
+    panelKomutuIsaretle('squad-01', 'kick', 'Berkay', 'Takım öldürme');
+    vi.advanceTimersByTime(21_000);
+    expect(panelKomutSebebi('squad-01', 'kick', 'Berkay')).toBeNull();
+  });
+
+  it('sebebin baş/son boşluğunu kırpar', () => {
+    panelKomutuIsaretle('squad-01', 'kick', 'Berkay', '  Takım öldürme  ');
+    expect(panelKomutSebebi('squad-01', 'kick', 'Berkay')).toBe('Takım öldürme');
   });
 });
