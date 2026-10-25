@@ -1,7 +1,13 @@
 'use client';
 
 import type { Kural } from '@/components/kurallar';
-import { bolumlereAyir, kuralAra, kuralKodu, kuralOzeti } from '@/components/oyuncu/kural';
+import {
+  banlanabilirKurallar,
+  bolumlereAyir,
+  kuralAra,
+  kuralKodu,
+  kuralOzeti,
+} from '@/components/oyuncu/kural';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
@@ -92,9 +98,10 @@ export function BanPenceresi({
   const [icNot, setIcNot] = useState('');
   const [delil, setDelil] = useState('');
 
-  // Yalnızca AKTİF kurallar seçilebiliyor: kaldırılmış bir kurala
-  // dayanarak ban atmak, itirazda savunulamaz.
-  const aktif = useMemo(() => kurallar.filter((k) => k.active !== false), [kurallar]);
+  // Yalnızca AKTİF ve kural niteliğindeki kayıtlar seçilebiliyor:
+  // kaldırılmış bir kurala dayanarak ban atmak itirazda savunulamaz,
+  // "KULLANIM" notu da zaten kural değil.
+  const aktif = useMemo(() => banlanabilirKurallar(kurallar), [kurallar]);
   const bulunan = useMemo(() => kuralAra(aktif, arama), [aktif, arama]);
   const bolumler = useMemo(() => bolumlereAyir(bulunan), [bulunan]);
   const secili = aktif.find((k) => k.id === kuralId) ?? null;

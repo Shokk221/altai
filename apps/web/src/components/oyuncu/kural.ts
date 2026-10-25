@@ -1,4 +1,5 @@
 import type { Kural } from '@/components/kurallar';
+import { BANLANAMAZ, BAN_ACIKLAMALARI } from '@/components/oyuncu/ban-aciklamalari';
 
 /**
  * Kural kodu ve özeti.
@@ -28,6 +29,11 @@ export function kuralKodu(kural: Kural): string {
  * söylüyor.
  */
 export function kuralOzeti(kural: Kural, enFazla = 140): string {
+  // ELDE YAZILMIŞ AÇIKLAMA ÖNCE. Gövdenin ilk satırını kesmek bazen
+  // yarım cümle, bazen alakasız bir alt madde veriyordu.
+  const elde = BAN_ACIKLAMALARI[kuralKodu(kural)];
+  if (elde) return elde;
+
   const ilk = (kural.body.split('\n')[0] ?? '').replace(/^•\s*/, '').trim();
   if (ilk.length <= enFazla) return ilk;
   // Kelime ortasından kesmiyoruz.
@@ -66,4 +72,14 @@ export function kuralAra(kurallar: Kural[], sorgu: string): Kural[] {
       k.body.toLocaleLowerCase('tr').includes(q) ||
       (k.category ?? '').toLocaleLowerCase('tr').includes(q),
   );
+}
+
+/**
+ * Ban gerekçesi olabilecek kurallar.
+ *
+ * Aktif olmayanlar seçilemez (kaldırılmış bir kurala dayanan ban
+ * itirazda savunulamaz) ve kural olmayan kayıtlar da (bkz. BANLANAMAZ).
+ */
+export function banlanabilirKurallar(kurallar: Kural[]): Kural[] {
+  return kurallar.filter((k) => k.active !== false && !BANLANAMAZ.has(kuralKodu(k)));
 }

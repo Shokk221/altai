@@ -227,7 +227,14 @@ export function OyuncuProfili({
                         bizim sunucumuzda uygulanmıyor
                       </span>
                     </div>
-                    <p className="mt-1.5 text-footnote leading-snug">{b.reason}</p>
+                    {/* Kendi banlarımızla AYNI yardımcı: BM'nin ban
+                        sebepleri BM'nin kendi şablon yer tutucularını
+                        ({{expires}}, {{timeLeft}}) taşıyor ve ham basmak
+                        admine tarih yerine süslü parantez gösteriyordu.
+                        Aktarılmış 1502 aktif banın sebebinde bu biçim var. */}
+                    <p className="mt-1.5 text-footnote leading-snug">
+                      {banSebebi(b.reason, b.expiresAt)}
+                    </p>
                     {b.note ? (
                       <p className="mt-1 whitespace-pre-wrap text-2xs text-fg-muted">{b.note}</p>
                     ) : null}
