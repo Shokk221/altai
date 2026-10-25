@@ -159,8 +159,12 @@ export default class SquadRcon extends Rcon {
 
     for (const line of response.split('\n')) {
       const match = line.match(
-        /^ID: (?<playerID>\d+) \| Online IDs:([^|]+)\| Name: (?<name>.+) \| Team ID: (?<teamID>\d|N\/A)(?: \| Party ID: [^|]*?)? \| Squad ID: (?<squadID>\d+|N\/A) \| Is Leader: (?<isLeader>True|False) \| Role: (?<role>[A-Za-z_0-9]+).*$/
+        /^ID: (?<playerID>\d+) \| Online IDs:([^|]+)\| Name: (?<name>.+) \| Team ID: (?<teamID>\d+|N\/A)(?: \| Party ID: [^|]*?)? \| Squad ID: (?<squadID>\d+|N\/A) \| Is Leader: (?<isLeader>True|False) \| Role: (?<role>[A-Za-z_0-9]+).*$/
       ); // 'role' patched: sometimes when server is under heavy load, role has ',' at end
+      // teamID `\d+`: upstream `\d` ile tek haneye kilitliydi ve iki haneli
+      // takım kimliğinde satır HİÇ eşleşmiyor, yani oyuncu listeden sessizce
+      // düşüyordu. Oyun sunucusundaki elle yama da bu yüzden `\d+` yapmıştı;
+      // `\d`'ye geri dönmek çalışan bir davranışı sessizce daraltmak olurdu.
       // Squad 10.6: 'Party ID' (Team ID ile Squad ID arasında) ve sonda 'Vehicle' eklendi.
       // Party ID opsiyonel tutuldu ki 10.6 öncesi format da eşleşsin; Vehicle'ı role'ün
       // ardındaki '.*' zaten yutuyor. Upstream: Team-Silver-Sphere/SquadJS#455
