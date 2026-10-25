@@ -1,136 +1,33 @@
-import { ChatPanel, type Mesaj } from '@/components/chat-panel';
-import { CoplayPanel } from '@/components/coplay-panel';
-import { FlagPicker } from '@/components/flag-picker';
-import { BanKaldir, EtiketKaldir, HizliEylemler, KaydiKapat } from '@/components/player-actions';
-import { Badge } from '@/components/ui/badge';
+import type { Kural } from '@/components/kurallar';
+import { OyuncuProfili } from '@/components/oyuncu/profil-ekrani';
+import type { Profil } from '@/components/oyuncu/tipler';
 import { getJson, getMe, publicApiUrl } from '@/lib/api';
-import { cn } from '@/lib/cn';
-import { banBitis, banSebebi, gecenSure, sayi, sure, tarih, tarihSaat } from '@/lib/format';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import type { ReactNode } from 'react';
 
 export const metadata = { title: 'Oyuncu - Altai' };
 
 /**
- * Oyuncu profili.
+ * Oyuncu profili sayfası.
  *
- * DÜZEN KARARI: sayfa tek ekrana sığmalı. İlk sürüm tam genişlikte kartları
- * alt alta diziyordu ve her listenin tamamını basıyordu — bir oyuncuya
- * bakmak için sonuna kadar kaydırmak gerekiyordu, ekranın genişliği ise hiç
- * kullanılmıyordu. Moderasyonda karar hızlı verilir.
+ * Bu dosya yalnızca VERİ VE YETKİ. İşaretlemenin tamamı
+ * `components/oyuncu/profil-ekrani.tsx` içinde: aynı ekran örnek
+ * veriyle de basılabiliyor, böylece tasarım api olmadan görülüp
+ * ölçülebiliyor (demo kipi: `pnpm --filter @altai/web dev:demo`).
  *
- * Şimdiki yapı: üstte tek bantta künye + istatistik + eylemler, altta yan
- * yana üç panel. Listeler SAYFAYI değil kendi içlerini kaydırıyor; böylece
- * sayfanın boyu oyuncunun ban sayısına göre değişmiyor.
+ * Veri tipleri `components/oyuncu/tipler.ts` içinde — sayfa, ekran ve
+ * örnek veri aynı şekli paylaşıyor; tip tek yerde durmazsa üçü sessizce
+ * ayrışıyor.
  */
-
-interface Ban {
-  id: string;
-  reason: string;
-  internalNote: string | null;
-  expiresAt: string | null;
-  revokedAt: string | null;
-  issuedByName: string | null;
-  createdAt: string;
-  source: string;
-  active: boolean;
-}
-
-interface Flag {
-  id: string;
-  flagId: string;
-  name: string;
-  color: string | null;
-  addedAt: string;
-  removedAt: string | null;
-}
-
-interface Kayit {
-  id: string;
-  kind: 'note' | 'warning' | 'watchlist';
-  body: string;
-  authorName: string | null;
-  createdAt: string;
-  resolvedAt: string | null;
-}
-
-interface Profil {
-  player: {
-    id: string;
-    steamId: string | null;
-    eosId: string | null;
-    battlemetricsId: string | null;
-    name: string;
-  };
-  names: { name: string; firstSeen: string | null; lastSeen: string | null }[];
-  bans: Ban[];
-  flags: Flag[];
-  records: Kayit[];
-  sohbet: Mesaj[];
-  oyun: {
-    oturum: number;
-    toplamSaniye: number;
-    ilkGorulme: string | null;
-    sonGorulme: string | null;
-    mac: number;
-    kill: number;
-    olum: number;
-    revive: number;
-    tk: number;
-    enUzunSeri: number;
-    galibiyet: number;
-    maglubiyet: number;
-    /** Bilinen sonuç yoksa null — sıfır "hep kaybetti" demekti. */
-    galibiyetOrani: number | null;
-  };
-}
-
-const KAYIT_ETIKET = { note: 'Not', warning: 'Uyarı', watchlist: 'Takip' } as const;
-
-/** Künye bandındaki tek istatistik. Etiket küçük, değer dolgun. */
-function Deger({ baslik, deger }: { baslik: string; deger: string }) {
-  return (
-    <div>
-      <div className="display text-lg leading-tight">{deger}</div>
-      <div className="text-2xs text-fg-faint">{baslik}</div>
-    </div>
-  );
-}
-
-/**
- * Sabit yükseklikte panel: içerik uzunsa panel kendi içinde kayar, sayfa
- * uzamaz.
- */
-function Panel({
-  baslik,
-  sayac,
-  children,
-}: {
-  baslik: string;
-  /** Verilmezse başlıkta sayı gösterilmez (henüz yüklenmemiş paneller). */
-  sayac?: number;
-  children: ReactNode;
-}) {
-  return (
-    <section className="flex min-h-0 flex-col rounded border border-border bg-surface">
-      <header className="flex shrink-0 items-baseline justify-between gap-2 px-4 pt-3.5 pb-2">
-        <h2 className="text-sm font-semibold">{baslik}</h2>
-        {sayac === undefined ? null : <span className="num text-xs text-fg-faint">{sayac}</span>}
-      </header>
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">{children}</div>
-    </section>
-  );
-}
-
-function Bos({ metin }: { metin: string }) {
-  return <p className="py-6 text-center text-xs text-fg-muted">{metin}</p>;
-}
-
 export default async function PlayerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const me = await getMe();
-  const profil = await getJson<Profil>(`/players/${id}`);
+  // Kurallar ban penceresinde ZORUNLU seçim olarak kullanılıyor; profil
+  // ile birlikte çekiliyor ki pencere açılınca beklemesin.
+  const [profil, kuralVeri] = await Promise.all([
+    getJson<Profil>(`/players/${id}`),
+    getJson<{ rules: Kural[] }>('/rules'),
+  ]);
 
   if (!me) {
     return (
@@ -155,222 +52,18 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
     );
   }
 
-  const apiUrl = publicApiUrl();
   const yetki = (p: string) => me.permissions.includes(p) || me.systemRole === 'super_admin';
-  const banlayabilir = yetki('player.ban');
-  const notYazabilir = yetki('player.note.write');
-  const etiketYonetir = yetki('flag.manage');
-
-  const { player, oyun } = profil;
-  const aktifBan = profil.bans.find((b) => b.active);
-  const aktifEtiketler = profil.flags.filter((f) => !f.removedAt);
-  const kd = oyun.olum > 0 ? (oyun.kill / oyun.olum).toFixed(2) : String(oyun.kill);
-  const acikKayit = profil.records.filter((k) => !k.resolvedAt).length;
-
-  /**
-   * Kimlikler tek listede: isimler + Steam + EOS.
-   *
-   * Steam ve EOS künyede de yazıyor ama orada "ne zaman görüldü" bilgisi
-   * yok; burada isimlerle aynı zaman çizgisinde duruyorlar.
-   */
-  const kimlikler: { deger: string; tur: string; zaman: string | null }[] = [
-    ...(player.steamId ? [{ deger: player.steamId, tur: 'Steam ID', zaman: oyun.sonGorulme }] : []),
-    ...(player.eosId ? [{ deger: player.eosId, tur: 'EOS ID', zaman: oyun.sonGorulme }] : []),
-    ...profil.names.map((n) => ({ deger: n.name, tur: 'İsim', zaman: n.lastSeen })),
-  ];
 
   return (
-    // h-screen + min-h-0 zinciri: paneller taşmak yerine kendi içlerinde
-    // kaysın diye yükseklik yukarıdan aşağı aktarılıyor.
-    <main className="mx-auto flex h-full w-full max-w-[104rem] flex-col gap-3 px-5 py-4">
-      <Link
-        href="/oyuncular"
-        className="shrink-0 text-xs font-semibold text-fg-muted hover:text-fg"
-      >
-        ← Oyuncular
-      </Link>
-
-      {/* künye: kimlik, durum, istatistik ve eylem tek blokta */}
-      <header className="shrink-0 rounded border border-border bg-surface px-5 py-4">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <h1 className="display text-2xl sm:text-3xl">{player.name}</h1>
-          {aktifBan ? <Badge tone="danger">Banlı</Badge> : null}
-          {aktifEtiketler.map((f) => (
-            <span key={f.id} className="inline-flex items-center gap-1">
-              <Badge tone="info">{f.name}</Badge>
-              {etiketYonetir ? <EtiketKaldir apiUrl={apiUrl} atamaId={f.id} /> : null}
-            </span>
-          ))}
-          {etiketYonetir ? (
-            <FlagPicker
-              apiUrl={apiUrl}
-              playerId={player.id}
-              atanmisIdler={aktifEtiketler.map((f) => f.flagId)}
-            />
-          ) : null}
-          <span className="ml-auto font-mono text-2xs text-fg-faint">
-            {player.steamId ?? 'Steam yok'} · {player.eosId ?? 'EOS yok'}
-          </span>
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-end gap-x-7 gap-y-3">
-          <Deger baslik="oynama süresi" deger={sure(oyun.toplamSaniye)} />
-          <Deger baslik="oturum" deger={sayi(oyun.oturum)} />
-          <Deger baslik="maç" deger={sayi(oyun.mac)} />
-          <Deger baslik="K / D" deger={kd} />
-          <Deger baslik="canlandırma" deger={sayi(oyun.revive)} />
-          {/* Sıfır seri gösterilmiyor: hiç maçı olmayan oyuncuda "0" bir
-              bilgi değil, boş bir sütun. */}
-          {oyun.enUzunSeri > 0 ? (
-            <Deger baslik="en uzun seri" deger={sayi(oyun.enUzunSeri)} />
-          ) : null}
-          {oyun.galibiyetOrani === null ? null : (
-            <Deger baslik="galibiyet" deger={`%${oyun.galibiyetOrani}`} />
-          )}
-          <Deger baslik="ban" deger={sayi(profil.bans.length)} />
-          <Deger baslik="açık kayıt" deger={sayi(acikKayit)} />
-          <div className="ml-auto text-right text-2xs leading-relaxed text-fg-faint">
-            <div>ilk görülme {tarih(oyun.ilkGorulme)}</div>
-            <div>son görülme {tarih(oyun.sonGorulme)}</div>
-          </div>
-        </div>
-
-        {banlayabilir || notYazabilir ? (
-          <div className="mt-4">
-            <HizliEylemler
-              apiUrl={apiUrl}
-              playerId={player.id}
-              banlayabilir={banlayabilir}
-              notYazabilir={notYazabilir}
-            />
-          </div>
-        ) : null}
-      </header>
-
-      {/* çalışma alanı: yan yana paneller, her biri kendi içinde kayar */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_0.9fr_1.35fr]">
-        <Panel baslik="Kimlikler" sayac={kimlikler.length}>
-          {kimlikler.length === 0 ? (
-            <Bos metin="Kimlik kaydı yok" />
-          ) : (
-            // Tek tablo: isim, Steam ve EOS aynı listede. Ayrı yerlerde
-            // durduklarında "bu adam hangi kimlikle ne zaman görüldü"
-            // sorusu iki yere bakmayı gerektiriyordu.
-            <ul className="flex flex-col [&>li:last-child]:border-0">
-              {kimlikler.map((k) => (
-                <li
-                  key={`${k.tur}:${k.deger}`}
-                  className="flex items-baseline justify-between gap-3 border-b border-border py-[7px]"
-                >
-                  <span className="min-w-0">
-                    <span
-                      className={cn(
-                        'block truncate text-footnote',
-                        k.tur === 'İsim' ? '' : 'font-mono text-xs',
-                      )}
-                    >
-                      {k.deger}
-                    </span>
-                    <span className="text-2xs uppercase tracking-wider text-fg-faint">{k.tur}</span>
-                  </span>
-                  <span className="shrink-0 text-right">
-                    <span className="num block text-xs text-fg-muted">{tarih(k.zaman)}</span>
-                    {/* Mutlak tarihin yanında göreli: biri hangi gün
-                        olduğunu, diğeri ne kadar eski olduğunu söylüyor. */}
-                    <span className="block text-2xs text-fg-faint">{gecenSure(k.zaman)}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-
-        <Panel baslik="Banlar" sayac={profil.bans.length}>
-          {profil.bans.length === 0 ? (
-            <Bos metin="Ban kaydı yok" />
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {profil.bans.map((b) => (
-                <li
-                  key={b.id}
-                  className="rounded-sm border border-border bg-surface-sunken px-3 py-2.5"
-                >
-                  <div className="flex items-center gap-2">
-                    {b.active ? (
-                      <Badge tone="danger">aktif</Badge>
-                    ) : b.revokedAt ? (
-                      <Badge tone="neutral">kaldırıldı</Badge>
-                    ) : (
-                      <Badge tone="neutral">doldu</Badge>
-                    )}
-                    <span className="text-2xs text-fg-faint">
-                      {tarih(b.createdAt)} → {banBitis(b.expiresAt)}
-                    </span>
-                  </div>
-                  <p className="mt-1.5 text-footnote leading-snug">
-                    {banSebebi(b.reason, b.expiresAt)}
-                  </p>
-                  <p className="mt-1 text-2xs text-fg-faint">
-                    {b.issuedByName ?? 'bilinmiyor'}
-                    {b.source !== 'altai' ? ` · ${b.source}` : ''}
-                  </p>
-                  {b.active && banlayabilir ? (
-                    <div className="mt-2">
-                      <BanKaldir apiUrl={apiUrl} banId={b.id} />
-                    </div>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-
-        {/* Kayıtlar ve coplay kısa listeler; tek sütunu paylaşıyorlar.
-            Sohbet ve kimlikler tam sütunu hak ediyor. */}
-        <div className="flex min-h-0 flex-col gap-3">
-          <Panel baslik="Kayıtlar" sayac={profil.records.length}>
-            {profil.records.length === 0 ? (
-              <Bos metin="Not, uyarı ya da takip yok" />
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {profil.records.map((k) => (
-                  <li
-                    key={k.id}
-                    className="rounded-sm border border-border bg-surface-sunken px-3 py-2.5"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <Badge tone={k.kind === 'warning' ? 'accent' : 'neutral'}>
-                          {KAYIT_ETIKET[k.kind]}
-                        </Badge>
-                        <span className="text-2xs text-fg-faint">{tarihSaat(k.createdAt)}</span>
-                      </div>
-                      {!k.resolvedAt && notYazabilir ? (
-                        <KaydiKapat apiUrl={apiUrl} recordId={k.id} />
-                      ) : null}
-                    </div>
-                    <p className="mt-1.5 whitespace-pre-wrap text-footnote leading-snug">
-                      {k.body}
-                    </p>
-                    <p className="mt-1 text-2xs text-fg-faint">
-                      {k.authorName ?? 'bilinmiyor'}
-                      {k.resolvedAt ? ' · kapatıldı' : ''}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Panel>
-
-          <Panel baslik="Birlikte oynadıkları">
-            <CoplayPanel apiUrl={apiUrl} playerId={player.id} />
-          </Panel>
-        </div>
-
-        <Panel baslik="Sohbet" sayac={profil.sohbet.length}>
-          <ChatPanel apiUrl={apiUrl} playerId={player.id} ilkMesajlar={profil.sohbet} />
-        </Panel>
-      </div>
-    </main>
+    <OyuncuProfili
+      profil={profil}
+      apiUrl={publicApiUrl()}
+      kurallar={kuralVeri?.rules ?? []}
+      yetkiler={{
+        banlayabilir: yetki('player.ban'),
+        notYazabilir: yetki('player.note.write'),
+        etiketYonetir: yetki('flag.manage'),
+      }}
+    />
   );
 }

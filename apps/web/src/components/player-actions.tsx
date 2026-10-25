@@ -1,7 +1,9 @@
 'use client';
 
+import type { Kural } from '@/components/kurallar';
+import { BanPenceresi } from '@/components/oyuncu/ban-penceresi';
+import { KayitPenceresi, type KayitTuru } from '@/components/oyuncu/kayit-penceresi';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useState } from 'react';
 
@@ -27,6 +29,11 @@ const API_HATALARI: Record<string, string> = {
   forbidden: 'Bu işlem için yetkiniz yok',
   no_session: 'Oturum bulunamadı, tekrar giriş yapın',
   invalid_session: 'Oturum geçersiz, tekrar giriş yapın',
+  // BM aynası kapalıyken ya da BM'ye ulaşılamazken: ikisi AYRI mesaj,
+  // çünkü biri bizim ayarımız (token yok), diğeri BM tarafı. Tek mesaja
+  // indirmek, admini yanlış yerde hata aramaya gönderirdi.
+  bm_aynasi_kapali: 'BM aynası kapalı (token tanımlı değil)',
+  bm_erisilemedi: 'BattleMetrics’e ulaşılamadı',
 };
 
 function mesaj(kod: unknown, detay?: unknown): string {
@@ -65,15 +72,13 @@ function useEylem(apiUrl: string) {
     }
   }
 
-  return { calistir, bekliyor, hata };
+  return { calistir, bekliyor, hata, temizle: () => setHata(null) };
 }
 
 function Hata({ children }: { children: ReactNode }) {
   if (!children) return null;
   return <p className="mt-2 text-xs font-medium text-danger">{children}</p>;
 }
-
-type Kip = null | 'ban' | 'note' | 'warning' | 'watchlist';
 
 const KAYIT_ETIKET: Record<'note' | 'warning' | 'watchlist', string> = {
   note: 'Not',
@@ -82,109 +87,94 @@ const KAYIT_ETIKET: Record<'note' | 'warning' | 'watchlist', string> = {
 };
 
 /**
- * Kompakt eylem çubuğu.
+ * Eylem çubuğu — düğmeler, PENCERE açıyor.
  *
- * Kapalıyken düğme satırı, açıkken aynı yerde tek satırlık form. Formu
- * açmak sayfanın düzenini kaydırmasın diye yükseklik farkı en aza indirildi.
+ * ÖNCESİ: düğmeye basınca aynı yerde tek satırlık bir form beliriyordu.
+ * Üç sorunu vardı. Form açılınca sayfanın düzeni kayıyor, moderatörün
+ * az önce okuduğu satır aşağı itiliyordu. Ban sebebi tek satırlık bir
+ * `input`'tu: bir olayı anlatmak oraya sığmıyordu. Ve sebep SERBEST
+ * METİNDİ — aynı ihlal "tk", "TK yaptı", "takım arkadaşını öldürdü"
+ * diye dört ayrı kayıtla duruyordu, itiraz geldiğinde hangi kurala
+ * dayandığı belirsizdi.
+ *
+ * Artık her eylem kendi penceresinde ve ban bir kurala bağlanmadan
+ * atılamıyor (bkz. ban-penceresi.tsx).
  */
 export function HizliEylemler({
   apiUrl,
   playerId,
+  playerAdi,
+  kurallar,
   banlayabilir,
   notYazabilir,
 }: {
   apiUrl: string;
   playerId: string;
+  /** Pencere başlığında geçiyor: hangi oyuncuya işlem yapıldığı belli olsun. */
+  playerAdi: string;
+  /** Ban penceresi bunlardan birini seçmeye zorluyor. */
+  kurallar: Kural[];
   banlayabilir: boolean;
   notYazabilir: boolean;
 }) {
-  const { calistir, bekliyor, hata } = useEylem(apiUrl);
-  const [kip, setKip] = useState<Kip>(null);
-  const [metin, setMetin] = useState('');
-  // Ban süresi gün olarak; boş = kalıcı. Takvim açmaktan hızlı.
-  const [gun, setGun] = useState('');
+  const { calistir, bekliyor, hata, temizle } = useEylem(apiUrl);
+  const [banAcik, setBanAcik] = useState(false);
+  const [kayitTuru, setKayitTuru] = useState<KayitTuru | null>(null);
 
-  const kapat = () => {
-    setKip(null);
-    setMetin('');
-    setGun('');
-  };
+  function kapat() {
+    setBanAcik(false);
+    setKayitTuru(null);
+    temizle();
+  }
 
-  const gonder = async () => {
-    if (!kip) return;
-    let ok = false;
-    if (kip === 'ban') {
-      const g = Number(gun);
-      const expiresAt =
-        gun.trim() === '' ? null : new Date(Date.now() + Math.max(1, g) * 86_400_000).toISOString();
-      ok = await calistir(`/players/${playerId}/bans`, { reason: metin.trim(), expiresAt });
-    } else {
-      ok = await calistir(`/players/${playerId}/records`, { kind: kip, body: metin.trim() });
-    }
-    if (ok) kapat();
-  };
-
-  if (kip === null) {
-    return (
+  return (
+    <>
       <div className="flex flex-wrap gap-2">
         {banlayabilir ? (
-          <Button variant="danger" size="sm" onClick={() => setKip('ban')}>
+          <Button variant="danger" size="sm" onClick={() => setBanAcik(true)}>
             Ban at
           </Button>
         ) : null}
         {notYazabilir
           ? (['note', 'warning', 'watchlist'] as const).map((k) => (
-              <Button key={k} variant="soft" size="sm" onClick={() => setKip(k)}>
+              <Button key={k} variant="soft" size="sm" onClick={() => setKayitTuru(k)}>
                 {KAYIT_ETIKET[k]} ekle
               </Button>
             ))
           : null}
       </div>
-    );
-  }
 
-  const banKipi = kip === 'ban';
-  const yeterli = banKipi ? metin.trim().length >= 3 : metin.trim().length > 0;
-
-  return (
-    <div>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Input
-          autoFocus
-          placeholder={banKipi ? 'Ban sebebi (oyuncuya gösterilir)' : `${KAYIT_ETIKET[kip]} metni`}
-          value={metin}
-          onChange={(e) => setMetin(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && yeterli) void gonder();
-            if (e.key === 'Escape') kapat();
+      {banlayabilir ? (
+        <BanPenceresi
+          acik={banAcik}
+          onKapat={kapat}
+          kurallar={kurallar}
+          oyuncuAdi={playerAdi}
+          bekliyor={bekliyor}
+          hata={hata}
+          onGonder={async (veri) => {
+            const ok = await calistir(`/players/${playerId}/bans`, veri);
+            if (ok) kapat();
           }}
-          className="flex-1"
         />
-        {banKipi ? (
-          <Input
-            placeholder="Gün (boş = kalıcı)"
-            inputMode="numeric"
-            value={gun}
-            onChange={(e) => setGun(e.target.value.replace(/\D/g, ''))}
-            className="sm:w-40"
-          />
-        ) : null}
-        <div className="flex gap-2">
-          <Button
-            variant={banKipi ? 'danger' : 'ink'}
-            size="sm"
-            onClick={gonder}
-            disabled={bekliyor || !yeterli}
-          >
-            {bekliyor ? '…' : banKipi ? 'Banla' : 'Ekle'}
-          </Button>
-          <Button variant="ghost" size="sm" onClick={kapat} disabled={bekliyor}>
-            Vazgeç
-          </Button>
-        </div>
-      </div>
-      <Hata>{hata}</Hata>
-    </div>
+      ) : null}
+
+      {notYazabilir && kayitTuru ? (
+        <KayitPenceresi
+          acik
+          onKapat={kapat}
+          ilkTur={kayitTuru}
+          kurallar={kurallar}
+          oyuncuAdi={playerAdi}
+          bekliyor={bekliyor}
+          hata={hata}
+          onGonder={async (veri) => {
+            const ok = await calistir(`/players/${playerId}/records`, veri);
+            if (ok) kapat();
+          }}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -234,5 +224,33 @@ export function EtiketKaldir({ apiUrl, atamaId }: { apiUrl: string; atamaId: str
     >
       ×
     </button>
+  );
+}
+
+/**
+ * "BM'den tazele" — oyuncunun BattleMetrics verisini şimdi yeniden okur.
+ *
+ * Ayna normalde kendi kendine çalışıyor (oyuncu girince + profil açılınca
+ * bayatsa). Bu düğme TTL'i yok saymak için: adminin BM'de az önce yazdığı
+ * bir notu panelde hemen görmek istediği durum.
+ *
+ * Künye bandındaki soluk metnin içinde duruyor, Button DEĞİL: orada bir
+ * düğme kutusu, yanındaki "ilk/son görülme" satırlarının hizasını bozuyor
+ * ve okunması gereken bilgiden daha çok dikkat çekiyordu.
+ */
+export function BmTazele({ apiUrl, playerId }: { apiUrl: string; playerId: string }) {
+  const { calistir, bekliyor, hata } = useEylem(apiUrl);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => calistir(`/players/${playerId}/bm-tazele`)}
+        disabled={bekliyor}
+        className="font-medium text-fg-muted underline-offset-2 transition-colors hover:text-fg hover:underline disabled:opacity-40"
+      >
+        {bekliyor ? 'BM okunuyor…' : 'BM’den tazele'}
+      </button>
+      <Hata>{hata}</Hata>
+    </>
   );
 }
