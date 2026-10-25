@@ -44,6 +44,16 @@ export const bans = pgTable(
     issuedByName: text('issued_by_name'),
     // Hangi BM ban listesinden geldiği — paylaşımlı listeler ayırt edilebilsin.
     banListName: text('ban_list_name'),
+    /**
+     * Discord'daki kanıt gönderisinin thread id'si.
+     *
+     * AYNI ZAMANDA "bu kayıt gönderildi mi" işareti: bot, thread'i
+     * olmayan YENİ kayıtları arayıp açıyor ve id'yi buraya yazıyor. Ayrı
+     * bir imleç tutmak yerine böyle: imleç, bot yeniden başladığında ya
+     * baştan okuyup aynı banı iki kez gönderir ya da atlayıp hiç
+     * göndermez. Burada iki durum da mümkün değil.
+     */
+    discordThreadId: text('discord_thread_id'),
     source: text('source').$type<RecordSource>().notNull().default('altai'),
     externalId: text('external_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -131,6 +141,16 @@ export const flagAssignments = pgTable(
     reason: text('reason'),
     addedByUserId: uuid('added_by_user_id').references(() => users.id),
     addedByName: text('added_by_name'),
+    /**
+     * Discord'daki kanıt gönderisinin thread id'si.
+     *
+     * AYNI ZAMANDA "bu kayıt gönderildi mi" işareti: bot, thread'i
+     * olmayan YENİ kayıtları arayıp açıyor ve id'yi buraya yazıyor. Ayrı
+     * bir imleç tutmak yerine böyle: imleç, bot yeniden başladığında ya
+     * baştan okuyup aynı banı iki kez gönderir ya da atlayıp hiç
+     * göndermez. Burada iki durum da mümkün değil.
+     */
+    discordThreadId: text('discord_thread_id'),
     source: text('source').$type<RecordSource>().notNull().default('altai'),
     externalId: text('external_id'),
   },

@@ -7,6 +7,7 @@ import {
   SlashCommandBuilder,
   type TextChannel,
 } from 'discord.js';
+import { createBanPostalari } from './ban-postalari.js';
 import { createOlayOkuyucu } from './event-reader.js';
 import { hesapBagla, hesapCoz } from './linking.js';
 import { adminCagrisiGomusu, macSonuGomusu, teamkillGomusu } from './render.js';
@@ -113,6 +114,15 @@ const macKanali = process.env.DISCORD_MATCH_CHANNEL_ID;
 const cagriKanali = process.env.DISCORD_ADMIN_REQUEST_CHANNEL_ID;
 /** Çağrı kartında etiketlenecek rol. Verilmezse etiket yok. */
 const cagriRolu = process.env.DISCORD_ADMIN_ROLE_ID;
+/**
+ * Panelden atılan banların kanıt gönderisi açılacağı FORUM kanalı.
+ *
+ * Forum olmak zorunda: her ban ayrı bir gönderi ve kanıt o gönderiye
+ * ekleniyor. Normal metin kanalında aynı şey mesaj yığınına dönüşür.
+ */
+const banKanali = process.env.DISCORD_BAN_CHANNEL_ID;
+/** Gönderiye eklenecek profil bağlantısının kökü. Verilmezse bağlantı yok. */
+const panelKoku = process.env.PANEL_PUBLIC_URL?.replace(/\/+$/, '');
 
 /**
  * Gömüyü kanala basar.
@@ -245,6 +255,32 @@ const olayOkuyucu =
       })
     : null;
 
+/**
+ * Ban kanıt gönderileri. Kanal verilmediyse özellik sessizce kapalı —
+ * bot'un geri kalanı bundan etkilenmiyor.
+ */
+const banPostalari = banKanali
+  ? createBanPostalari({
+      db,
+      kanal: async () => {
+        try {
+          const kanal = await client.channels.fetch(banKanali);
+          if (!kanal || kanal.type !== ChannelType.GuildForum) {
+            // Sessizce geçmiyoruz: yanlış kanal tipi verilince "ban
+            // attım ama gönderi açılmadı" diye saatlerce aranır.
+            logger.warn({ banKanali }, 'ban kanalı bulunamadı ya da forum kanalı değil');
+            return null;
+          }
+          return kanal;
+        } catch (err) {
+          logger.error({ err, banKanali }, 'ban kanalı getirilemedi');
+          return null;
+        }
+      },
+      ...(panelKoku ? { profilUrl: (id: string) => `${panelKoku}/oyuncular/${id}` } : {}),
+    })
+  : undefined;
+
 client.once('ready', () => {
   logger.info(`bot giriş yaptı: ${client.user?.tag}`);
   void tamTarama('acilis');
@@ -260,6 +296,7 @@ client.once('ready', () => {
   sesZamanlayici.unref?.();
 
   if (olayOkuyucu) olayOkuyucu.baslat();
+  if (banPostalari) banPostalari.baslat();
   else logger.info({}, 'olay render kanalı tanımlı değil — killfeed ve maç sonu kapalı');
 
   if (ticketKanali) {
@@ -506,6 +543,7 @@ await client.login(process.env.DISCORD_BOT_TOKEN);
 async function shutdown(signal: string) {
   logger.info({ signal }, 'bot kapanıyor');
   olayOkuyucu?.durdur();
+  banPostalari?.durdur();
   await client.destroy();
   process.exit(0);
 }

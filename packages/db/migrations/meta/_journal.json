@@ -211,6 +211,13 @@
       "when": 1792947037310,
       "tag": "0029_sl_ban_suresi",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1792950401634,
+      "tag": "0030_ban_discord_thread",
+      "breakpoints": true
     }
   ]
 }
