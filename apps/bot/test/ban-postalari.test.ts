@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { type BanKaydi, gonderiBasligi, gonderiGovdesi } from '../src/ban-postalari.js';
+import { type BanKaydi, banGomusu, gonderiBasligi } from '../src/ban-postalari.js';
 
 /**
- * Ban kanıt gönderisinin başlığı ve gövdesi.
+ * Ban kanıt gönderisinin başlığı ve kartı.
  *
  * NEDEN TEST EDİLİYOR: eski sistemin aynı kanalda duran gönderilerinden
  * biri `Ban: PZ Höllensturm-{{player.steamID}}` başlığını taşıyor —
@@ -11,8 +11,9 @@ import { type BanKaydi, gonderiBasligi, gonderiGovdesi } from '../src/ban-postal
  * yalnızca kimliksiz oyuncuda ortaya çıktığı için gözle fark edilmesi
  * uzun sürüyor.
  *
- * Aynı yer tutucu hatası ban mesajlarında da iki kez canlıya çıktı
- * (bkz. api/test/ban-sebebi-renderlenir.test.ts).
+ * Aynı yer tutucu hatası ban mesajlarında üç kez canlıya çıktı
+ * (bkz. api/test/ban-sebebi-renderlenir.test.ts), dördüncüsü de burada
+ * yaşandı: ilk sürüm sebebi ham gönderiyordu.
  */
 
 const kayit = (o: Partial<BanKaydi> = {}): BanKaydi => ({
@@ -24,8 +25,13 @@ const kayit = (o: Partial<BanKaydi> = {}): BanKaydi => ({
   reason: 'GEN-1 · Küfür, hakaret',
   expiresAt: null,
   verenAd: 'Yalnızkurt',
+  olusturuldu: new Date('2026-10-25T21:00:00.000Z'),
   ...o,
 });
+
+const SIMDI = new Date('2026-10-25T21:00:00.000Z');
+const alan = (g: ReturnType<typeof banGomusu>, ad: string) =>
+  g.fields?.find((f) => f.name === ad)?.value;
 
 describe('gonderiBasligi', () => {
   it('eski sistemin biçimini koruyor: Ban: ad-steamid', () => {
@@ -60,46 +66,66 @@ describe('gonderiBasligi', () => {
   // Discord thread adı 100 karakterle sınırlı; aşarsa istek reddedilir ve
   // gönderi hiç açılmaz, yani ban kanıtsız kalır.
   it('100 karakteri aşmıyor', () => {
-    const b = gonderiBasligi(kayit({ oyuncuAdi: 'A'.repeat(200) }));
-    expect(b.length).toBeLessThanOrEqual(100);
+    expect(gonderiBasligi(kayit({ oyuncuAdi: 'A'.repeat(200) })).length).toBeLessThanOrEqual(100);
   });
 });
 
-describe('gonderiGovdesi', () => {
-  it('kalıcı banda süre "kalıcı" yazıyor', () => {
-    const g = gonderiGovdesi(kayit(), null);
-    expect(g).toContain('**Süre:** kalıcı');
-    expect(g).toContain('GEN-1');
-    expect(g).toContain('Yalnızkurt');
+describe('banGomusu', () => {
+  it('oyun banının başlığı sadece "Ban"', () => {
+    expect(banGomusu(kayit(), null, SIMDI).title).toBe('Ban');
+  });
+
+  it('SL ban başlığı "SL Ban" ve açıklama cümlesi YOK', () => {
+    const g = banGomusu(kayit({ tur: 'sl' }), null, SIMDI);
+    expect(g.title).toBe('SL Ban');
+    // Kart kendini anlatan cümleler yazmıyor; başlık ve renk yeterli.
+    expect(JSON.stringify(g)).not.toContain('manga lideri olamaz');
+    expect(JSON.stringify(g)).not.toContain('sunucuda kalır');
+  });
+
+  it('iki tür farklı renkte', () => {
+    expect(banGomusu(kayit(), null, SIMDI).color).not.toBe(
+      banGomusu(kayit({ tur: 'sl' }), null, SIMDI).color,
+    );
+  });
+
+  it('sebep kartın gövdesinde', () => {
+    expect(banGomusu(kayit(), null, SIMDI).description).toContain('GEN-1');
+  });
+
+  it('oyuncu, süre ve atan alan olarak duruyor', () => {
+    const g = banGomusu(kayit(), null, SIMDI);
+    expect(alan(g, 'Oyuncu')).toBe('Osmanweb');
+    expect(alan(g, 'Süre')).toBe('kalıcı');
+    expect(alan(g, 'Atan')).toBe('Yalnızkurt');
   });
 
   it('süreli banda bitiş tarihi yazıyor', () => {
-    const g = gonderiGovdesi(kayit({ expiresAt: new Date('2026-11-01T18:30:00.000Z') }), null);
-    expect(g).toContain('2026-11-01 18:30 UTC');
+    const g = banGomusu(kayit({ expiresAt: new Date('2026-11-01T18:30:00.000Z') }), null, SIMDI);
+    expect(alan(g, 'Süre')).toContain('2026-11-01 18:30');
   });
 
-  it('SL ban gövdesi oyundan ban olmadığını söylüyor', () => {
-    const g = gonderiGovdesi(kayit({ tur: 'sl' }), null);
-    expect(g).toContain('manga lideri olamaz');
-    expect(g).not.toContain('**Oyundan ban**');
+  // render.ts ile aynı kural: bilinmeyen değer için alan eklemiyoruz,
+  // çünkü yer kaplıyor ama bir şey söylemiyor.
+  it('atan bilinmiyorsa alan hiç eklenmiyor', () => {
+    expect(alan(banGomusu(kayit({ verenAd: null }), null, SIMDI), 'Atan')).toBeUndefined();
   });
 
-  it('kanıt istemi her gönderide var', () => {
-    expect(gonderiGovdesi(kayit(), null)).toContain('Kanıtı');
+  it('kimliksiz oyuncuda kimlik alanı hiç eklenmiyor', () => {
+    const g = banGomusu(kayit({ steamId: null, eosId: null }), null, SIMDI);
+    expect(alan(g, 'Kimlikler')).toBeUndefined();
+    expect(JSON.stringify(g)).not.toContain('null');
   });
 
-  it('panel bağlantısı verilmezse satır hiç yazılmıyor', () => {
-    expect(gonderiGovdesi(kayit(), null)).not.toContain('http');
-    expect(gonderiGovdesi(kayit(), 'https://panel.altaisquad.com/oyuncular/p1')).toContain(
+  it('panel bağlantısı başlığı tıklanabilir yapıyor', () => {
+    expect(banGomusu(kayit(), null, SIMDI).url).toBeUndefined();
+    expect(banGomusu(kayit(), 'https://panel.altaisquad.com/oyuncular/p1', SIMDI).url).toBe(
       'https://panel.altaisquad.com/oyuncular/p1',
     );
   });
 
-  it('kimliksiz oyuncuda kimlik satırı boş kalmıyor', () => {
-    const g = gonderiGovdesi(kayit({ steamId: null, eosId: null }), null);
-    expect(g).not.toContain('Steam');
-    expect(g).not.toContain('EOS');
-    expect(g).not.toContain('null');
+  it('kanıt istemi altbilgide', () => {
+    expect(banGomusu(kayit(), null, SIMDI).footer?.text).toContain('Kanıtı');
   });
 });
 
@@ -109,13 +135,9 @@ describe('sebepteki yer tutucular', () => {
    * `**Sebep:** GEN-6 · … · Bitiş: {{expires}}` düştü. Veritabanındaki
    * sebep metni bu yer tutucuyu taşıyor (ban listesi üretilirken
    * dolduruluyor); gönderiyi yazan yol da doldurmak zorunda.
-   *
-   * Aynı hata ban mesajlarında üç ayrı yolda yaşandı; dördüncüsü buydu.
    */
-  const SIMDI = new Date('2026-10-25T21:00:00.000Z');
-
   it('{{expires}} yerine gerçek tarih yazıyor', () => {
-    const g = gonderiGovdesi(
+    const g = banGomusu(
       kayit({
         reason: 'GEN-6 · Reklam yapma · Bitiş: {{expires}}',
         expiresAt: new Date('2026-11-01T20:37:00.000Z'),
@@ -123,33 +145,30 @@ describe('sebepteki yer tutucular', () => {
       null,
       SIMDI,
     );
-    expect(g).not.toContain('{{');
-    expect(g).toContain('2026-11-01 20:37');
+    expect(g.description).not.toContain('{{');
+    expect(g.description).toContain('2026-11-01 20:37');
   });
 
   it('{{timeLeft}} yerine kalan süre yazıyor', () => {
-    const g = gonderiGovdesi(
-      kayit({
-        reason: 'Kalan süre: {{timeLeft}}',
-        expiresAt: new Date('2026-10-28T21:00:00.000Z'),
-      }),
+    const g = banGomusu(
+      kayit({ reason: 'Kalan: {{timeLeft}}', expiresAt: new Date('2026-10-28T21:00:00.000Z') }),
       null,
       SIMDI,
     );
-    expect(g).not.toContain('{{');
-    expect(g).toContain('3 gün');
+    expect(g.description).not.toContain('{{');
+    expect(g.description).toContain('3 gün');
   });
 
   it('kalıcı banda yer tutucu "kalıcı" oluyor', () => {
-    const g = gonderiGovdesi(kayit({ reason: 'Hile · Bitiş: {{expires}}' }), null, SIMDI);
-    expect(g).not.toContain('{{');
-    expect(g).toContain('kalıcı');
+    const g = banGomusu(kayit({ reason: 'Hile · Bitiş: {{expires}}' }), null, SIMDI);
+    expect(g.description).not.toContain('{{');
+    expect(g.description).toContain('kalıcı');
   });
 
   // Discord'da 180 karaktere kırpmanın sebebi yok: kanıt gönderisinde
   // sebebin yarısını göstermek yetkilinin aradığı bilgiyi gizler.
   it('uzun sebep ban listesi sınırına kırpılmıyor', () => {
     const uzun = `A${'b'.repeat(300)}`;
-    expect(gonderiGovdesi(kayit({ reason: uzun }), null, SIMDI)).toContain(uzun);
+    expect(banGomusu(kayit({ reason: uzun }), null, SIMDI).description).toContain(uzun);
   });
 });

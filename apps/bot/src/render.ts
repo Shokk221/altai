@@ -14,6 +14,8 @@ import type { AgentEvent } from '@altai/contracts';
 
 export interface Gomu {
   title: string;
+  /** Başlığı tıklanabilir yapar (oyuncu profili gibi). */
+  url?: string;
   description?: string;
   color: number;
   fields?: Array<{ name: string; value: string; inline?: boolean }>;

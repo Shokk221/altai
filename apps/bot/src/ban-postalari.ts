@@ -3,6 +3,7 @@ import { identitySchema, moderationSchema } from '@altai/db';
 import { logger, renderReason } from '@altai/shared';
 import { type ForumChannel, ThreadAutoArchiveDuration } from 'discord.js';
 import { and, asc, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
+import type { Gomu } from './render.js';
 
 /**
  * Panelden atılan her ban için Discord forum kanalında bir gönderi açar.
@@ -41,6 +42,7 @@ export interface BanKaydi {
   reason: string;
   expiresAt: Date | null;
   verenAd: string | null;
+  olusturuldu: Date;
 }
 
 /** Discord thread adı 100 karakterle sınırlı. */
@@ -65,39 +67,55 @@ export function gonderiBasligi(
   return tam.length > BASLIK_SINIRI ? `${tam.slice(0, BASLIK_SINIRI - 1)}…` : tam;
 }
 
+/** Ban kartı kırmızı, SL ban kehribar — bot'un mevcut paleti. */
+const RENK_BAN = 0xdc2626;
+const RENK_SL = 0xf59e0b;
+
 /**
- * Gönderinin ilk mesajı. Kanıtı yetkili buraya ekliyor.
+ * Gönderinin kartı.
+ *
+ * DÜZ METİN DEĞİL GÖMÜ: ilk sürüm markdown satırları basıyordu ve kanalda
+ * okunaksız duruyordu. Alanlar yan yana dizilince "kim, neden, ne kadar"
+ * tek bakışta okunuyor.
  *
  * SEBEP RENDERLENİYOR. Veritabanındaki metin yer tutucu taşıyor
  * (`… · Bitiş: {{expires}}`) ve ham gönderilirse kanalda süslü parantez
  * görünür — kanalda duran eski sistem gönderilerinden birinde aynı hata
- * var (`Ban: PZ Höllensturm-{{player.steamID}}`) ve gönderi başlığı
- * sonradan düzeltilemiyor. Kural `@altai/shared`'da, kopyası yok.
+ * var ve gönderi başlığı sonradan düzeltilemiyor. Kural
+ * `@altai/shared`'da, kopyası yok.
  */
-export function gonderiGovdesi(
-  k: BanKaydi,
-  panelUrl: string | null,
-  simdi: Date = new Date(),
-): string {
-  const satirlar: string[] = [];
-  satirlar.push(
-    k.tur === 'sl' ? '**SL ban** — oyuncu sunucuda kalır, manga lideri olamaz.' : '**Oyundan ban**',
-  );
-  satirlar.push(`**Sebep:** ${renderReason(k.reason, k.expiresAt, simdi, 500)}`);
-  const bitis = k.expiresAt
-    ? `${k.expiresAt.toISOString().slice(0, 16).replace('T', ' ')} UTC`
-    : 'kalıcı';
-  satirlar.push(`**Süre:** ${bitis}`);
-  if (k.verenAd) satirlar.push(`**Atan:** ${k.verenAd}`);
+export function banGomusu(k: BanKaydi, panelUrl: string | null, simdi: Date = new Date()): Gomu {
+  const slBan = k.tur === 'sl';
   const kimlikler = [
-    k.steamId ? `Steam ${k.steamId}` : null,
-    k.eosId ? `EOS ${k.eosId}` : null,
-  ].filter(Boolean);
-  if (kimlikler.length > 0) satirlar.push(kimlikler.join(' · '));
-  if (panelUrl) satirlar.push(panelUrl);
-  satirlar.push('');
-  satirlar.push('_Kanıtı (klip, ekran görüntüsü) bu gönderiye ekleyin._');
-  return satirlar.join('\n');
+    k.steamId ? `Steam \`${k.steamId}\`` : null,
+    k.eosId ? `EOS \`${k.eosId}\`` : null,
+  ].filter(Boolean) as string[];
+
+  return {
+    title: slBan ? 'SL Ban' : 'Ban',
+    ...(panelUrl ? { url: panelUrl } : {}),
+    // Sebep kartın gövdesi: moderatörün aradığı ilk bilgi bu.
+    description: renderReason(k.reason, k.expiresAt, simdi, 500),
+    color: slBan ? RENK_SL : RENK_BAN,
+    fields: [
+      { name: 'Oyuncu', value: k.oyuncuAdi?.trim() || 'bilinmeyen', inline: true },
+      {
+        name: 'Süre',
+        value: k.expiresAt
+          ? `${k.expiresAt.toISOString().slice(0, 16).replace('T', ' ')} UTC`
+          : 'kalıcı',
+        inline: true,
+      },
+      // Atan bilinmiyorsa alan HİÇ eklenmiyor: "bilinmeyen" yazan bir alan
+      // yer kaplıyor ama bir şey söylemiyor (render.ts ile aynı kural).
+      ...(k.verenAd?.trim() ? [{ name: 'Atan', value: k.verenAd.trim(), inline: true }] : []),
+      ...(kimlikler.length > 0
+        ? [{ name: 'Kimlikler', value: kimlikler.join('\n'), inline: false }]
+        : []),
+    ],
+    timestamp: k.olusturuldu.toISOString(),
+    footer: { text: 'Kanıtı (klip, ekran görüntüsü) bu gönderiye ekleyin' },
+  };
 }
 
 export interface BanPostaSecenekleri {
@@ -137,6 +155,7 @@ export async function bekleyenler(
       reason: moderationSchema.bans.reason,
       expiresAt: moderationSchema.bans.expiresAt,
       verenAd: moderationSchema.bans.issuedByName,
+      olusturuldu: moderationSchema.bans.createdAt,
     })
     .from(moderationSchema.bans)
     .innerJoin(
@@ -162,6 +181,7 @@ export async function bekleyenler(
       reason: moderationSchema.flagAssignments.reason,
       expiresAt: moderationSchema.flagAssignments.expiresAt,
       verenAd: moderationSchema.flagAssignments.addedByName,
+      olusturuldu: moderationSchema.flagAssignments.addedAt,
       etiketAdi: moderationSchema.flags.name,
     })
     .from(moderationSchema.flagAssignments)
@@ -252,7 +272,7 @@ export function createBanPostalari(opts: BanPostaSecenekleri): BanPostalari {
           name: gonderiBasligi(kayit),
           autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
           message: {
-            content: gonderiGovdesi(kayit, opts.profilUrl?.(kayit.playerId) ?? null),
+            embeds: [banGomusu(kayit, opts.profilUrl?.(kayit.playerId) ?? null)],
           },
           reason: kayit.tur === 'sl' ? 'SL ban kanıt gönderisi' : 'Ban kanıt gönderisi',
         });
