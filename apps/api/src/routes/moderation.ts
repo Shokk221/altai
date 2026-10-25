@@ -33,6 +33,22 @@ const BanBody = z.object({
   serverId: uuid.nullish(),
 });
 
+/**
+ * Ban kaldırma gerekçesi — ZORUNLU.
+ *
+ * Bir banın kaldırılması, verilmesi kadar bir karar: itiraz kabul
+ * edildi mi, yanlış kişi mi banlandı, yetkili hata mı yaptı? Gerekçesiz
+ * kaldırma, aylar sonra "bu ban neden düştü" sorusunu cevapsız
+ * bırakıyor ve aynı oyuncu tekrar gelince kimse ne olduğunu bilmiyor.
+ *
+ * Gerekçe denetim kaydına yazılıyor (`ban.revoke` olayının yükü):
+ * `bans` tablosunda kaldırma gerekçesi için sütun yok ve bu kayıt
+ * zaten "kim ne yaptı, neden" sorusunun yeri.
+ */
+const RevokeBody = z.object({
+  reason: z.string().trim().min(3).max(500),
+});
+
 const RecordBody = z.object({
   kind: z.enum(moderationSchema.PLAYER_RECORD_KINDS),
   body: z.string().trim().min(1).max(4000),
@@ -215,6 +231,11 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
       const banId = uuid.safeParse(req.params.id);
       if (!banId.success) return reply.code(400).send({ error: 'gecersiz_ban_id' });
 
+      const parsed = RevokeBody.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: 'gecersiz_girdi', detay: ilkHata(parsed.error) });
+      }
+
       const actor = req.authSession;
       const sonuc = await db.transaction(async (tx) => {
         // Zaten kaldırılmış banı ikinci kez kaldırmak revoked_at'i ve
@@ -240,6 +261,8 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
           action: 'ban.revoke',
           targetType: 'ban',
           targetId: banId.data,
+          // Gerekçe burada: "bu ban neden düştü" sorusunun tek cevabı.
+          payload: { reason: parsed.data.reason },
         });
         return { durum: 'ok' as const, ban: guncel };
       });

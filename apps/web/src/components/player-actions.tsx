@@ -1,6 +1,7 @@
 'use client';
 
 import type { Kural } from '@/components/kurallar';
+import { BanKaldirPenceresi } from '@/components/oyuncu/ban-kaldir-penceresi';
 import { BanPenceresi } from '@/components/oyuncu/ban-penceresi';
 import { KayitPenceresi, type KayitTuru } from '@/components/oyuncu/kayit-penceresi';
 import { Button } from '@/components/ui/button';
@@ -178,20 +179,39 @@ export function HizliEylemler({
   );
 }
 
+/**
+ * Banı kaldır — PENCERE açıyor, gerekçe soruyor.
+ *
+ * Önce tek tıkta çalışıyordu: onay da yoktu gerekçe de. Yanlışlıkla
+ * basmak geri alınamıyor (api ikinci kaldırmayı reddediyor, ilk
+ * kaldıranın kaydını korumak için) ve "bu ban neden düştü" sorusunun
+ * cevabı hiçbir yerde kalmıyordu.
+ */
 export function BanKaldir({ apiUrl, banId }: { apiUrl: string; banId: string }) {
-  const { calistir, bekliyor, hata } = useEylem(apiUrl);
+  const { calistir, bekliyor, hata, temizle } = useEylem(apiUrl);
+  const [acik, setAcik] = useState(false);
+
+  function kapat() {
+    setAcik(false);
+    temizle();
+  }
+
   return (
-    <div>
-      <Button
-        variant="soft"
-        size="sm"
-        onClick={() => calistir(`/bans/${banId}/revoke`)}
-        disabled={bekliyor}
-      >
-        {bekliyor ? 'Kaldırılıyor…' : 'Banı kaldır'}
+    <>
+      <Button variant="soft" size="sm" onClick={() => setAcik(true)}>
+        Banı kaldır
       </Button>
-      <Hata>{hata}</Hata>
-    </div>
+      <BanKaldirPenceresi
+        acik={acik}
+        onKapat={kapat}
+        bekliyor={bekliyor}
+        hata={hata}
+        onGonder={async (gerekce) => {
+          const ok = await calistir(`/bans/${banId}/revoke`, { reason: gerekce });
+          if (ok) kapat();
+        }}
+      />
+    </>
   );
 }
 
