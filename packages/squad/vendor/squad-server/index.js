@@ -232,7 +232,10 @@ export default class SquadServer extends EventEmitter {
     this.rcon.on('SQUAD_CREATED', async (data) => {
       // Önce normal şekilde işle
       data.player = await this.getPlayerByEOSID(data.playerEOSID, true);
-      data.player.squadID = data.squadID;
+      // Oyuncu RCON listesinde HENUZ olmayabilir: manga, oyuncu listeye
+      // islenmeden once kurulabiliyor. Korumasiz hali burada TypeError
+      // atip SquadServer'i dusuruyordu (canli sunucuda yasandi).
+      if (data.player) data.player.squadID = data.squadID;
 
       // ÖNEMLİ: Oyuncunun manga bilgisini hafızadaki (this.players) listesine manuel işle
       // Böylece sonraki olaylarda (Admin Cam vb.) güncel bilgi görünür.
@@ -248,6 +251,12 @@ export default class SquadServer extends EventEmitter {
       delete data.playerName;
       for (const k in data) if (k.startsWith('player') && k.endsWith('ID')) delete data[k];
 
+      if (!data.player) {
+        // Oyuncusu cozulemeyen olayi yaymiyoruz: alt taraf (adapter,
+        // admin cam) data.player'i dolu varsayiyor.
+        Logger.verbose('SquadServer', 1, `SQUAD_CREATED atlandi: oyuncu henuz listede yok (squad ${data.squadID})`);
+        return;
+      }
       this.emit('SQUAD_CREATED', data);
     });
   }

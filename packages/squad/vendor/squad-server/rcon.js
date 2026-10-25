@@ -159,8 +159,11 @@ export default class SquadRcon extends Rcon {
 
     for (const line of response.split('\n')) {
       const match = line.match(
-        /^ID: (?<playerID>\d+) \| Online IDs:([^|]+)\| Name: (?<name>.+) \| Team ID: (?<teamID>\d|N\/A) \| Squad ID: (?<squadID>\d+|N\/A) \| Is Leader: (?<isLeader>True|False) \| Role: (?<role>[A-Za-z_0-9]+).*$/
+        /^ID: (?<playerID>\d+) \| Online IDs:([^|]+)\| Name: (?<name>.+) \| Team ID: (?<teamID>\d|N\/A)(?: \| Party ID: [^|]*?)? \| Squad ID: (?<squadID>\d+|N\/A) \| Is Leader: (?<isLeader>True|False) \| Role: (?<role>[A-Za-z_0-9]+).*$/
       ); // 'role' patched: sometimes when server is under heavy load, role has ',' at end
+      // Squad 10.6: 'Party ID' (Team ID ile Squad ID arasında) ve sonda 'Vehicle' eklendi.
+      // Party ID opsiyonel tutuldu ki 10.6 öncesi format da eşleşsin; Vehicle'ı role'ün
+      // ardındaki '.*' zaten yutuyor. Upstream: Team-Silver-Sphere/SquadJS#455
       if (!match) continue;
 
       const data = match.groups;
