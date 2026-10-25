@@ -7,7 +7,8 @@
     "dev": "next dev --port 3000",
     "build": "next build && node scripts/check-css.mjs",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "dev:demo": "node scripts/dev-demo.mjs"
   },
   "dependencies": {
     "@altai/contracts": "workspace:*",

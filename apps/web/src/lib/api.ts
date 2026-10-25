@@ -15,8 +15,35 @@ function temizle(raw?: string): string | null {
   return s.endsWith('/') ? s.slice(0, -1) : s;
 }
 
+/**
+ * DEMO KİPİ — api ve Discord olmadan paneli gezmek için.
+ *
+ * NEDEN VAR: panel Postgres + api + Discord OAuth olmadan açılmıyor.
+ * Lokalde bu üçünü kurmadan hiçbir sayfa görülemiyordu; her rota "Giriş
+ * gerekli" kapısına düşüyordu ve tasarıma bakmak imkânsızdı.
+ *
+ * `ALTAI_DEMO=1` verildiğinde `getMe` sahte bir süper admin, `getJson` de
+ * src/fixtures/ornek.ts'teki örnek veriyi döndürüyor. Ağa hiç çıkılmıyor.
+ *
+ * ÜRETİMDE AÇILAMAZ: `NODE_ENV === 'production'` olduğunda bayrak ne
+ * olursa olsun yok sayılıyor. Bu bir kimlik doğrulama atlaması ve
+ * üretimde erişilebilir olması panelin tamamını açığa çıkarırdı; o yüzden
+ * kontrol tek bir yerde ve derleme kipine bağlı, yalnızca ortam
+ * değişkenine değil.
+ */
+export function demoKipi(): boolean {
+  return process.env.NODE_ENV !== 'production' && process.env.ALTAI_DEMO === '1';
+}
+
 /** Tarayıcının kullanacağı adres (mutlak, dışarıdan erişilebilir). */
 export function publicApiUrl(): string {
+  // Demo kipinde tarayıcı da aynı örnek veriyi görsün diye istekler
+  // panelin kendi sahte ucuna gidiyor (app/demo-api). Mutlak adres:
+  // canlı panel bundan WebSocket adresini türetiyor ve göreli bir yol
+  // `new WebSocket()` çağrısını hata fırlatarak düşürüyor.
+  if (demoKipi()) {
+    return `${temizle(process.env.ALTAI_DEMO_ORIGIN) ?? 'http://localhost:3000'}/demo-api`;
+  }
   return (
     temizle(process.env.SERVER_PUBLIC_URL) ??
     temizle(process.env.NEXT_PUBLIC_API_URL) ??
@@ -37,6 +64,14 @@ export interface Me {
   isBreakGlass: boolean;
 }
 
+const DEMO_ME: Me = {
+  id: 'u-demo',
+  discordUsername: 'yalnizkurt',
+  systemRole: 'super_admin',
+  permissions: [],
+  isBreakGlass: false,
+};
+
 async function fetchAuth(path: string): Promise<Response | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
@@ -51,6 +86,7 @@ async function fetchAuth(path: string): Promise<Response | null> {
 }
 
 export async function getMe(): Promise<Me | null> {
+  if (demoKipi()) return DEMO_ME;
   const res = await fetchAuth('/auth/me');
   if (!res?.ok) return null;
   return (await res.json()) as Me;
@@ -62,6 +98,12 @@ export async function getMe(): Promise<Me | null> {
  * farklı davranmalı.
  */
 export async function getJson<T>(path: string): Promise<T | null | undefined> {
+  if (demoKipi()) {
+    // Dinamik import: örnek veri yalnızca demo kipinde yükleniyor,
+    // üretim paketine girmiyor.
+    const { demoCevap } = await import('@/fixtures/demo-api');
+    return demoCevap<T>(path);
+  }
   const res = await fetchAuth(path);
   if (!res) return null;
   if (res.status === 404) return undefined;
