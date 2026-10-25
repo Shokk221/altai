@@ -9,6 +9,7 @@ import {
   savasKadrosu,
 } from '@altai/db';
 import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import { aktifEtiketKosulu } from './etiket-aktif.js';
 import {
   type OyuncuIstatistigi,
   type SiralamaSatiri,
@@ -225,7 +226,7 @@ async function etiketliOyuncular(
       identitySchema.players,
       eq(identitySchema.players.id, moderationSchema.flagAssignments.playerId),
     )
-    .where(and(isNull(moderationSchema.flagAssignments.removedAt), or(...kimlikKosulu)));
+    .where(and(aktifEtiketKosulu(new Date()), or(...kimlikKosulu)));
 
   // Ad süzmesi SQL'de değil burada: karşılaştırma harf duyarsız ve
   // Türkçe'ye özgü (İ/ı), veritabanının collation'ına bırakılamaz.
@@ -632,7 +633,8 @@ export async function sorguyuCoz(db: Db, query: AgentQuery, serverId?: string): 
         .where(
           and(
             eq(moderationSchema.flagAssignments.playerId, id),
-            isNull(moderationSchema.flagAssignments.removedAt),
+            // Süresi dolan etiket plugin'e GÖRÜNMEMELİ: yaptırım yolu bu.
+            aktifEtiketKosulu(new Date()),
           ),
         );
 

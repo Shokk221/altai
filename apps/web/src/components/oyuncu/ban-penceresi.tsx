@@ -68,6 +68,26 @@ export function banMetni(kural: Kural | null, detay: string, kalici: boolean): s
   return parcalar.join(' · ');
 }
 
+/** Ban türü. SL ban oyuncuyu sunucudan atmaz, yalnızca liderliği keser. */
+export type BanTuru = 'oyun' | 'sl';
+
+/**
+ * SL ban'da kaydedilen metin.
+ *
+ * `banMetni`den ayrı: oyun banında sona `Bitiş: {{expires}}` ekleniyor
+ * çünkü o metin ban listesine yazılıyor ve yer tutucu orada doluyor.
+ * SL ban'ın bitişi ayrı bir sütunda (`flag_assignments.expires_at`);
+ * metne yer tutucu koymak, hiçbir zaman doldurulmayacak bir `{{expires}}`
+ * bırakmak olurdu — oyuncuya ham görünen tam da bu hataydı.
+ */
+export function slBanMetni(kural: Kural | null, detay: string): string {
+  const parcalar: string[] = [];
+  if (kural) parcalar.push(`${kuralKodu(kural)} · ${kuralOzeti(kural)}`);
+  const d = detay.trim();
+  if (d) parcalar.push(d);
+  return parcalar.join(' · ');
+}
+
 export function BanPenceresi({
   acik,
   onKapat,
@@ -80,6 +100,7 @@ export function BanPenceresi({
   acik: boolean;
   onKapat: () => void;
   onGonder: (veri: {
+    tur: BanTuru;
     reason: string;
     expiresAt: string | null;
     internalNote: string | null;
@@ -90,6 +111,7 @@ export function BanPenceresi({
   bekliyor: boolean;
   hata: string | null;
 }) {
+  const [tur, setTur] = useState<BanTuru>('oyun');
   const [kuralId, setKuralId] = useState<string | null>(null);
   const [arama, setArama] = useState('');
   const [gun, setGun] = useState<number>(7);
@@ -109,14 +131,16 @@ export function BanPenceresi({
   const etkinGun = elleGun.trim() ? Number(elleGun) : gun;
   const kalici = etkinGun === 0;
 
-  // KAYDEDİLEN metin: `{{expires}}` yer tutucusu duruyor.
-  const kaydedilecek = banMetni(secili, detay, kalici);
+  const slBan = tur === 'sl';
+  // KAYDEDİLEN metin: oyun banında `{{expires}}` yer tutucusu duruyor.
+  const kaydedilecek = slBan ? slBanMetni(secili, detay) : banMetni(secili, detay, kalici);
   const bitis = kalici
     ? null
     : new Date(Date.now() + Math.max(1, etkinGun) * 86_400_000).toISOString();
-  // GÖSTERİLEN metin: yer tutucu dolu. "Oyuncu şunu görecek" diyorsak
-  // gerçekten göreceği şeyi basmalıyız.
-  const onizleme = banSebebi(kaydedilecek, bitis);
+  // GÖSTERİLEN metin: oyun banında yer tutucu dolduruluyor çünkü oyuncu
+  // o metni ban ekranında birebir görüyor. SL ban'da göreceği şey
+  // eklentinin kendi uyarısı; buradaki metin kayda geçiyor.
+  const onizleme = slBan ? kaydedilecek : banSebebi(kaydedilecek, bitis);
   // api sebebi 500 karakterle sınırlıyor; sınır KAYDEDİLEN metne.
   const cokUzun = kaydedilecek.length > 500;
   const gonderilebilir = secili !== null && !cokUzun && !bekliyor;
@@ -124,6 +148,7 @@ export function BanPenceresi({
   function gonder() {
     if (!secili || cokUzun) return;
     onGonder({
+      tur,
       reason: kaydedilecek,
       expiresAt: bitis,
       internalNote: icNot.trim() || null,
@@ -136,8 +161,12 @@ export function BanPenceresi({
       acik={acik}
       onKapat={onKapat}
       genislik="lg"
-      baslik={`${oyuncuAdi} için ban`}
-      aciklama="Ban bir kurala dayanmak zorunda. Oyuncu aşağıdaki metni görecek."
+      baslik={slBan ? `${oyuncuAdi} için SL ban` : `${oyuncuAdi} için ban`}
+      aciklama={
+        slBan
+          ? 'Oyuncu sunucuda kalır, yalnızca manga lideri olamaz. Yine de bir kurala dayanmak zorunda.'
+          : 'Ban bir kurala dayanmak zorunda. Oyuncu aşağıdaki metni görecek.'
+      }
       altBilgi={
         <div className="flex flex-wrap items-center justify-end gap-2">
           {hata ? <span className="mr-auto text-xs font-medium text-danger">{hata}</span> : null}
@@ -145,12 +174,68 @@ export function BanPenceresi({
             Vazgeç
           </Button>
           <Button variant="danger" size="sm" onClick={gonder} disabled={!gonderilebilir}>
-            {bekliyor ? 'Banlanıyor…' : kalici ? 'Kalıcı banla' : `${etkinGun} gün banla`}
+            {bekliyor
+              ? slBan
+                ? 'Uygulanıyor…'
+                : 'Banlanıyor…'
+              : slBan
+                ? kalici
+                  ? 'Kalıcı SL ban'
+                  : `${etkinGun} gün SL ban`
+                : kalici
+                  ? 'Kalıcı banla'
+                  : `${etkinGun} gün banla`}
           </Button>
         </div>
       }
     >
       <div className="flex flex-col gap-5">
+        {/* ---------------------------------------------- tür */}
+        <section>
+          <h3 className="text-footnote font-semibold">Ne uygulanacak?</h3>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {(
+              [
+                {
+                  deger: 'oyun' as const,
+                  baslik: 'Oyundan ban',
+                  alt: 'Sunucuya hiç giremez.',
+                },
+                {
+                  deger: 'sl' as const,
+                  baslik: 'SL ban',
+                  alt: 'Oynamaya devam eder, manga lideri olamaz.',
+                },
+              ] satisfies { deger: BanTuru; baslik: string; alt: string }[]
+            ).map((secenek) => (
+              <button
+                key={secenek.deger}
+                type="button"
+                onClick={() => setTur(secenek.deger)}
+                aria-pressed={tur === secenek.deger}
+                className={cn(
+                  'rounded-sm border px-3 py-2.5 text-left transition-colors',
+                  tur === secenek.deger
+                    ? 'border-accent bg-accent-weak'
+                    : 'border-border hover:border-border-strong',
+                )}
+              >
+                <span
+                  className={cn(
+                    'block text-footnote font-semibold',
+                    tur === secenek.deger ? 'text-accent-2' : 'text-fg',
+                  )}
+                >
+                  {secenek.baslik}
+                </span>
+                <span className="mt-0.5 block text-2xs leading-relaxed text-fg-muted">
+                  {secenek.alt}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+
         {/* ---------------------------------------------- kural */}
         <section>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -279,7 +364,9 @@ export function BanPenceresi({
             Ek açıklama <span className="font-normal text-fg-faint">isteğe bağlı</span>
           </h3>
           <p className="mt-1 text-2xs text-fg-faint">
-            Oyuncu bunu da görecek. Olayın kendisi: "mangayı dağıttı", "üçüncü kez".
+            {slBan
+              ? 'Gerekçeye eklenir. Olayın kendisi: "mangayı dağıttı", "üçüncü kez".'
+              : 'Oyuncu bunu da görecek. Olayın kendisi: "mangayı dağıttı", "üçüncü kez".'}
           </p>
           <Input
             value={detay}
@@ -291,7 +378,9 @@ export function BanPenceresi({
 
         {/* ---------------------------------------------- önizleme */}
         <section>
-          <h3 className="text-footnote font-semibold">Oyuncu şunu görecek</h3>
+          <h3 className="text-footnote font-semibold">
+            {slBan ? 'Kayda geçecek gerekçe' : 'Oyuncu şunu görecek'}
+          </h3>
           <p
             className={cn(
               'mt-2 rounded-sm border px-3 py-2.5 text-footnote leading-relaxed',
@@ -307,27 +396,35 @@ export function BanPenceresi({
           ) : null}
         </section>
 
-        {/* ------------------------------------- yalnızca yetkililer */}
-        <section className="border-t border-border pt-4">
-          <h3 className="text-footnote font-semibold">
-            Yalnızca yetkililer görür{' '}
-            <span className="font-normal text-fg-faint">isteğe bağlı</span>
-          </h3>
-          <div className="mt-2 flex flex-col gap-2">
-            <Input
-              value={icNot}
-              onChange={(e) => setIcNot(e.target.value)}
-              placeholder="İç not: karar gerekçesi, geçmiş uyarılar"
-              aria-label="İç not"
-            />
-            <Input
-              value={delil}
-              onChange={(e) => setDelil(e.target.value)}
-              placeholder="Delil: kayıt bağlantısı, ekran görüntüsü, saat"
-              aria-label="Delil"
-            />
-          </div>
-        </section>
+        {/*
+          Yalnızca yetkililer — SL ban'da GİZLİ.
+
+          `flag_assignments`'ta iç not ve delil için sütun yok. Alanları
+          gösterip gönderimde atmak, yetkilinin yazdığını sessizce çöpe
+          atmak olurdu; yazılamayacak bir alanı hiç sormamak dürüst olanı.
+        */}
+        {slBan ? null : (
+          <section className="border-t border-border pt-4">
+            <h3 className="text-footnote font-semibold">
+              Yalnızca yetkililer görür{' '}
+              <span className="font-normal text-fg-faint">isteğe bağlı</span>
+            </h3>
+            <div className="mt-2 flex flex-col gap-2">
+              <Input
+                value={icNot}
+                onChange={(e) => setIcNot(e.target.value)}
+                placeholder="İç not: karar gerekçesi, geçmiş uyarılar"
+                aria-label="İç not"
+              />
+              <Input
+                value={delil}
+                onChange={(e) => setDelil(e.target.value)}
+                placeholder="Delil: kayıt bağlantısı, ekran görüntüsü, saat"
+                aria-label="Delil"
+              />
+            </div>
+          </section>
+        )}
       </div>
     </Modal>
   );

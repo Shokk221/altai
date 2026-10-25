@@ -7,6 +7,8 @@ import { agentBagliMi, komutGonder, komutUlasti } from '../lib/agent-command-bus
 import { writeAudit } from '../lib/audit.js';
 import { requireSession } from '../lib/auth-guard.js';
 import { renderReason } from '../lib/ban-list-format.js';
+import { aktifEtiketKosulu, kaldirilmamisKosulu } from '../lib/etiket-aktif.js';
+import { slBanEtiketId } from '../lib/sl-ban.js';
 
 /**
  * Moderasyon yazma uçları — plan Faz 2'nin çekirdeği.
@@ -56,6 +58,19 @@ const RecordBody = z.object({
 });
 
 const FlagBody = z.object({ flagId: uuid });
+
+/**
+ * SL ban gövdesi — oyun banıyla aynı sözleşme.
+ *
+ * `reason` zorunlu ve en az 3 karakter: panel kural seçimini zorunlu
+ * tutuyor, api de arkasında durmalı. Gerekçesiz verilen bir yaptırım
+ * itirazda savunulamıyor.
+ */
+const SlBanBody = z.object({
+  reason: z.string().trim().min(3).max(500),
+  /** null = süresiz (elle kaldırılana kadar). */
+  expiresAt: z.string().datetime().nullable().default(null),
+});
 
 /** Zod hatasını okunur tek satıra indirger. */
 function ilkHata(err: z.ZodError): string {
@@ -443,7 +458,9 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
             and(
               eq(moderationSchema.flagAssignments.playerId, playerId.data),
               eq(moderationSchema.flagAssignments.flagId, parsed.data.flagId),
-              isNull(moderationSchema.flagAssignments.removedAt),
+              // Süresi dolmuş bir atama "zaten var" sayılmamalı: süreli SL
+              // ban bittikten sonra yenisi verilebilmeli.
+              aktifEtiketKosulu(new Date()),
             ),
           )
           .limit(1);
@@ -493,7 +510,9 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
           .where(
             and(
               eq(moderationSchema.flagAssignments.id, id.data),
-              isNull(moderationSchema.flagAssignments.removedAt),
+              // Kaldırma hedefi: süresi dolmuş ama kaldırılmamış satır da
+              // elle kaldırılabilmeli, o yüzden süreye bakılmıyor.
+              kaldirilmamisKosulu(),
             ),
           )
           .limit(1);
@@ -518,6 +537,90 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
 
       if (!sonuc) return reply.code(404).send({ error: 'acik_atama_bulunamadi' });
       return { assignment: sonuc };
+    },
+  );
+
+  // ------------------------------------------------------------- SL ban
+  /**
+   * Oyuncuyu manga liderliğinden men eder — SUNUCUDAN ATMADAN.
+   *
+   * Ayrı bir uç, genel etiket ucunun üstüne `reason`/`expiresAt`
+   * eklenmesi yerine: bu bir yaptırım ve gerekçesi zorunlu. Ayrıca
+   * paneldeki ban penceresi hangi etiketin kullanıldığını bilmek
+   * zorunda kalmıyor, adı sunucu tarafında çözülüyor (bkz. lib/sl-ban.ts).
+   *
+   * İzin `player.ban`: kullanıcıya ban olarak sunuluyor, yetkisi de
+   * banla aynı yerden gelmeli.
+   */
+  app.post<{ Params: { id: string }; Body: unknown }>(
+    '/players/:id/sl-ban',
+    { preHandler: requireSession(db, 'player.ban') },
+    async (req, reply) => {
+      const playerId = uuid.safeParse(req.params.id);
+      if (!playerId.success) return reply.code(400).send({ error: 'gecersiz_oyuncu_id' });
+
+      const parsed = SlBanBody.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: 'gecersiz_girdi', detay: ilkHata(parsed.error) });
+      }
+      if (!(await playerVarMi(playerId.data))) {
+        return reply.code(404).send({ error: 'oyuncu_bulunamadi' });
+      }
+
+      const expiresAt = parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : null;
+      // Geçmişe tarihli SL ban, verildiği anda bitmiş bir yaptırım demek.
+      if (expiresAt && expiresAt.getTime() <= Date.now()) {
+        return reply.code(400).send({ error: 'bitis_gecmiste' });
+      }
+
+      const flagId = await slBanEtiketId(db);
+      if (!flagId) return reply.code(500).send({ error: 'sl_ban_etiketi_cozulemedi' });
+
+      const actor = req.authSession;
+      const sonuc = await db.transaction(async (tx) => {
+        const [acik] = await tx
+          .select({ id: moderationSchema.flagAssignments.id })
+          .from(moderationSchema.flagAssignments)
+          .where(
+            and(
+              eq(moderationSchema.flagAssignments.playerId, playerId.data),
+              eq(moderationSchema.flagAssignments.flagId, flagId),
+              aktifEtiketKosulu(new Date()),
+            ),
+          )
+          .limit(1);
+        if (acik) return { durum: 'zaten_var' as const };
+
+        const [created] = await tx
+          .insert(moderationSchema.flagAssignments)
+          .values({
+            playerId: playerId.data,
+            flagId,
+            reason: parsed.data.reason,
+            expiresAt,
+            addedByUserId: actor?.id ?? null,
+            addedByName: actor?.discordUsername ?? null,
+            source: 'altai',
+          })
+          .returning();
+        if (!created) throw new Error('SL ban atanamadı');
+
+        await writeAudit(tx, {
+          actorUserId: actor?.id ?? null,
+          actorLabel: actor?.discordUsername ?? null,
+          requestId: String(req.id),
+          action: 'sl_ban.assign',
+          targetType: 'flag_assignment',
+          targetId: created.id,
+          payload: { playerId: playerId.data, reason: parsed.data.reason, expiresAt },
+        });
+        return { durum: 'ok' as const, assignment: created };
+      });
+
+      if (sonuc.durum === 'zaten_var') {
+        return reply.code(409).send({ error: 'sl_ban_zaten_var' });
+      }
+      return reply.code(201).send({ assignment: sonuc.assignment });
     },
   );
 }

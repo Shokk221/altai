@@ -25,6 +25,8 @@ const API_HATALARI: Record<string, string> = {
   ban_bulunamadi: 'Ban bulunamadı',
   ban_zaten_kaldirilmis: 'Bu ban zaten kaldırılmış',
   flag_zaten_atanmis: 'Bu etiket zaten atanmış',
+  sl_ban_zaten_var: 'Bu oyuncunun zaten aktif bir SL banı var',
+  sl_ban_etiketi_cozulemedi: 'SL ban etiketi bulunamadı, yöneticiye bildirin',
   acik_kayit_bulunamadi: 'Açık kayıt bulunamadı',
   bitis_gecmiste: 'Bitiş tarihi geçmişte olamaz',
   forbidden: 'Bu işlem için yetkiniz yok',
@@ -153,8 +155,18 @@ export function HizliEylemler({
           oyuncuAdi={playerAdi}
           bekliyor={bekliyor}
           hata={hata}
-          onGonder={async (veri) => {
-            const ok = await calistir(`/players/${playerId}/bans`, veri);
+          onGonder={async ({ tur, ...govde }) => {
+            // İki ayrı uç: SL ban oyuncuyu sunucudan atmıyor, `bans`
+            // tablosuna da düşmüyor (oraya düşen kayıt ban listesine ve
+            // giriş kickine karışırdı). `tur` gövdeden ayrılıyor; ban ucu
+            // onu tanımıyor.
+            const ok =
+              tur === 'sl'
+                ? await calistir(`/players/${playerId}/sl-ban`, {
+                    reason: govde.reason,
+                    expiresAt: govde.expiresAt,
+                  })
+                : await calistir(`/players/${playerId}/bans`, govde);
             if (ok) kapat();
           }}
         />

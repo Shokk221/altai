@@ -106,6 +106,29 @@ export const flagAssignments = pgTable(
     // Kaldırılan flag silinmez, işaretlenir — "bu oyuncuda ne zaman SL ban
     // vardı" sorusu geçmişe dönük cevaplanabilmeli.
     removedAt: timestamp('removed_at', { withTimezone: true }),
+    /**
+     * Süreli etiketler için bitiş. null = süresiz.
+     *
+     * SL ban için eklendi: yetkili "7 gün manga lideri olamasın" diyebilmeli
+     * ve sürenin dolması bir insanın hatırlamasına bağlı olmamalı. Süresi
+     * dolan atama SİLİNMİYOR ve `removedAt` de yazılmıyor — ikisi farklı
+     * şeyler: biri kendiliğinden bitti, diğerini bir yetkili kaldırdı.
+     * "Bu oyuncuya ne zaman SL ban verilmişti" sorusu ikisinde de
+     * cevaplanabilir kalıyor.
+     *
+     * UYARI: bu alan eklendikten sonra "etiket aktif mi" sorusu artık
+     * yalnızca `removedAt`'e bakarak cevaplanamaz. Kural tek yerde:
+     * apps/api/src/lib/etiket-aktif.ts.
+     */
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    /**
+     * Neden verildi.
+     *
+     * Serbest etiketlerde boş kalabilir, ama yaptırım etiketlerinde (SL ban)
+     * panel zorunlu tutuyor: hangi kurala dayandığı yazılmadan verilen bir
+     * yaptırım itirazda savunulamıyor. Ban tarafındaki kuralın aynısı.
+     */
+    reason: text('reason'),
     addedByUserId: uuid('added_by_user_id').references(() => users.id),
     addedByName: text('added_by_name'),
     source: text('source').$type<RecordSource>().notNull().default('altai'),

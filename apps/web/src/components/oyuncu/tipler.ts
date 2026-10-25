@@ -27,6 +27,17 @@ export interface Flag {
   color: string | null;
   addedAt: string;
   removedAt: string | null;
+  /** Süreli etiketlerde bitiş; null = süresiz. SL ban için eklendi. */
+  expiresAt: string | null;
+  /** Yaptırım etiketlerinde zorunlu (SL ban), serbest etiketlerde boş. */
+  reason: string | null;
+  /**
+   * Sunucu hesaplıyor: kaldırılmamış VE süresi dolmamış.
+   *
+   * Tarayıcıda `!removedAt` diye hesaplamak süre eklendikten sonra yanlış
+   * cevap verir; kural api'de tek yerde (lib/etiket-aktif.ts).
+   */
+  active: boolean;
 }
 
 export interface Kayit {

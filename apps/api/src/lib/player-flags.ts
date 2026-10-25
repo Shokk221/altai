@@ -2,6 +2,7 @@ import type { Db } from '@altai/db';
 import { moderationSchema } from '@altai/db';
 import { logger } from '@altai/shared';
 import { and, eq, isNull } from 'drizzle-orm';
+import { aktifEtiketKosulu, kaldirilmamisKosulu } from './etiket-aktif.js';
 
 /**
  * Otomatik etiket atama/kaldırma.
@@ -68,7 +69,7 @@ export async function aktifAtamaVarMi(db: Db, playerId: string, flagId: string):
       and(
         eq(moderationSchema.flagAssignments.playerId, playerId),
         eq(moderationSchema.flagAssignments.flagId, flagId),
-        isNull(moderationSchema.flagAssignments.removedAt),
+        aktifEtiketKosulu(new Date()),
       ),
     )
     .limit(1);
@@ -110,7 +111,7 @@ export async function etiketiUygula(
         and(
           eq(moderationSchema.flagAssignments.playerId, playerId),
           eq(moderationSchema.flagAssignments.flagId, flagId),
-          isNull(moderationSchema.flagAssignments.removedAt),
+          kaldirilmamisKosulu(),
         ),
       );
     logger.info({ playerId, flag: etiket.ad, ekleyen }, 'otomatik etiket kaldırıldı');

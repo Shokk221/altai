@@ -204,6 +204,13 @@
       "when": 1792861179186,
       "tag": "0028_bm_canli_ayna",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1792947037310,
+      "tag": "0029_sl_ban_suresi",
+      "breakpoints": true
     }
   ]
 }

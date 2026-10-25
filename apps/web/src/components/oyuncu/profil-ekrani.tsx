@@ -85,7 +85,7 @@ export function OyuncuProfili({
   };
   const ozet = sicilOzeti(profil);
   const aktifBan = profil.bans.find((b) => b.active);
-  const aktifEtiketler = profil.flags.filter((f) => !f.removedAt);
+  const aktifEtiketler = profil.flags.filter((f) => f.active);
   const acikKayit = profil.records.filter((k) => !k.resolvedAt);
   const kd = oyun.olum > 0 ? (oyun.kill / oyun.olum).toFixed(2) : String(oyun.kill);
   const bmSaniye = bm.sunucular.reduce((t, s) => t + (s.timePlayed ?? 0), 0);
@@ -114,7 +114,21 @@ export function OyuncuProfili({
               {aktifBan ? <Badge tone="danger">Banlı</Badge> : null}
               {aktifEtiketler.map((f) => (
                 <span key={f.id} className="inline-flex items-center gap-1">
-                  <Badge tone="info">{f.name}</Badge>
+                  {/*
+                    Süre ve gerekçe rozette değil `title`'da: rozet dar ve
+                    oyuncunun adının yanında duruyor. SL ban'da ikisi de
+                    dolu, serbest etiketlerde boş.
+                  */}
+                  <Badge tone="info">
+                    <span
+                      title={[f.reason, f.expiresAt ? `Bitiş: ${banBitis(f.expiresAt)}` : null]
+                        .filter(Boolean)
+                        .join(' — ')}
+                    >
+                      {f.name}
+                      {f.expiresAt ? ' ⏳' : ''}
+                    </span>
+                  </Badge>
                   {yetkiler.etiketYonetir ? <EtiketKaldir apiUrl={apiUrl} atamaId={f.id} /> : null}
                 </span>
               ))}

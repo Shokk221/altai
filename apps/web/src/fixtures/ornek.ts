@@ -15,6 +15,8 @@
  * 3.901 mesajlı oyuncu gerçek; burada ilk sayfası duruyor.
  */
 
+import type { Flag } from '@/components/oyuncu/tipler';
+
 /** Önizleme sabit görünsün diye tek bir "şimdi": her açılışta kaymıyor. */
 export const SIMDI = new Date('2026-10-24T21:40:00+03:00');
 
@@ -93,6 +95,9 @@ export const ORNEK_OYUNCU = {
       color: '#d9a441',
       addedAt: once(23 * gun),
       removedAt: null,
+      expiresAt: null,
+      reason: null,
+      active: true,
     },
     {
       id: 'fa-44',
@@ -101,6 +106,10 @@ export const ORNEK_OYUNCU = {
       color: '#4a8ad6',
       addedAt: once(5 * gun),
       removedAt: null,
+      // Süreli etiket örneği: SL ban demo'da da görünsün.
+      expiresAt: sonra(4 * gun),
+      reason: 'SL-6 · Aktif objektiflere oynamama',
+      active: true,
     },
     {
       id: 'fa-12',
@@ -109,8 +118,11 @@ export const ORNEK_OYUNCU = {
       color: null,
       addedAt: once(402 * gun),
       removedAt: once(330 * gun),
+      expiresAt: null,
+      reason: null,
+      active: false,
     },
-  ],
+  ] satisfies Flag[],
   records: [
     {
       id: 'r-903',

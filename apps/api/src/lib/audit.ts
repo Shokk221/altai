@@ -20,6 +20,14 @@ export type AuditAction =
   | 'record.resolve'
   | 'flag.assign'
   | 'flag.remove'
+  /**
+   * SL ban — oyuncu sunucuda kalır, yalnızca manga lideri olamaz.
+   *
+   * `flag.assign`'dan ayrı duruyor: altta aynı mekanizma (etiket) olsa da
+   * bu bir yaptırım kararı ve denetimde "etiket eklendi" ile aynı satıra
+   * düşmemeli. Kaldırma `flag.remove` üzerinden gidiyor.
+   */
+  | 'sl_ban.assign'
   | 'role_mapping.upsert'
   | 'role_mapping.delete'
   /** Oyun içi grup (Admins.cfg `Group=` satırı) tanımı. */

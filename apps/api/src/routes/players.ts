@@ -5,6 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import { requireSession } from '../lib/auth-guard.js';
 import { aktifBanKosulu, banAktifMi } from '../lib/ban-active.js';
 import { bmProfilAcildi, bmProfilVerisi, bmTazele } from '../lib/bm-sync.js';
+import { aktifEtiketKosulu, etiketAktifMi } from '../lib/etiket-aktif.js';
 import { galibiyetOrani } from '../lib/player-stats.js';
 
 /**
@@ -284,6 +285,8 @@ export async function playerRoutes(app: FastifyInstance, opts: { db: Db }) {
           color: moderationSchema.flags.color,
           addedAt: moderationSchema.flagAssignments.addedAt,
           removedAt: moderationSchema.flagAssignments.removedAt,
+          expiresAt: moderationSchema.flagAssignments.expiresAt,
+          reason: moderationSchema.flagAssignments.reason,
         })
         .from(moderationSchema.flagAssignments)
         .innerJoin(
@@ -375,7 +378,10 @@ export async function playerRoutes(app: FastifyInstance, opts: { db: Db }) {
         // tanımı kullanıyor, böylece panel ile sunucu ayrışamaz.
         active: banAktifMi(b, now),
       })),
-      flags: flagRows,
+      // Etiketin aktifliğini SUNUCU hesaplıyor, ban'da olduğu gibi: kural
+      // süre eklendikten sonra iki koşullu ve tarayıcıda ikinci kez
+      // yazılırsa biri güncellenip diğeri unutulur.
+      flags: flagRows.map((f) => ({ ...f, active: etiketAktifMi(f, now) })),
       records,
       sohbet,
       oyun: {
@@ -527,10 +533,7 @@ async function decorate(db: Db, rows: BaseRow[]) {
       eq(moderationSchema.flags.id, moderationSchema.flagAssignments.flagId),
     )
     .where(
-      and(
-        inArray(moderationSchema.flagAssignments.playerId, ids),
-        isNull(moderationSchema.flagAssignments.removedAt),
-      ),
+      and(inArray(moderationSchema.flagAssignments.playerId, ids), aktifEtiketKosulu(new Date())),
     );
   const etiketler = new Map<string, string[]>();
   for (const f of etiketSatirlari) {
