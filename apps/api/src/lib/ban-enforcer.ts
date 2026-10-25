@@ -6,6 +6,7 @@ import { and, eq, isNull, or } from 'drizzle-orm';
 import { kaydet } from './activity-log.js';
 import { agentBagliMi, komutGonder } from './agent-command-bus.js';
 import { aktifBanKosulu } from './ban-active.js';
+import { renderReason } from './ban-list-format.js';
 import { panelKomutuIsaretle } from './panel-komut-izi.js';
 import { oyuncuAdi } from './server-state.js';
 
@@ -66,6 +67,11 @@ export interface BanliOyuncu {
   steamId: string | null;
   eosId: string | null;
   reason: string;
+  /**
+   * Bitiş — `reason` içindeki `{{expires}}` / `{{timeLeft}}` yer
+   * tutucularını doldurmak için gerekiyor. null = kalıcı.
+   */
+  expiresAt: Date | null;
 }
 
 export interface OnlineKimlik {
@@ -122,6 +128,7 @@ async function aktifBanlar(db: Db, serverId: string): Promise<BanliOyuncu[]> {
       steamId: identitySchema.players.steamId,
       eosId: identitySchema.players.eosId,
       reason: moderationSchema.bans.reason,
+      expiresAt: moderationSchema.bans.expiresAt,
     })
     .from(moderationSchema.bans)
     .innerJoin(
@@ -137,10 +144,32 @@ async function aktifBanlar(db: Db, serverId: string): Promise<BanliOyuncu[]> {
     );
 }
 
+/**
+ * Oyuncunun ban ekranında GÖRECEĞİ metin.
+ *
+ * `reason` veritabanında yer tutucuyla duruyor ("… · Bitiş:
+ * {{expires}}"): bitiş bilgisi ban atıldığı anda değil, oyuncu atıldığı
+ * anda hesaplanmalı — 14 günlük bir banın üçüncü gününde atılan oyuncu
+ * kalan süreyi doğru görmeli.
+ *
+ * Yer tutucuyu doldurmak ban listesi (.cfg) üretiminde zaten vardı ama
+ * CANLI KICK yolunda YOKTU: oyuncu ban ekranında literal "{{expires}}"
+ * okuyordu. Aynı `renderReason` ikisinde de kullanılıyor ki iki yol aynı
+ * metni versin.
+ *
+ * Dışa açık olması test içindir: bu hata sessiz, yalnızca oyuncunun
+ * ekranında görünüyor ve kod tarafında hiçbir şey patlamıyor.
+ */
+export function kickSebebi(ban: BanliOyuncu, now: Date): string {
+  return renderReason(ban.reason, ban.expiresAt, now);
+}
+
 async function at(slug: string, ban: BanliOyuncu) {
+  const sebep = kickSebebi(ban, new Date());
+
   if (kip === 'dry') {
     logger.warn(
-      { slug, playerId: ban.playerId, steamId: ban.steamId, reason: ban.reason },
+      { slug, playerId: ban.playerId, steamId: ban.steamId, reason: sebep },
       'KURU KOŞU: banlı oyuncu atılacaktı (BAN_ENFORCEMENT=dry)',
     );
     return;
@@ -151,7 +180,7 @@ async function at(slug: string, ban: BanliOyuncu) {
   const sonuc = await komutGonder(
     slug,
     'kick',
-    { steamId: ban.steamId, eosId: ban.eosId, reason: ban.reason },
+    { steamId: ban.steamId, eosId: ban.eosId, reason: sebep },
     'ban-enforcer',
   );
   if (sonuc.durum === 'ok') {
@@ -170,7 +199,7 @@ async function at(slug: string, ban: BanliOyuncu) {
     targetType: 'player',
     targetId: ban.playerId,
     targetLabel: ban.steamId,
-    payload: { sunucu: slug, sebep: ban.reason, sonuc: sonuc.durum },
+    payload: { sunucu: slug, sebep, sonuc: sonuc.durum },
   });
 }
 
@@ -197,6 +226,7 @@ export async function girisAninda(
       steamId: identitySchema.players.steamId,
       eosId: identitySchema.players.eosId,
       reason: moderationSchema.bans.reason,
+      expiresAt: moderationSchema.bans.expiresAt,
     })
     .from(moderationSchema.bans)
     .innerJoin(
