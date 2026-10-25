@@ -1,6 +1,6 @@
 import type { Db } from '@altai/db';
 import { identitySchema, moderationSchema } from '@altai/db';
-import { logger } from '@altai/shared';
+import { logger, renderReason } from '@altai/shared';
 import { type ForumChannel, ThreadAutoArchiveDuration } from 'discord.js';
 import { and, asc, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
 
@@ -65,13 +65,25 @@ export function gonderiBasligi(
   return tam.length > BASLIK_SINIRI ? `${tam.slice(0, BASLIK_SINIRI - 1)}…` : tam;
 }
 
-/** Gönderinin ilk mesajı. Kanıtı yetkili buraya ekliyor. */
-export function gonderiGovdesi(k: BanKaydi, panelUrl: string | null): string {
+/**
+ * Gönderinin ilk mesajı. Kanıtı yetkili buraya ekliyor.
+ *
+ * SEBEP RENDERLENİYOR. Veritabanındaki metin yer tutucu taşıyor
+ * (`… · Bitiş: {{expires}}`) ve ham gönderilirse kanalda süslü parantez
+ * görünür — kanalda duran eski sistem gönderilerinden birinde aynı hata
+ * var (`Ban: PZ Höllensturm-{{player.steamID}}`) ve gönderi başlığı
+ * sonradan düzeltilemiyor. Kural `@altai/shared`'da, kopyası yok.
+ */
+export function gonderiGovdesi(
+  k: BanKaydi,
+  panelUrl: string | null,
+  simdi: Date = new Date(),
+): string {
   const satirlar: string[] = [];
   satirlar.push(
     k.tur === 'sl' ? '**SL ban** — oyuncu sunucuda kalır, manga lideri olamaz.' : '**Oyundan ban**',
   );
-  satirlar.push(`**Sebep:** ${k.reason}`);
+  satirlar.push(`**Sebep:** ${renderReason(k.reason, k.expiresAt, simdi, 500)}`);
   const bitis = k.expiresAt
     ? `${k.expiresAt.toISOString().slice(0, 16).replace('T', ' ')} UTC`
     : 'kalıcı';

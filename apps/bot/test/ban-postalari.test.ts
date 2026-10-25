@@ -102,3 +102,54 @@ describe('gonderiGovdesi', () => {
     expect(g).not.toContain('null');
   });
 });
+
+describe('sebepteki yer tutucular', () => {
+  /**
+   * CANLIDA YAŞANDI. İlk sürüm sebebi HAM gönderiyordu ve Discord'a
+   * `**Sebep:** GEN-6 · … · Bitiş: {{expires}}` düştü. Veritabanındaki
+   * sebep metni bu yer tutucuyu taşıyor (ban listesi üretilirken
+   * dolduruluyor); gönderiyi yazan yol da doldurmak zorunda.
+   *
+   * Aynı hata ban mesajlarında üç ayrı yolda yaşandı; dördüncüsü buydu.
+   */
+  const SIMDI = new Date('2026-10-25T21:00:00.000Z');
+
+  it('{{expires}} yerine gerçek tarih yazıyor', () => {
+    const g = gonderiGovdesi(
+      kayit({
+        reason: 'GEN-6 · Reklam yapma · Bitiş: {{expires}}',
+        expiresAt: new Date('2026-11-01T20:37:00.000Z'),
+      }),
+      null,
+      SIMDI,
+    );
+    expect(g).not.toContain('{{');
+    expect(g).toContain('2026-11-01 20:37');
+  });
+
+  it('{{timeLeft}} yerine kalan süre yazıyor', () => {
+    const g = gonderiGovdesi(
+      kayit({
+        reason: 'Kalan süre: {{timeLeft}}',
+        expiresAt: new Date('2026-10-28T21:00:00.000Z'),
+      }),
+      null,
+      SIMDI,
+    );
+    expect(g).not.toContain('{{');
+    expect(g).toContain('3 gün');
+  });
+
+  it('kalıcı banda yer tutucu "kalıcı" oluyor', () => {
+    const g = gonderiGovdesi(kayit({ reason: 'Hile · Bitiş: {{expires}}' }), null, SIMDI);
+    expect(g).not.toContain('{{');
+    expect(g).toContain('kalıcı');
+  });
+
+  // Discord'da 180 karaktere kırpmanın sebebi yok: kanıt gönderisinde
+  // sebebin yarısını göstermek yetkilinin aradığı bilgiyi gizler.
+  it('uzun sebep ban listesi sınırına kırpılmıyor', () => {
+    const uzun = `A${'b'.repeat(300)}`;
+    expect(gonderiGovdesi(kayit({ reason: uzun }), null, SIMDI)).toContain(uzun);
+  });
+});

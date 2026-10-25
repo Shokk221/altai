@@ -10,7 +10,14 @@
  * ban yine tutar. Fazladan satırın maliyeti yok (20 bin ban ~2 MB).
  */
 
+import { renderReason } from '@altai/shared';
 import { type YaptirimKipi, banAktifMi } from './ban-active.js';
+
+// Kural `@altai/shared` içinde: aynı metni gönderen dört yol var (ban
+// listesi, periyodik kick, anlık kick, Discord kanıt gönderisi) ve
+// dördüncüsü apps/api dışında. Buradan yeniden dışa açılıyor ki mevcut
+// çağıranlar (ban-enforcer, routes/moderation) değişmesin.
+export { renderReason };
 
 export interface BanListEntry {
   steamId: string | null;
@@ -18,36 +25,6 @@ export interface BanListEntry {
   reason: string;
   /** null = kalıcı ban */
   expiresAt: Date | null;
-}
-
-const MAX_REASON_LENGTH = 180;
-
-/**
- * BM'nin sebep metinlerinde şablon yer tutucuları var ({{expires}} gibi).
- * Bunlar BM tarafında dolduruluyordu; ham bırakırsak oyuncu ban ekranında
- * literal "{{expires}}" görür.
- */
-export function renderReason(reason: string, expiresAt: Date | null, now: Date): string {
-  const expiryText = expiresAt ? expiresAt.toISOString().slice(0, 16).replace('T', ' ') : 'kalıcı';
-  const leftText = expiresAt ? humanizeDuration(expiresAt.getTime() - now.getTime()) : 'kalıcı';
-
-  const out = reason
-    .replaceAll('{{expires}}', expiryText)
-    .replaceAll('{{timeLeft}}', leftText)
-    // Satır sonu ban listesini bozar: bir sonraki satır geçersiz kayıt olur.
-    .replace(/[\r\n]+/g, ' ')
-    .trim();
-
-  return out.length > MAX_REASON_LENGTH ? `${out.slice(0, MAX_REASON_LENGTH - 1)}…` : out;
-}
-
-function humanizeDuration(ms: number): string {
-  if (ms <= 0) return 'süresi doldu';
-  const hours = Math.floor(ms / 3_600_000);
-  if (hours < 24) return `${hours} saat`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} gün`;
-  return `${Math.floor(days / 30)} ay`;
 }
 
 export interface FormatOptions {
