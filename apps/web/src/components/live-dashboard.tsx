@@ -234,14 +234,6 @@ export function LiveDashboard({
     };
   }, [wsUrl]);
 
-  // Otomatik kaydırma YALNIZCA en alttayken: biri yukarı kaydırıp eski bir
-  // satırı okurken listeyi zorla aşağı çekmek en sinir bozucu davranış.
-  useEffect(() => {
-    if (!altta.current) return;
-    const el = akisKutusu.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, []);
-
   const sunucuListesi = useMemo(
     () => Object.values(sunucular).sort((a, b) => a.serverSlug.localeCompare(b.serverSlug)),
     [sunucular],
@@ -279,7 +271,30 @@ export function LiveDashboard({
     return m;
   }, [olaylar]);
 
-  const gosterilenOlaylar = olaySuzgeci ? olaylar.filter((o) => o.tur === olaySuzgeci) : olaylar;
+  // Memoize: hem her render'da 600 kayda kadar süzmeyi tekrarlamamak için,
+  // hem de aşağıdaki kaydırma efektinin bağımlılığı olabilmesi için —
+  // her render'da yeni bir dizi üretseydi efekt de her render'da koşardı.
+  const gosterilenOlaylar = useMemo(
+    () => (olaySuzgeci ? olaylar.filter((o) => o.tur === olaySuzgeci) : olaylar),
+    [olaylar, olaySuzgeci],
+  );
+
+  // Otomatik kaydırma YALNIZCA en alttayken: biri yukarı kaydırıp eski bir
+  // satırı okurken listeyi zorla aşağı çekmek en sinir bozucu davranış.
+  //
+  // Daha önce bağımlılık dizisi BOŞTU: efekt yalnızca ilk render'da, akış
+  // henüz boşken koşuyor ve sonraki hiçbir olayda tetiklenmiyordu —
+  // kaydırma bu yüzden hiç çalışmadı.
+  //
+  // Bağımlılık liste KİMLİĞİ, uzunluğu değil. Uzunluk yanlış olurdu: liste
+  // OLAY_TAVANI'na (600) ulaştıktan sonra her yeni olayda bir eskisi
+  // düşüyor ve uzunluk sabit kalıyor; panel uzun süre açık kaldığında
+  // kaydırma tam da o noktada sessizce ölürdü.
+  useEffect(() => {
+    if (!altta.current || gosterilenOlaylar.length === 0) return;
+    const el = akisKutusu.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [gosterilenOlaylar]);
 
   const toplamOyuncu = sunucuListesi.reduce((a, s) => a + s.playerCount, 0);
   const toplamKuyruk = sunucuListesi.reduce((a, s) => a + s.queueCount, 0);
