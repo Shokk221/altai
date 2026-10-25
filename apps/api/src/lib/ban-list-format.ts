@@ -10,7 +10,7 @@
  * ban yine tutar. Fazladan satırın maliyeti yok (20 bin ban ~2 MB).
  */
 
-import { banAktifMi } from './ban-active.js';
+import { type YaptirimKipi, banAktifMi } from './ban-active.js';
 
 export interface BanListEntry {
   steamId: string | null;
@@ -55,10 +55,23 @@ export interface FormatOptions {
   now: Date;
   /** Başlık yorumunda görünür; hangi sunucu için üretildiği belli olsun. */
   label?: string;
+  /**
+   * Yaptırım kipi — listeyi DEĞİŞTİRMEZ, yalnızca başlıkta uyarı yazar.
+   *
+   * Hangi banların sunulduğunu SQL belirliyor (bkz. routes/ban-list.ts →
+   * yaptirimKaynakKosulu). Burada durmasının sebebi şu: `altai` kipinde
+   * liste yalnızca panel banlarını içeriyor ve bugün panel banı neredeyse
+   * yok — yani dosya neredeyse BOŞ geliyor. Boş bir ban listesi, "ban yok"
+   * ile "liste süzülmüş" arasındaki farkı dosyaya bakan birine
+   * söylemiyor. Oyun sunucusunu bu uca çeviren kişi, 20 binden fazla
+   * arşiv banının neden içinde olmadığını dosyanın kendisinden
+   * okuyabilmeli.
+   */
+  kip?: YaptirimKipi;
 }
 
 export function formatBanList(opts: FormatOptions): string {
-  const { entries, now, label } = opts;
+  const { entries, now, label, kip } = opts;
   const lines: string[] = [];
   const seen = new Set<string>();
   let banCount = 0;
@@ -84,6 +97,19 @@ export function formatBanList(opts: FormatOptions): string {
     if (wrote) banCount++;
   }
 
+  // `altai` kipinde liste SÜZÜLMÜŞ: boşluğu "ban yok" sanmak, arşivdeki
+  // yirmi binden fazla banın sessizce uygulanmamasına yol açar.
+  const valfUyarisi =
+    kip === 'altai'
+      ? [
+          '//// DİKKAT — yaptırım kipi: altai. Bu liste YALNIZCA panelden',
+          '//// atılan banları içeriyor. BattleMetrics arşivinden gelen',
+          '//// banlar burada YOK; onları hâlâ ESKİ sistem uyguluyor.',
+          '//// Oyun sunucusunu bu listeye çevirmeden önce arşivin',
+          '//// tazelenmesi ve BAN_ENFORCEMENT kararı gözden geçirilmeli.',
+        ]
+      : [];
+
   // Girdi ile çıktı arasındaki fark bilinçli ve açıkça yazılıyor: BM verisinde
   // aynı oyuncuya aynı bitiş tarihiyle defalarca ban atılmış kayıtlar var
   // (otomatik TK banları). Oyun için etkileri aynı olduğundan tek satıra
@@ -92,6 +118,7 @@ export function formatBanList(opts: FormatOptions): string {
   const header = [
     '//////////////////////////////////////////////////////////////////////',
     '//// Altai v2 — otomatik üretilmiş ban listesi. ELLE DÜZENLEMEYİN. ////',
+    ...valfUyarisi,
     `//// ${banCount} tekil ban (${entries.length} kayıttan), ${lines.length} kimlik satırı`,
     '//// Aynı oyuncuya aynı bitiş tarihiyle atılmış banlar tek satıra indi.',
     `//// üretim: ${now.toISOString()}${label ? ` — ${label}` : ''}`,

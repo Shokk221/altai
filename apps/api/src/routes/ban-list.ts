@@ -3,7 +3,7 @@ import { identitySchema, moderationSchema, presenceSchema } from '@altai/db';
 import type { AppConfig } from '@altai/shared';
 import { and, eq, gt, isNull, or } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
-import { aktifBanKosulu } from '../lib/ban-active.js';
+import { aktifBanKosulu, yaptirimKaynakKosulu } from '../lib/ban-active.js';
 import { formatBanList } from '../lib/ban-list-format.js';
 import { timingSafeCompare } from '../lib/timing-safe.js';
 
@@ -39,10 +39,17 @@ export async function banListRoutes(app: FastifyInstance, opts: { db: Db; config
       // hesaplamanın ayrışmaması için ikisi de oradan geliyor.
       const active = aktifBanKosulu(now);
 
+      // GÜVENLİK VALFİ — kural enforcer ile TEK yerde: lib/ban-active.ts.
+      // Bu yol uzun süre valfsizdi ve tehlikesi gecikmeli: oyun sunucusu
+      // RemoteBanListHosts.cfg ile bu uca çevrildiği gün, dondurulmuş BM
+      // arşivinin tamamı tek seferde uygulanmaya başlardı — yani `altai`
+      // kipinin önlemek için var olduğu şey.
+      const gecerli = and(active, yaptirimKaynakKosulu(config.BAN_ENFORCEMENT));
+
       // Sunucu filtresi: serverId NULL olan banlar tüm sunucularda geçerli
       // (BM'deki orgWide karşılığı), diğerleri yalnızca kendi sunucusunda.
       const slug = req.query.server;
-      let where = active;
+      let where = gecerli;
       if (slug) {
         const [server] = await db
           .select({ id: presenceSchema.servers.id })
@@ -51,9 +58,9 @@ export async function banListRoutes(app: FastifyInstance, opts: { db: Db; config
           .limit(1);
         if (!server) return reply.code(404).type('text/plain; charset=utf-8').send('');
         where = and(
-          active,
+          gecerli,
           or(isNull(moderationSchema.bans.serverId), eq(moderationSchema.bans.serverId, server.id)),
-        ) as typeof active;
+        ) as typeof gecerli;
       }
 
       const rows = await db
@@ -73,6 +80,7 @@ export async function banListRoutes(app: FastifyInstance, opts: { db: Db; config
       const body = formatBanList({
         entries: rows,
         now,
+        kip: config.BAN_ENFORCEMENT,
         ...(slug ? { label: slug } : {}),
       });
 
