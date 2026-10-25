@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { agentBagliMi, komutGonder, komutUlasti } from '../lib/agent-command-bus.js';
 import { writeAudit } from '../lib/audit.js';
 import { requireSession } from '../lib/auth-guard.js';
+import { renderReason } from '../lib/ban-list-format.js';
 
 /**
  * Moderasyon yazma uçları — plan Faz 2'nin çekirdeği.
@@ -121,9 +122,16 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
       // agent kopuksa ya da RCON yanıt vermiyorsa ban yine geçerli, oyuncu
       // bir sonraki girişinde remote ban list tarafından engellenir.
       // Bu yüzden sonucu 201'in içinde bildiriyoruz, hata olarak değil.
+      //
+      // Sebep RENDERLENEREK gidiyor: `reason` yer tutucu taşıyor
+      // ("… · Bitiş: {{expires}}") ve ham gönderilirse oyuncu ban
+      // ekranında süslü parantez okuyor. Oyuna sebep gönderen üç yol var
+      // ve ÜÇÜ DE aynı `renderReason`'dan geçmek zorunda: ban listesi
+      // (.cfg), ban-enforcer'ın periyodik kicki, ve burası — ban atıldığı
+      // anda oyuncu çevrimiçiyse atılan anlık kick. Üçüncüsü atlanmıştı.
       const atma = await oyuncuyuAt(
         playerId.data,
-        parsed.data.reason,
+        renderReason(parsed.data.reason, expiresAt, new Date()),
         actor?.id ?? 'sistem',
         parsed.data.serverId ?? null,
       );
@@ -185,7 +193,12 @@ export async function moderationRoutes(app: FastifyInstance, opts: { db: Db }) {
     return { denendi: true as const, sunucular: sonuclar };
   }
 
-  /** Ban sonrası oyuncuyu o anki maçtan çıkarır — ban'ın kapsadığı yerden. */
+  /**
+   * Ban sonrası oyuncuyu o anki maçtan çıkarır — ban'ın kapsadığı yerden.
+   *
+   * `reason` RENDERLENMİŞ gelmeli (yer tutucular dolu): bu metin
+   * doğrudan oyuncunun ban ekranına yazılıyor.
+   */
   function oyuncuyuAt(
     playerId: string,
     reason: string,
