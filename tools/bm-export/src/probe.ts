@@ -1,4 +1,4 @@
-import { type BmClient, BmHttpError } from './bm-client.js';
+import { type BmClient, BmHttpError } from '@altai/bm';
 import {
   type ExportContext,
   LIST_RESOURCES,

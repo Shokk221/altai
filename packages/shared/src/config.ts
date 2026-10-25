@@ -56,6 +56,39 @@ const envSchema = z.object({
    * `dry` ise şüphe hâlinde: neyin atılacağını atmadan gösterir.
    */
   BAN_ENFORCEMENT: z.enum(['on', 'altai', 'dry', 'off']).default('on'),
+
+  /**
+   * BattleMetrics CANLI AYNASI (bkz. apps/api/src/lib/bm-sync.ts).
+   *
+   * Arşiv aracı (`tools/bm-export`) bu değişkenleri kendi başına
+   * process.env'den okuyordu; artık api de okuduğu için burada doğrulanıyor.
+   * Token verilmezse ayna kendiliğinden kapanır — api token olmadan da
+   * ayağa kalkmalı, aksi hâlde geliştirme ortamında panel hiç açılmazdı.
+   */
+  BATTLEMETRICS_TOKEN: z.string().optional(),
+  /**
+   * Aynanın okuduğu BM sunucuları (virgülle). Verilmesi TERCİH EDİLİR:
+   * oyuncu aramasını bu sunuculara daraltıyor. Verilmezse arama BM'nin
+   * global oyuncu veritabanına gider — yavaş ve gürültülü.
+   */
+  BM_SERVER_IDS: z.string().optional(),
+  /** Aynayı tamamen kapatmak için (token dururken bile). */
+  BM_SYNC: z.enum(['on', 'off']).default('on'),
+  /**
+   * Bir oyuncunun BM verisi kaç saat sonra bayat sayılır.
+   *
+   * 24 saat: isim geçmişi ve notlar günler içinde değişen şeyler, saatler
+   * içinde değil. Daha kısa bir süre BM kotasını (dakikada 300 istek)
+   * hiçbir karşılığı olmadan yakardı.
+   */
+  BM_SYNC_TTL_HOURS: z.coerce.number().int().positive().default(24),
+  /**
+   * Aynanın saniyedeki istek tavanı. Arşiv 4 ile çalışıyor; ayna 2 ile,
+   * çünkü arşiv tek başına koşan bir iş, ayna ise panel çalışırken
+   * sürekli arka planda. Kotanın yarısını boş bırakmak, bir gün
+   * `pnpm bm:export` ile yan yana koşabilmesi için.
+   */
+  BM_SYNC_RPS: z.coerce.number().positive().default(2),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;

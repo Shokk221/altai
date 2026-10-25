@@ -1,6 +1,6 @@
+import { BmClient } from '@altai/bm';
 import { logger } from '@altai/shared';
 import { Archive } from './archive.js';
-import { BmClient } from './bm-client.js';
 import { exportList, readResourceIds, resolveServers } from './export-list.js';
 import { exportFlagAssignments, readNoteCandidates } from './flag-assignments.js';
 import { exportPerPlayer } from './per-player.js';

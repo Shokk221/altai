@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { type BmClient, BmHttpError } from '@altai/bm';
 import { logger } from '@altai/shared';
 import type { Archive } from './archive.js';
-import { type BmClient, BmHttpError } from './bm-client.js';
 
 /** Token'ın bu uca erişimi yok — arşiv durmaz, kaynak "unsupported" işaretlenir. */
 function isAccessError(error: unknown): error is BmHttpError {

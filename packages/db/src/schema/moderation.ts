@@ -219,3 +219,46 @@ export const moderationAudit = pgTable(
     index('moderation_audit_target_idx').on(table.targetType, table.targetId),
   ],
 );
+
+/**
+ * BattleMetrics'teki banların SALT GÖSTERİM aynası.
+ *
+ * NEDEN `bans` TABLOSUNA YAZILMIYOR — bu tablonun var olma sebebi bu:
+ * `bans`, yaptırımın kendisi. Uzak ban listesi ucu (Squad sunucularının
+ * çektiği liste) ve `ban-enforcer` doğrudan oradan okuyor. Canlı BM
+ * banlarını oraya yazmak, BM'de birinin attığı bir banın bizim
+ * sunucumuzda SESSİZCE uygulanmaya başlaması demekti — hem de kimse öyle
+ * bir karar vermemişken. Kick/ban kararı bizde kalıyor; BM yalnızca
+ * "bu oyuncunun BM'de şu sicili var" diye bilgi veriyor.
+ *
+ * Arşiv importunun `bans` tablosuna yazdığı 25.759 BM banı burada DEĞİL:
+ * onlar geçmişin dondurulmuş kopyası ve `BAN_ENFORCEMENT=altai` kipi tam
+ * olarak onlar için var. Bu tablo canlı aynanın yeri, ve hiçbir yaptırım
+ * yolu buraya bakmıyor.
+ */
+export const bmBans = pgTable(
+  'bm_bans',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    playerId: uuid('player_id')
+      .notNull()
+      .references(() => players.id),
+    /** BM ban kaydının id'si — aynayı tekrar tekrar yazabilmek için tekil. */
+    externalId: text('external_id').notNull(),
+    reason: text('reason').notNull(),
+    /** BM'de "note" alanı: banı atanın iç açıklaması. */
+    note: text('note'),
+    /** null = süresiz (BM `expires: null`). */
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    issuedAt: timestamp('issued_at', { withTimezone: true }),
+    issuedByName: text('issued_by_name'),
+    /** Hangi BM ban listesinden — paylaşımlı listeler ayırt edilebilsin. */
+    banListName: text('ban_list_name'),
+    /** Bu satırın BM'den en son ne zaman okunduğu. */
+    syncedAt: timestamp('synced_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('bm_bans_player_idx').on(table.playerId),
+    uniqueIndex('bm_bans_external_idx').on(table.externalId),
+  ],
+);

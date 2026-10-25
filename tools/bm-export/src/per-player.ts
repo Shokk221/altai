@@ -1,9 +1,9 @@
 import { createWriteStream, existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { type BmClient, BmHttpError } from '@altai/bm';
 import { logger } from '@altai/shared';
 import type { Archive } from './archive.js';
-import { type BmClient, BmHttpError } from './bm-client.js';
 import { readResourceIds } from './export-list.js';
 import type { PerPlayerResource } from './resources.js';
 

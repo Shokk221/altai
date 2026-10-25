@@ -4,6 +4,7 @@ import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import Fastify, { type FastifyError, type FastifyServerOptions } from 'fastify';
 import { activityLogBaslat, activityLogDurdur, kaydet } from './lib/activity-log.js';
+import { bmSyncBaslat } from './lib/bm-sync.js';
 import { redactedRequestSerializer } from './lib/log-redact.js';
 import { registerActivityLog } from './plugins/activity.js';
 import { registerDiscordOAuth } from './plugins/discord-oauth.js';
@@ -69,6 +70,10 @@ const app = Fastify(serverOptions);
 // de kayda düşsün istiyoruz.
 activityLogBaslat(db);
 registerActivityLog(app);
+
+// BattleMetrics canlı aynası (salt okunur). Token yoksa kendiliğinden
+// kapalı kalır ve api normal açılır — geliştirme ortamında BM token'ı yok.
+const bmSyncDurdur = bmSyncBaslat(db, config);
 
 // Beklenmeyen hatalar: gerçek sebep loglanır, istemciye genel mesaj döner.
 // Fastify varsayılanı hata mesajını olduğu gibi gönderiyor ve bu iç detay
@@ -165,6 +170,9 @@ async function shutdown(signal: string) {
     category: 'sistem',
     payload: { signal },
   });
+  // Ayna app.close()'tan ÖNCE durduruluyor: kapanış sırasında kuyruktan
+  // yeni bir BM isteği başlatıp yarıda kalan bir yazımla uğraşmayalım.
+  bmSyncDurdur();
   try {
     await app.close();
   } catch (err) {

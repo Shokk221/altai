@@ -363,9 +363,37 @@ export async function analyzeArchive(dir: string): Promise<AnalysisReport> {
   say();
 
   // ----------------------------------------------------------------- notlar
+  //
+  // Eskiden burada "ARŞİVLENMEDİ — bilinçli karar" yazılıydı. Bu artık
+  // sabit bir cümle olamaz: notlar ETL'e eklendi ve abonelik devam ettiği
+  // için arşiv her an yeniden çekilebiliyor. Sabit cümle, notlar çekilmiş
+  // olduğu hâlde "yok" diyerek aktarımı atlatırdı.
   say('## Notlar');
-  say('  ARŞİVLENMEDİ — bilinçli karar (bkz. bm-archive/manifest.json).');
-  say('  BM aboneliği dururken hâlâ çekilebilir: pnpm bm:export -- --only player-notes');
+  let notKayit = 0;
+  let notGovdesiz = 0;
+  let notOyuncusuz = 0;
+  for await (const rec of readNdjson<BmRecord & { _playerId?: string }>(p('player-notes.ndjson'))) {
+    notKayit++;
+    const ham = rec.attributes?.note ?? rec.attributes?.text;
+    if (typeof ham !== 'string' || !ham.trim()) notGovdesiz++;
+    const bmPlayerId = rec._playerId ?? relId(rec, 'player');
+    // Notun kimliği yok, yalnızca BM oyuncu id'si var: oyuncusu arşivde
+    // yoksa aktarımda bağlanamaz ve atlanır (bkz. import.ts -> notSatiri).
+    if (!bmPlayerId || !players.has(bmPlayerId)) notOyuncusuz++;
+  }
+
+  if (notKayit === 0) {
+    say('  Arşivde not kaydı yok (player-notes.ndjson boş ya da hiç çekilmemiş).');
+    say('  Çekmek için: pnpm bm:export -- --only player-notes');
+    say('  Not: canlı ayna (apps/api) notları oyuncu bazında zaten çekiyor; bu');
+    say('  aşama binlerce oyuncunun notunu BM kotası harcamadan bir kerede yazar.');
+  } else {
+    const aktarilacak = notKayit - notGovdesiz - notOyuncusuz;
+    say(`  kayıt                    ${fmt(notKayit)}`);
+    say(`  aktarılacak              ${fmt(aktarilacak)}`);
+    if (notGovdesiz > 0) say(`  ! gövdesi boş            ${fmt(notGovdesiz)}`);
+    if (notOyuncusuz > 0) say(`  ! oyuncusu arşivde yok   ${fmt(notOyuncusuz)}`);
+  }
   say();
 
   say('## Sonuç');

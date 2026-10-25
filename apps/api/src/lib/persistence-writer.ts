@@ -8,7 +8,8 @@ import {
   presenceSchema,
 } from '@altai/db';
 import { logger } from '@altai/shared';
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { bmKuyrugaAl } from './bm-sync.js';
 import { cblUyarisiniIsle } from './cbl-alerts.js';
 import { VARSAYILAN_ODUL, seedOdulunuDegerlendir } from './seed-whitelist.js';
 import { steamSeviyesiniIsle } from './steam-level-flags.js';
@@ -208,10 +209,82 @@ export async function reconcileStaleSessions(db: Db, serverId: string) {
   }
 }
 
+/**
+ * Kaydedilecek ismi belirler; kaydedilmemesi gerekiyorsa null.
+ *
+ * İKİ İŞİ VAR, ikisi de gerçek veriden çıktı:
+ *
+ *  - BOŞLUK KIRPILIYOR. `player_names` tekilliği (player_id, name)
+ *    üzerinde; kırpmazsak "Ali" ile "Ali " aynı oyuncunun iki ayrı ismi
+ *    olarak durur ve isim geçmişi, oyuncunun hiç yapmadığı bir isim
+ *    değişikliğini gösterir.
+ *  - BOŞ İSİM REDDEDİLİYOR. Squad bazı girişlerde isim vermiyor;
+ *    gövdesiz bir isim satırı profilde boş bir satır olarak görünür ve
+ *    hiçbir şey anlatmaz.
+ *
+ * Ayrı ve saf fonksiyon, çünkü karar testle kilitlenmeli: isim geçmişi
+ * moderasyonda "bu adam 6 ay önce hangi isimle oynuyordu" sorusunun tek
+ * cevabı ve kirlenmesi geri alınması zor bir şey.
+ */
+export function kaydedilecekIsim(name: string | null | undefined): string | null {
+  if (typeof name !== 'string') return null;
+  const kirpilmis = name.trim();
+  return kirpilmis.length > 0 ? kirpilmis : null;
+}
+
+/**
+ * Oyuncunun o an kullandığı ismi isim geçmişine yazar.
+ *
+ * `gorulmeZamani` OLAYIN zamanı, `now()` değil: agent bağlantı koptuğunda
+ * olayları diske kuyruklayıp sonra gönderiyor (spool). `now()` yazmak,
+ * saatler önce girmiş bir oyuncunun ismini bugün görülmüş gibi
+ * kaydetmek olurdu.
+ *
+ * Aynı isim tekrar görülürse yeni satır AÇILMAZ, mevcut satırın aralığı
+ * genişler — şemadaki (player_id, name) tekilliğinin gereği. BM aynası da
+ * (bkz. lib/bm-sync.ts) aynı kuralla yazıyor, bu yüzden iki kaynak aynı
+ * ismi gördüğünde tek satırda birleşiyorlar.
+ */
+async function isimKaydet(
+  db: Db,
+  playerId: string,
+  name: string | null | undefined,
+  gorulmeZamani: Date,
+): Promise<void> {
+  const isim = kaydedilecekIsim(name);
+  if (!isim) return;
+
+  await db
+    .insert(identitySchema.playerNames)
+    .values({
+      playerId,
+      name: isim,
+      firstSeen: gorulmeZamani,
+      lastSeen: gorulmeZamani,
+      source: 'altai',
+    })
+    .onConflictDoUpdate({
+      target: [identitySchema.playerNames.playerId, identitySchema.playerNames.name],
+      set: {
+        // Aralık yalnızca GENİŞLER. `least/greatest` null'ı yok sayıyor,
+        // yani BM'den gelmiş tarihsiz bir satır bozulmuyor.
+        firstSeen: sql`least(${identitySchema.playerNames.firstSeen}, excluded.first_seen)`,
+        lastSeen: sql`greatest(${identitySchema.playerNames.lastSeen}, excluded.last_seen)`,
+        // `source` DOKUNULMUYOR: ismi ilk kim gördüyse o kalsın. BM
+        // aynası da aynısını yapıyor; iki yazıcı birbirinin kaynağını
+        // sürekli ezerse alan hiçbir şey ifade etmez olur.
+      },
+    });
+}
+
 // Oyuncuyu steamId'ye göre bulur/oluşturur. EOS eşlemesi değişmişse eskisini
 // silmeden player_id_history'e tarihçe olarak yazar (Bölüm 4.1 — eski sistemin
 // sessizce sildiği çakışma sorununun çözümü).
-async function upsertPlayer(db: Db, steamId: string, eosId: string | undefined, name: string) {
+//
+// İSİM ALMIYOR: isim geçmişi `isimKaydet` ile ayrı yazılıyor. Eskiden bir
+// `name` parametresi vardı, kullanılmıyordu (`void name`) ve SteamID'siz
+// oyuncu yolu ona uydurma bir `''` geçmek zorunda kalıyordu.
+async function upsertPlayer(db: Db, steamId: string, eosId: string | undefined) {
   const [existing] = await db
     .select()
     .from(identitySchema.players)
@@ -238,8 +311,6 @@ async function upsertPlayer(db: Db, steamId: string, eosId: string | undefined, 
       .set({ eosId })
       .where(eq(identitySchema.players.id, existing.id));
   }
-
-  void name; // İsim geçmişi (player_names, Bölüm 4.1) Faz 4'te eklenecek
 
   return existing;
 }
@@ -321,10 +392,22 @@ export function createPersistenceWriter(db: Db): PersistenceWriter {
     serverId: string,
     event: Extract<AgentEvent, { type: 'PLAYER_CONNECTED' }>,
   ) {
-    const player = await upsertPlayer(db, event.steamId, event.eosId, event.name);
+    const player = await upsertPlayer(db, event.steamId, event.eosId);
     if (!player) return;
     // Sohbet yazımı bu önbellekten besleniyor.
     onbellegeYaz(event.steamId, player.id);
+
+    // İsim geçmişi. Giriş anı, ismi kendi gözümüzle gördüğümüz TEK yer:
+    // Squad'da isim oyuncunun profilinden geliyor ve oturum ortasında
+    // değişmiyor. Bu yazım olmadan isim geçmişinin tek kaynağı BM
+    // kalıyordu — abonelik bir gün biterse geçmiş o günde donardı.
+    await isimKaydet(db, player.id, event.name, new Date(event.timestamp));
+
+    // BM aynasını kuyruğa al: oyuncu şu an sunucuda ve admin birkaç saniye
+    // içinde profiline bakabilir. Giriş anında başlatmak, o profil açıldığında
+    // eski isimlerin ve notların çoktan yazılmış olmasını sağlıyor.
+    // Kuyruğa yazmak senkron ve veritabanına gitmiyor; girişi yavaşlatmaz.
+    bmKuyrugaAl(player.id);
 
     // Açık kalan eski bir session varsa (crash sonrası) reconciler onu kapatır;
     // burada sadece yeni session açılır.
@@ -551,7 +634,7 @@ export function createPersistenceWriter(db: Db): PersistenceWriter {
     eosId: string | null | undefined,
   ): Promise<string | null> {
     if (steamId) {
-      const oyuncu = await upsertPlayer(db, steamId, eosId ?? undefined, '');
+      const oyuncu = await upsertPlayer(db, steamId, eosId ?? undefined);
       return oyuncu?.id ?? null;
     }
 

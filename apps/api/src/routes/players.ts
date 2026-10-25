@@ -4,6 +4,7 @@ import { and, desc, eq, gt, ilike, inArray, isNull, lt, or, sql } from 'drizzle-
 import type { FastifyInstance } from 'fastify';
 import { requireSession } from '../lib/auth-guard.js';
 import { aktifBanKosulu, banAktifMi } from '../lib/ban-active.js';
+import { bmProfilAcildi, bmProfilVerisi, bmTazele } from '../lib/bm-sync.js';
 import { galibiyetOrani } from '../lib/player-stats.js';
 
 /**
@@ -256,7 +257,7 @@ export async function playerRoutes(app: FastifyInstance, opts: { db: Db }) {
       .limit(1);
     if (!player) return reply.code(404).send({ error: 'oyuncu_bulunamadi' });
 
-    const [names, banRows, flagRows, records, sohbet, sure, sonOturum] = await Promise.all([
+    const [names, banRows, flagRows, records, sohbet, sure, sonOturum, bm] = await Promise.all([
       db
         .select({
           name: identitySchema.playerNames.name,
@@ -341,7 +342,19 @@ export async function playerRoutes(app: FastifyInstance, opts: { db: Db }) {
             from round_players
            where player_id = ${id}
         `),
+
+      // BM aynasının durumu + BM'deki banlar. Bu BİR BM İSTEĞİ DEĞİL,
+      // yalnızca veritabanı okuması: profil ekranı BM'nin hızına bağlı
+      // olmamalı. Tazeleme aşağıda, cevap gönderildikten sonra tetikleniyor.
+      bmProfilVerisi(db, id),
     ]);
+
+    // Veri bayatsa arka planda tazelenir. İSTEK BEKLEMEZ: ekran elimizdekini
+    // anında gösteriyor, BM'den gelen fark bir sonraki açılışta görünüyor.
+    // Beklemek, BM yavaşladığında profil ekranının da yavaşlaması demekti.
+    void bmProfilAcildi(db, id).catch((err) =>
+      req.log.error({ err, playerId: id }, 'BM ayna tetiklemesi başarısız'),
+    );
 
     const s = (sure as unknown as Record<string, unknown>[])[0] ?? {};
     const m = (sonOturum as unknown as Record<string, unknown>[])[0] ?? {};
@@ -381,8 +394,52 @@ export async function playerRoutes(app: FastifyInstance, opts: { db: Db }) {
         // Bilinen sonuç yoksa null: sıfır yazmak "hep kaybetti" demekti.
         galibiyetOrani: galibiyetOrani(Number(m.galibiyet ?? 0), Number(m.maglubiyet ?? 0)),
       },
+      /**
+       * BattleMetrics aynası.
+       *
+       * Eski isimler ve notlar ÜSTTEKİ `names`/`records` içinde — BM'den
+       * gelenler de oraya yazıldığı için ayrı bir liste yok. Burada
+       * yalnızca aynanın KENDİSİNE dair olan var: ne zaman okundu, bir
+       * şey eksik kaldı mı, BM'de hangi banlar görünüyor.
+       */
+      bm,
     };
   });
+
+  /**
+   * "BM'den tazele" — profil ekranındaki düğme.
+   *
+   * TTL'i yok sayar (`zorla`) ve SONUCU BEKLER: düğmeye basan admin
+   * ekranın yenilenmesini bekliyor, arka plana atmak "bir şey oldu mu"
+   * sorusunu cevapsız bırakırdı. Kuyruğun aksine burada beklemek doğru.
+   *
+   * `player.note.write` ile korunuyor, `player.view` ile değil: her
+   * görüntüleyene BM kotası harcatma yetkisi vermek istemiyoruz ve bu
+   * çağrı oyuncunun moderasyon kayıtlarına yazıyor.
+   */
+  app.post<{ Params: { id: string } }>(
+    '/players/:id/bm-tazele',
+    { preHandler: requireSession(opts.db, 'player.note.write') },
+    async (req, reply) => {
+      const id = req.params.id;
+      if (!/^[0-9a-f-]{36}$/i.test(id)) {
+        return reply.code(400).send({ error: 'gecersiz_oyuncu_id' });
+      }
+
+      try {
+        const sonuc = await bmTazele(db, id, { zorla: true });
+        if (sonuc.durum === 'kapali') {
+          return reply.code(503).send({ error: 'bm_aynasi_kapali' });
+        }
+        return { ...sonuc, bm: await bmProfilVerisi(db, id) };
+      } catch (err) {
+        // BM'ye ulaşılamadı. Durum tabloya 'hata' olarak yazıldı; istemciye
+        // 502 dönüyoruz ki ekran "tazelendi" demesin.
+        req.log.error({ err, playerId: id }, 'BM elle tazeleme başarısız');
+        return reply.code(502).send({ error: 'bm_erisilemedi' });
+      }
+    },
+  );
 }
 
 interface BaseRow {

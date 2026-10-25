@@ -1,8 +1,8 @@
 import { type WriteStream, createWriteStream, existsSync, mkdirSync } from 'node:fs';
 import { readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import type { BmResource } from '@altai/bm';
 import { logger } from '@altai/shared';
-import type { BmResource } from './bm-client.js';
 
 export type ResourceStatus =
   | 'pending'

@@ -1,5 +1,20 @@
 import { logger } from '@altai/shared';
 
+/**
+ * BattleMetrics JSON:API istemcisi.
+ *
+ * TEK SEFERLİK ARŞİV ARACINDAN BURAYA TAŞINDI: artık iki tüketicisi var —
+ * `tools/bm-export` (tam arşiv) ve `apps/api` (canlı ayna). İkisi de aynı
+ * hız limiti/yeniden deneme davranışını paylaşmalı; iki kopya tutmak,
+ * birinin 429 davranışını düzeltip diğerini unutmak demekti.
+ *
+ * İSTEMCİ BİLEREK SADECE OKUR. Dışa açılan tek fiil `get` (ve onun
+ * üzerine kurulu `paginate`) — POST/PATCH/DELETE yok. Kick, ban, flag
+ * atama gibi YAPTIRIMLAR bu sistemde kendi veritabanımızda yaşıyor ve
+ * BM'ye yazılmıyor; bunu bir kuralla değil, yazma fiili hiç var olmayarak
+ * garanti ediyoruz. Buraya bir `post` eklemek, o kararı geri almaktır.
+ */
+
 export const BM_BASE_URL = 'https://api.battlemetrics.com';
 
 export class BmHttpError extends Error {

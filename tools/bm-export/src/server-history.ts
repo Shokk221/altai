@@ -1,6 +1,6 @@
+import { type BmClient, BmHttpError } from '@altai/bm';
 import { logger } from '@altai/shared';
 import type { Archive } from './archive.js';
-import { type BmClient, BmHttpError } from './bm-client.js';
 import { exportList } from './export-list.js';
 import type { ServerHistoryResource, ServerListResource } from './resources.js';
 

@@ -23,6 +23,7 @@
     "db:seed:role-mapping": "pnpm --filter @altai/db seed:role-mapping --",
     "db:backfill:chat": "pnpm --filter @altai/db backfill:chat",
     "mongo:chat": "pnpm --filter @altai/mongo-import chat --",
+    "bm:ayna": "pnpm --filter @altai/bm probe --",
     "db:seed:kurallar": "pnpm --filter @altai/db seed:kurallar --"
   },
   "devDependencies": {

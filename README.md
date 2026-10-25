@@ -27,12 +27,19 @@ packages/
               real-engine-adapter.ts (gerçek SquadServer'ı sarar)
               vendor/   Ported gerçek SquadJS (core + squad-server + agent-entry) —
                         gerçek RCON/log-parser, çalışır durumda
+  bm/         BattleMetrics istemcisi (SALT OKUR: tek fiil `get`) + tek
+              oyuncunun BM geçmişini çözen okuma katmanı. İki tüketicisi
+              var: tools/bm-export (tam arşiv) ve apps/api (canlı ayna)
   shared/     logger (pino), config loader (Zod), hata tipleri, password hashing
 tools/
   bm-export/     BattleMetrics ham arşiv çekimi (bkz. aşağıdaki bölüm) —
                  sunucular, oyuncular, session'lar, banlar, ban listeleri,
                  flag tanımları + atamaları, notlar, reserved slot'lar,
                  sunucu geçmişi. Devam edilebilir, --probe ile önden doğrulanır
+  bm-import/     BM arşivi -> Postgres ETL. `pnpm bm:analyze` kuru koşu
+                 (DB gerektirmez), `pnpm bm:import -- --write` gerçek
+                 aktarım. Oyuncular, isimler, session'lar, flagler,
+                 banlar ve NOTLAR
   hash-password/ break-glass şifresi için hash üretme CLI'ı
 deploy/       panel konteyneri: supervisord tanımları (api/web/bot),
               deploy.sh, env örneği, rehber
@@ -340,6 +347,152 @@ tekilleştirme, ağ kesintisi sonrası resume, 429 + Retry-After, 403'te
 `unsupported` işaretleme, oyuncu başına fan-out + `.done` ile atlama, flag
 atamalarının oyuncu başına DEĞİL flag başına taranması, not aday kümesinin
 doğru birleşmesi, yanlış org'a yazmayı reddetme.
+
+## BattleMetrics canlı aynası (`apps/api/src/lib/bm-sync.ts`)
+
+Arşiv aracı, BM aboneliği iptal edilecek diye yazılmıştı. **İptal olmuyor.**
+BM'nin bizde karşılığı olmayan iki şeyi — oyuncuların **eski isimleri** ve
+yıllardır birikmiş **notları** — dondurulmuş bir kopya değil, canlı bir
+okuma kaynağı. Ayna bunu yapıyor.
+
+> **Kendi isim kaydımız da var** (`isimKaydet`, `persistence-writer`):
+> oyuncu sunucuya girdiğinde o anki ismi `player_names`'e `source='altai'`
+> ile yazılıyor. Ayna ile aynı tekillik kuralını kullanıyorlar, yani iki
+> kaynak aynı ismi gördüğünde tek satırda birleşiyor ve aralık genişliyor.
+> Bu olmadan isim geçmişinin tek kaynağı BM'ydi ve abonelik bir gün
+> biterse geçmiş o günde donardı.
+
+### Sınır: BM okunur, yazılmaz
+
+Kick, ban, flag, uyarı — hepsinin kararı ve uygulaması bu panelde.
+Bu bir kural değil, kodun şekli:
+
+- `packages/bm` istemcisinin dışa açtığı tek fiil `get` (ve `paginate`).
+  POST/PATCH/DELETE yok. Buraya bir `post` eklemek, kararı geri almaktır.
+- BM'den okunan banlar **`bm_bans`** tablosunda duruyor, `bans`'ta değil.
+  `bans` yaptırımın kendisi: uzak ban listesi ucu ve `ban-enforcer`
+  oradan okuyor. BM banlarını oraya yazmak, BM'de birinin attığı bir banın
+  bizim sunucumuzda kimse karar vermemişken uygulanmaya başlaması olurdu.
+  `bm_bans`'a giden hiçbir yaptırım yolu yok.
+
+### Ne çekiliyor, nereye yazılıyor
+
+| BM verisi | Tablo | Not |
+|---|---|---|
+| Eski isimler | `player_names` (`source='battlemetrics'`) | `(player_id, name)` tekil; aralık yalnızca genişler |
+| Notlar | `player_records` (`kind='note'`) | `(source, external_id)` tekil; `resolved_at`'e dokunulmaz |
+| Banlar | `bm_bans` | **Yalnızca gösterim.** BM'de kalkan ban aynadan düşer |
+| Oynama süresi / ilk-son görülme | `bm_sync_state.sunucular` (jsonb) | Sunucu başına, BM'nin gördüğü hâliyle |
+| Aynanın durumu | `bm_sync_state` | Ne zaman okundu, ne eksik kaldı |
+
+BM'den gelen isimler ve notlar **ayrı bir listede değil**, panelin mevcut
+"Kimlikler" ve "Kayıtlar" panellerinde — ayna onları doğrudan o tablolara
+yazıyor. Profilde ayrıca aynanın tazeliği ve BM'deki banlar görünüyor.
+
+### Ne zaman tetiklenir
+
+1. **Oyuncu sunucuya girince** (`persistence-writer`) kuyruğa alınır. Admin
+   profili açtığında veri çoğunlukla çoktan hazır olur.
+2. **Admin profili açınca** (`routes/players.ts`) bayatsa kuyruğa alınır.
+   İstek **beklemez**: ekran veritabanındakini anında döner. BM'nin
+   yavaşlığı panelin yavaşlığı olmamalı.
+3. **Elle**: `POST /api/players/:id/bm-tazele` (`player.note.write` ister).
+   TTL'i yok sayar ve sonucu bekler — düğmeye basan admin cevap bekliyor.
+
+Periyodik tam tarama **yok**: 111 bin oyuncuyu sürekli dönmek kotanın
+tamamını, hiç profili açılmayan oyuncular için harcardı.
+
+### Uç yoklaması — `pnpm bm:ayna -- <steamId>`
+
+Ayna üç varsayım üzerine kurulu ve hiçbiri gerçek token'la doğrulanmadı:
+`filter[search]`'ün SteamID kabul ettiği, `/bans?filter[player]`'ın
+çalıştığı, oynama süresinin `included` sunucu meta'sında geldiği.
+Varsayım yanlışsa ayna **çökmüyor** — kaynağı `erisilemeyen` işaretleyip
+devam ediyor — ama bu da sessiz bir eksiklik: notlar hiç gelmezken panel
+çalışmaya devam eder.
+
+```bash
+# Sunucunuzda oynadığını BİLDİĞİNİZ bir oyuncunun SteamID64'ü:
+pnpm bm:ayna -- 76561198000000000
+```
+
+Altı uçtan fazla istek atmaz, hiçbir şey yazmaz. Çıktı her ucu
+`kritik`/`gösterim` olarak ayırıyor: notlar ve eski isimler kritik (aynanın
+var olma sebebi), BM banı ve oynama süresi yalnızca gösterim — onlar
+kapalıyken de ayna işini yapıyor. Kritik bir uç sorunluysa çıkış kodu 1.
+
+Arşivin `pnpm bm:probe`'u ile karıştırılmamalı: o org geneli listeleme
+uçlarını yokluyor, bu ise aynanın gerçekten kullandığı **tek oyuncu**
+yolunu.
+
+### Notların toplu aktarımı (arşivden)
+
+Ayna notları oyuncu bazında çekiyor — ama yalnızca sunucuya giren ya da
+profili açılan oyuncular için. Binlerce oyuncunun notu bu hızla yıllarca
+beklerdi. ETL'e bir **notlar aşaması** eklendi (`importNotes`): arşivdeki
+`player-notes.ndjson` tek koşuda `player_records`'a yazılıyor, **BM kotası
+harcanmadan**.
+
+```bash
+pnpm bm:analyze                      # arşivde kaç not var, kaçı aktarılabilir
+pnpm bm:import -- --write            # notlar dahil aktarım
+```
+
+> **Arşivinizde notlar olmayabilir.** Plan 5.5-A'daki gerçek çekimde
+> (2026-08-08) notlar alınmamıştı; `bm:analyze` artık bunu sabit bir
+> cümleyle değil, dosyaya BAKARAK söylüyor. Yoksa önce çekin:
+> `pnpm bm:export -- --only player-notes` (varsayılan `candidates`
+> kapsamıyla ~8 bin oyuncu, ~30 dk).
+
+Çakışmada **güncelleme yok** (`onConflictDoNothing`): arşiv tanımı gereği
+canlı aynadan eski, `DoUpdate` aynanın bugün okuduğu notun üzerine geçen
+yılın metnini yazmak olurdu.
+
+### Kota ve bayatlık
+
+BM dakikada 300 istek veriyor. Ayna bunun yarısını kullanıyor
+(`BM_SYNC_RPS=2`), diğer yarısı `pnpm bm:export` ile yan yana koşabilsin
+diye boş. Oyuncu başına 2–3 istek; `players.battlemetrics_id` arşivden
+dolu olan 111 bin oyuncuda arama isteği hiç atılmıyor.
+
+Üç durum ayrı tutuluyor ve **karıştırılmamalı**:
+
+- `ok` → `BM_SYNC_TTL_HOURS` (24s) sonra yeniden okunur
+- `hata` → 1 saat sonra; BM'ye ulaşılamadı demek, **"notu yok" demek değil**
+- `bulunamadi` → 6 saat sonra; BM'de kayıt yok (yeni oyuncu olabilir)
+
+`synced_at` yalnızca başarıda ilerler: hata durumunda son başarılı okumanın
+zamanı korunur, yoksa "bu veri ne kadar eski" sorusu cevapsız kalırdı.
+
+### Yanlış oyuncuyu bağlamama
+
+BM'nin `filter[search]` filtresi **isme de bakıyor**. Dönen ilk sonucu kabul
+etmek, adında o rakamlar geçen başka bir oyuncunun notlarını ve banlarını
+bizim oyuncumuzun profiline yazmak olurdu — moderatör o notlara bakıp ban
+kararı veriyor, yani bu hata doğrudan yanlış yaptırıma dönüşür.
+
+Bu yüzden eşleşme ismin değil, `include=identifier` ile gelen kimlik
+kayıtlarının üzerinden kuruluyor: **aradığımız değerin tam karşılığı bir
+identifier yoksa sonuç reddedilir** (`eslesenOyuncuId`, testle kilitli).
+
+### Test durumu
+
+`pnpm --filter @altai/bm test` — 26 test, sahte bir BM sunucusuna karşı:
+isim benzerliğiyle gelen yanlış oyuncunun reddi, kimliği data'da olmayan
+kaydın reddi, EOS'ta büyük/küçük harf, isim birleştirme ve aralık
+genişletme, süreyi hem `included` meta'sından hem oyuncu ilişkisinden
+okuma, 403'te fırlatmayıp `erisilemeyen` olarak bildirme. Yoklama
+tarafında: 401'de gerisini denememe, oyuncu çözülemeyince uydurma id ile
+yoklamama, notu kritik / banı gösterim olarak ayırma.
+
+`pnpm --filter @altai/bm-import test` — 10 test, notların elenmesi:
+`_playerId` damgası ve `player` ilişkisi, oyuncusu çözülemeyen notun
+atlanması, `note`/`text` alanlarının ikisi de, tarihsiz notun düşürülmemesi.
+
+`pnpm --filter @altai/api test` içinde `bm-ayna.test.ts` — 10 test, bayatlık
+ve yeniden deneme sınırları (kotanın nasıl harcandığı burada kilitli) ve
+`isim-gecmisi.test.ts` — 8 test, isim geçmişine ne yazılıp ne yazılmadığı
+(boşluk kırpma, boş isim reddi; kirlenen isim geçmişi geri alınması zor).
 
 ## Eski sistemle hizalanan bağımlılık sürümleri
 

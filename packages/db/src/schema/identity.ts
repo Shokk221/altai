@@ -132,6 +132,83 @@ export const steamProfiles = pgTable(
 );
 
 /**
+ * BattleMetrics canlı aynasının durumu — oyuncu başına tek satır.
+ *
+ * Ayrı tablo, `players`'a kolon eklemek yerine, `steam_profiles` ile aynı
+ * gerekçeyle: buradaki her şey DIŞ bir kaynaktan geliyor ve bayatlıyor,
+ * yani ne zaman okunduğu verinin kendisi kadar önemli. `players` ise
+ * kimliğin kendisi — orada bayatlayan bir şey yok.
+ *
+ * ÜÇ DURUM AYRI TUTULUYOR ve karıştırılmamalı:
+ *  - `ok`          : okundu, veri yazıldı
+ *  - `bulunamadi`  : BM'de bu kimliğe karşılık oyuncu YOK (yeni oyuncu
+ *                    olabilir). Tekrar sormanın bir faydası var ama hemen
+ *                    değil — TTL dolana kadar bekleriz.
+ *  - `hata`        : BM'ye ulaşılamadı ya da yetki yok. "Notu yok" DEĞİL.
+ *
+ * `bulunamadi` ile `hata`yı tek bayrağa indirmek, aboneliğin kapandığı bir
+ * günde bütün oyuncuları "BM'de kaydı yok" diye göstermek olurdu.
+ */
+export const BM_SYNC_STATUSES = ['ok', 'bulunamadi', 'hata'] as const;
+export type BmSyncStatus = (typeof BM_SYNC_STATUSES)[number];
+
+/** BM'nin oyuncu-sunucu çifti başına tuttuğu oynama süresi. */
+export interface BmSunucuSuresi {
+  bmServerId: string;
+  serverName: string | null;
+  /** Saniye. */
+  timePlayed: number | null;
+  firstSeen: string | null;
+  lastSeen: string | null;
+}
+
+export const bmSyncState = pgTable(
+  'bm_sync_state',
+  {
+    playerId: uuid('player_id')
+      .primaryKey()
+      .references(() => players.id),
+    /**
+     * Çözülmüş BM oyuncu id'si. `players.battlemetrics_id` ile aynı değer
+     * ama burada da duruyor: oradaki alan tek seferlik arşiv importunun
+     * doldurduğu alan ve canlı ayna onu EZMEMELİ — ikisi ayrışırsa
+     * (BM hesapları birleştirdiğinde oluyor) bunu görmek istiyoruz.
+     */
+    bmPlayerId: text('bm_player_id'),
+    /** Son BAŞARILI okuma. Bayatlık hesabı buna göre yapılır. */
+    syncedAt: timestamp('synced_at', { withTimezone: true }),
+    /**
+     * Son DENEME — başarılı olmasa da. Bayatlık `synced_at`'e bakar ama
+     * yeniden deneme hakkı buna: sürekli hata veren bir oyuncu için her
+     * profil açılışında BM'ye gitmek kotayı boşa yakar.
+     */
+    attemptedAt: timestamp('attempted_at', { withTimezone: true }).defaultNow().notNull(),
+    status: text('status').$type<BmSyncStatus>().notNull(),
+    /** Hata mesajı — yalnızca teşhis için, panelde gösterilmez. */
+    error: text('error'),
+    /**
+     * BM'ye ulaşamadığımız alt kaynaklar ('notlar', 'banlar'). Boş dizi
+     * "hepsi okundu" demek; dolu olması panelde "bu bölüm eksik" uyarısı.
+     */
+    erisilemeyen: jsonb('erisilemeyen').$type<string[]>().notNull().default([]),
+    /**
+     * Sunucu başına oynama süresi, BM'nin gördüğü hâliyle.
+     *
+     * jsonb, ayrı tablo değil: bu veri GÖSTERİM için okunuyor, sorgulanmıyor
+     * ("BM'de 100 saatten fazla oynayanlar" diye bir soru sormuyoruz) ve
+     * sunucu listesi BM tarafında değişebiliyor. Ayrı tablo, hiç
+     * faydalanmayacağımız bir birleşim ve bir migration daha demekti.
+     */
+    sunucular: jsonb('sunucular').$type<BmSunucuSuresi[]>().notNull().default([]),
+  },
+  (table) => [
+    // Süpürge/kuyruk "en bayat olanı" seçiyor; bu indeks o sorgunun tamamı.
+    index('bm_sync_state_synced_idx').on(table.syncedAt),
+    index('bm_sync_state_attempted_idx').on(table.attemptedAt),
+  ],
+);
+
+/**
  * Klanlar.
  *
  * Üyelik SteamID ile yönetiliyor: klan yöneticisi panele SteamID listesi
