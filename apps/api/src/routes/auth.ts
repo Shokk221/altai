@@ -6,7 +6,7 @@ import { verifyPassword } from '@altai/shared';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { kaydetIstek } from '../lib/activity-log.js';
-import { resolveRoles } from '../lib/roles.js';
+import { resolveRoles, yetkisizMi } from '../lib/roles.js';
 import { createSession, destroySession, verifySession } from '../lib/session.js';
 import { timingSafeCompare } from '../lib/timing-safe.js';
 import { isDiscordOAuthConfigured } from '../plugins/discord-oauth.js';
@@ -82,6 +82,46 @@ export async function authRoutes(app: FastifyInstance, opts: { db: Db; config: A
 
     // 3. Discord rolleri -> sistem rolü + izinler (tek yetki zinciri, Bölüm 8)
     const resolved = await resolveRoles(db, roleIds);
+
+    /**
+     * YETKİSİ OLMAYAN HESAP OTURUM ALMIYOR.
+     *
+     * Önce herkes giriyordu: eşleşmeyen Discord hesabı `member` + boş
+     * izinle panele alınıyor, içeride hiçbir şey yapamıyordu. İki sorunu
+     * vardı. Sunucudaki herhangi bir üye panelin iç ekranlarını (oyuncu
+     * listesi, canlı durum) açabiliyordu — yetki her EYLEMDE kontrol
+     * ediliyordu ama GÖRMEK bir eylem değil. İkincisi, girip boş bir panel
+     * gören kişi "bozuk" sanıp yetkiliye yazıyordu.
+     *
+     * Kontrol oturum yazılmadan ve `users` satırı açılmadan önce: giremeyen
+     * bir hesap için kullanıcı kaydı oluşturmak, yetkili listesini
+     * hiç girmemiş kişilerle doldurur.
+     *
+     * Rol aynası (`uyeRolleriniYaz`) yukarıda ZATEN yazıldı ve bilerek
+     * öyle: kişinin Discord rolleri bizim bilgimiz, girişi reddetmemiz o
+     * bilgiyi eskitmemeli.
+     *
+     * KAPIYI KİLİTLEMİYOR: break-glass girişi (aşağıdaki şifreli yol)
+     * bundan etkilenmiyor. Rol eşlemeleri bir gün yanlışlıkla silinirse
+     * panele oradan girilip düzeltilebilir.
+     */
+    if (yetkisizMi(resolved)) {
+      app.log.warn(
+        { discordId: discordUser.id, rolSayisi: roleIds.length },
+        'yetkisiz Discord hesabı giriş denedi',
+      );
+      kaydetIstek(String(req.id), {
+        actorType: 'user',
+        actorUserId: null,
+        actorLabel: discordUser.username,
+        action: 'auth.login_reddedildi',
+        category: 'oturum',
+        ip: req.ip,
+        payload: { yontem: 'discord', sebep: 'yetki_yok', discordId: discordUser.id },
+      });
+      const kok = config.WEB_APP_URL ?? 'http://localhost:3000';
+      return reply.redirect(`${kok}/?hata=yetkisiz`);
+    }
 
     // 4. users upsert
     const [existing] = await db

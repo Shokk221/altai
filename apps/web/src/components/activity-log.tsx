@@ -61,6 +61,7 @@ const SEKMELER = [
  */
 const EYLEM_ADI: Record<string, string> = {
   'auth.login': 'panele giriş yaptı',
+  'auth.login_reddedildi': 'yetkisiz giriş denemesi',
   'auth.logout': 'çıkış yaptı',
   'auth.break_glass': 'acil giriş kullandı',
   'auth.break_glass_failed': 'acil giriş denemesi BAŞARISIZ',

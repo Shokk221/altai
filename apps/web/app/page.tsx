@@ -22,7 +22,15 @@ function wsAdresi(): string {
   return `${koken.replace(/^http/, 'ws')}/ws`;
 }
 
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ hata?: string }>;
+}) {
+  // Giriş reddedildiyse api buraya `?hata=yetkisiz` ile döndürüyor.
+  // Sebebi yazmazsak kişi aynı giriş ekranına düşüp düğmeye tekrar basar
+  // ve neden içeri alınmadığını hiç öğrenemez.
+  const { hata } = await searchParams;
   const me = await getMe();
   const apiUrl = publicApiUrl();
 
@@ -51,6 +59,16 @@ export default async function HomePage() {
         <h1 className="display text-4xl">Altai</h1>
         <p className="mt-2 text-sm text-fg-muted">Sunucu yönetim paneli</p>
       </div>
+
+      {hata === 'yetkisiz' ? (
+        <div className="w-full rounded border border-danger-weak bg-surface px-5 py-4">
+          <p className="text-sm font-semibold text-danger">Panel yetkin yok</p>
+          <p className="mt-1.5 text-xs leading-relaxed text-fg-muted">
+            Discord hesabın sunucuda bulundu ama panele erişim veren bir rolün yok. Yetki
+            gerekiyorsa sunucu yöneticisine yazman lazım.
+          </p>
+        </div>
+      ) : null}
 
       <div className="flex w-full flex-col items-center gap-4 rounded border border-border bg-surface px-6 py-7">
         <a

@@ -11,6 +11,23 @@ export interface ResolvedRoles {
 const YETKISIZ: ResolvedRoles = { systemRole: 'member', permissions: [] };
 
 /**
+ * Bu hesabın panelde hiçbir karşılığı yok mu?
+ *
+ * Discord rolleri `role_mappings` içinde hiçbir satıra denk gelmiyorsa
+ * sonuç `YETKISIZ` oluyor. Eskiden böyle biri panele GİRİYOR ama hiçbir
+ * şey yapamıyordu; artık giriş de verilmiyor (bkz. routes/auth.ts).
+ *
+ * Eşleşmenin olup olmadığına değil SONUCUNA bakılıyor, çünkü ikisi aynı
+ * kapıya çıkıyor: `member` + boş izin veren bir eşleme de hiçbir şey
+ * vermiyor demektir. Buna karşılık yalnızca izinlere bakmak yanlış
+ * olurdu — izin listesi boş ama sistem rolü `admin` olan bir eşleme
+ * gerçek bir yetkidir ve girişi engellenmemeli.
+ */
+export function yetkisizMi(r: ResolvedRoles): boolean {
+  return r.permissions.length === 0 && r.systemRole === YETKISIZ.systemRole;
+}
+
+/**
  * Eşlemeleri tek bir yetkiye indirger: izinler BİRLEŞİR, sistem rolü en
  * yüksek olan kazanır.
  *
@@ -38,7 +55,8 @@ export function izinleriBirlestir(
 
 // Discord'daki bir kullanıcının rol ID listesini alır, role_mappings tablosunda
 // eşleşenleri bulur ve tek yetkiye indirger. Eşleşme yoksa en düşük rol
-// (member, boş izin) döner — panele girer ama hiçbir şey yapamaz.
+// (member, boş izin) döner; giriş yolu bunu `yetkisizMi` ile görüp oturum
+// açmayı reddediyor.
 export async function resolveRoles(db: Db, discordRoleIds: string[]): Promise<ResolvedRoles> {
   if (discordRoleIds.length === 0) return YETKISIZ;
 
