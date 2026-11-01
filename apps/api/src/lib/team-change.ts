@@ -44,6 +44,19 @@ const DIGER_SISTEMI_BEKLEME_MS = 25_000;
  */
 const DOGRULAMA_BEKLEME_MS = 1_200;
 
+/**
+ * Taşıma kaç kez denenir (ilk gönderim dahil).
+ *
+ * Squad komutu kabul edip oyuncuyu taşımayabiliyor: oyuncu o an spawn
+ * ekranındaysa, ölüm anındaysa ya da sunucunun kendi denge kilidi
+ * devredeyse. Bunların çoğu GEÇİCİ — ilk denemede olmayan saniyeler
+ * sonra oluyor. Tek denemede pes etmek, yetkiliye "çalışmıyor" dedirten
+ * şeydi; komutu yeniden göndermenin yan etkisi yok çünkü hedefe ULAŞMIŞ
+ * oyuncuya zaten gönderilmiyor (komut "karşıya çevir" demek, hedefte
+ * olana göndermek onu geri alırdı).
+ */
+const DENEME_SAYISI = 3;
+
 export interface Hedef {
   steamId: string;
   eosId?: string | null;
@@ -120,30 +133,70 @@ export async function simdiDegistir(
   const sonuclar: Sonuc[] = [];
   const gecenler: string[] = [];
 
-  // Sırayla: RCON zaten tek kanal, paralel göndermek sıraya girmekten
-  // hızlı değil ama hata ayıklamayı zorlaştırırdı.
+  // Hedefte olana dokunmuyoruz: komut "karşıya çevir" dediği için
+  // göndermek onu hedeften ÇIKARIRDI.
+  const tasinacak: Hedef[] = [];
   for (const h of hedefler) {
-    // Hedefte olana dokunmuyoruz: komut "karşıya çevir" dediği için
-    // göndermek onu hedeften ÇIKARIRDI.
     if (h.teamId === hedefTakim) {
       sonuclar.push({ steamId: h.steamId, name: h.name ?? null, durum: 'zaten_hedefte' });
       continue;
     }
-    await uyar(slug, h, metin, issuedBy);
-    const sonuc = await komutGonder(
-      slug,
-      'forceTeamChange',
-      { steamId: h.steamId, eosId: h.eosId ?? null },
-      issuedBy,
-    );
-    const ok = sonuc.durum === 'ok';
-    if (ok) gecenler.push(h.steamId);
-    sonuclar.push({
-      steamId: h.steamId,
-      name: h.name ?? null,
-      durum: ok ? 'ok' : 'komut_basarisiz',
-    });
+    sonuclar.push({ steamId: h.steamId, name: h.name ?? null, durum: 'komut_basarisiz' });
+    tasinacak.push(h);
+  }
 
+  // Uyarı BİR KEZ, denemelerden önce: tekrar denemede oyuncuya üç ayrı
+  // "takım değiştiriliyorsun" mesajı gitmemeli.
+  for (const h of tasinacak) await uyar(slug, h, metin, issuedBy);
+
+  /**
+   * ISRARLA DENE. Squad komutu kabul edip oyuncuyu taşımayabiliyor ve
+   * sebeplerin çoğu geçici (spawn ekranı, ölüm anı, anlık denge kilidi).
+   * Tek denemede pes etmek yetkiliye "switch çalışmıyor" dedirtiyordu.
+   *
+   * Sırayla gönderiliyor: RCON zaten tek kanal, paralel göndermek sıraya
+   * girmekten hızlı değil ama hata ayıklamayı zorlaştırırdı.
+   */
+  let kalan = tasinacak;
+  let kullanilanDeneme = 0;
+  for (let deneme = 1; deneme <= DENEME_SAYISI && kalan.length > 0; deneme += 1) {
+    kullanilanDeneme = deneme;
+    const gecenler: string[] = [];
+    for (const h of kalan) {
+      const sonuc = await komutGonder(
+        slug,
+        'forceTeamChange',
+        { steamId: h.steamId, eosId: h.eosId ?? null },
+        issuedBy,
+      );
+      if (sonuc.durum === 'ok') gecenler.push(h.steamId);
+      const kayit = sonuclar.find((x) => x.steamId === h.steamId);
+      if (kayit) kayit.durum = sonuc.durum === 'ok' ? 'ok' : 'komut_basarisiz';
+    }
+
+    // Ekran ANINDA doğruyu göstersin: RCON tazelemesi 20 saniyede bir
+    // çalışıyor ve o süre boyunca oyuncu eski takımında görünüyordu.
+    if (gecenler.length > 0) applyTeamChange(slug, gecenler, hedefTakim);
+
+    const ulasmayan = await dogrula(slug, hedefTakim, sonuclar);
+    kalan = kalan.filter((h) => ulasmayan.includes(h.steamId));
+    if (kalan.length > 0 && deneme < DENEME_SAYISI) {
+      logger.warn(
+        { slug, deneme, kalan: kalan.map((h) => h.steamId) },
+        'takım değişimi tutmadı, yeniden deneniyor',
+      );
+    }
+  }
+
+  /**
+   * KAYIT EN SONDA. Önce döngünün içinde yazılıyordu, yani DOĞRULAMADAN
+   * ÖNCE: Squad sessizce reddetse bile günlüğe "ok" düşüyordu. Günlük
+   * yapısal olarak `dogrulanamadi` yazamıyordu ve "switch çalışıyor mu"
+   * sorusu ona bakarak cevaplanamıyordu.
+   */
+  for (const h of hedefler) {
+    const kayit = sonuclar.find((x) => x.steamId === h.steamId);
+    if (!kayit) continue;
     kaydet({
       actorType: actor.userId ? 'user' : 'system',
       actorUserId: actor.userId,
@@ -159,17 +212,10 @@ export async function simdiDegistir(
         onceki_takim: h.teamId ?? null,
         hedef_takim: hedefTakim,
         ...(mesaj ? { mesaj } : {}),
-        sonuc: sonuc.durum,
+        sonuc: kayit.durum,
+        deneme: kayit.durum === 'zaten_hedefte' ? 0 : kullanilanDeneme,
       },
     });
-  }
-
-  // Ekran ANINDA doğruyu göstersin: RCON tazelemesi 20 saniyede bir
-  // çalışıyor ve o süre boyunca oyuncu eski takımında görünüyordu —
-  // yetkili komutun çalışmadığını sanıyordu.
-  if (gecenler.length > 0) {
-    applyTeamChange(slug, gecenler, hedefTakim);
-    await dogrula(slug, hedefTakim, sonuclar);
   }
 
   return sonuclar;
@@ -184,19 +230,27 @@ export async function simdiDegistir(
  * Doğrulanamayan varsa iyimser güncelleme de geri alınıyor — ekranın
  * gerçekleşmemiş bir değişimi göstermesi, hiç göstermemesinden kötü.
  */
-async function dogrula(slug: string, hedefTakim: Takim, sonuclar: Sonuc[]) {
+async function dogrula(slug: string, hedefTakim: Takim, sonuclar: Sonuc[]): Promise<string[]> {
   await new Promise((r) => setTimeout(r, DOGRULAMA_BEKLEME_MS));
   const tazelendi = await sunucuyuTazele(slug, true).catch(() => false);
-  if (!tazelendi) return; // Okuyamadıysak iddiada bulunmuyoruz.
+  if (!tazelendi) return []; // Okuyamadıysak iddiada bulunmuyoruz.
 
   const durum = getServerState(slug);
+  const ulasmayanlar: string[] = [];
   for (const s of sonuclar) {
-    if (s.durum !== 'ok') continue;
+    if (s.durum === 'zaten_hedefte') continue;
     const simdiki = durum?.players.find((p) => p.steamId === s.steamId);
     // Oyuncu çıktıysa ya da takımı okunamıyorsa iddia edecek bir şey yok.
     if (!simdiki || simdiki.teamId === null) continue;
-    if (simdiki.teamId !== hedefTakim) s.durum = 'dogrulanamadi';
+    if (simdiki.teamId === hedefTakim) {
+      // Önceki turda doğrulanamayan bu turda ulaşmış olabilir.
+      s.durum = 'ok';
+    } else {
+      s.durum = 'dogrulanamadi';
+      ulasmayanlar.push(s.steamId);
+    }
   }
+  return ulasmayanlar;
 }
 
 /**
