@@ -92,7 +92,22 @@ export function formatBanList(opts: FormatOptions): string {
   // (otomatik TK banları). Oyun için etkileri aynı olduğundan tek satıra
   // indiriyoruz. Bunu yazmazsak, panelde 21 bin ban görüp listede 11 bin
   // satır sayan biri veri kaybı sanır.
-  const header = [
+  /**
+   * YORUM BLOĞU LİSTENİN SONUNDA — bilinçli.
+   *
+   * Canlıda gerçekten uygulanan iki ban listesini okudum: oyun sunucusunun
+   * çektiği eski sistem listesi (3971 satır) ve OWI'nin global listesi.
+   * İKİSİNDE DE tek bir yorum ya da boş satır yok, baştan sona
+   * `<id>:<ts> //sebep`. Yani "satır başında // olur" varsayımının canlıda
+   * hiçbir örneği yok.
+   *
+   * Squad'ın ayrıştırıcısının tek başına duran bir `//` satırında ne yaptığı
+   * doğrulanmadı ve yanlışının bedeli sessiz: ilk bozuk satırda duruyorsa
+   * blok en üstteyken liste KOMPLE boşa düşer, bunu ne oyun günlüğü ne panel
+   * söyler. Blok en sonda olunca en kötü durumda bile ban satırlarının
+   * tamamı okunmuş olur; en iyi durumda hiçbir şey değişmez.
+   */
+  const altbilgi = [
     '//////////////////////////////////////////////////////////////////////',
     '//// Altai v2 — otomatik üretilmiş ban listesi. ELLE DÜZENLEMEYİN. ////',
     ...valfUyarisi,
@@ -102,5 +117,5 @@ export function formatBanList(opts: FormatOptions): string {
     '//////////////////////////////////////////////////////////////////////',
   ];
 
-  return `${[...header, ...lines].join('\n')}\n`;
+  return `${[...lines, ...altbilgi].join('\n')}\n`;
 }

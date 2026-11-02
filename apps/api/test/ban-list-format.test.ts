@@ -133,3 +133,50 @@ describe('renderReason', () => {
     expect(out.endsWith('…')).toBe(true);
   });
 });
+
+/**
+ * Oyun sunucusu bu dosyayı artık GERÇEKTEN çekiyor (RemoteBanListHosts.cfg).
+ *
+ * Canlıda uygulanan iki listede (eski sistemin listesi, OWI global listesi)
+ * tek bir yorum satırı yok — yani Squad'ın ayrıştırıcısının satır başındaki
+ * `//` ile ne yaptığı canlıda hiç denenmemiş. İlk bozuk satırda duruyorsa,
+ * yorum bloğunun üstte olması listeyi komple boşa düşürür ve bunu hiçbir
+ * günlük söylemez. Sıra bu yüzden testle kilitli.
+ */
+describe('yorum bloğu ban satırlarından SONRA gelir', () => {
+  const ciktiSatirlari = (out: string) => out.split('\n').filter((l) => l.length > 0);
+
+  it('ilk satır bir ban satırı, yorum değil', () => {
+    const out = formatBanList({ entries: [entry()], now: NOW });
+    const ilk = ciktiSatirlari(out)[0];
+    expect(ilk?.startsWith('//'), `ilk satır yorum: ${ilk}`).toBe(false);
+    expect(ilk).toMatch(/^[0-9a-f]{32}:0 \/\//);
+  });
+
+  it('hiçbir yorum satırı son ban satırından önce gelmiyor', () => {
+    const out = formatBanList({
+      entries: [entry(), entry({ steamId: '76561198000000002', eosId: null })],
+      now: NOW,
+      kip: 'altai', // valf uyarısı da eklendiğinde bile sıra bozulmasın
+    });
+    const satirlar = ciktiSatirlari(out);
+    // findLastIndex bu paketin lib hedefinde yok; elle geriye tarıyoruz.
+    let sonBan = -1;
+    for (let i = satirlar.length - 1; i >= 0; i--) {
+      if (!satirlar[i]?.startsWith('//')) {
+        sonBan = i;
+        break;
+      }
+    }
+    const ilkYorum = satirlar.findIndex((l) => l.startsWith('//'));
+    expect(sonBan).toBeGreaterThanOrEqual(0);
+    expect(ilkYorum, 'çıktıda hiç yorum satırı yok').toBeGreaterThanOrEqual(0);
+    expect(ilkYorum, 'yorum satırı ban satırlarının arasına girmiş').toBeGreaterThan(sonBan);
+  });
+
+  it('hiç ban yokken bile çıktı yalnızca yorumdan oluşur ve bozuk satır içermez', () => {
+    // `altai` kipinde liste bugün boş geliyor; boş dosya Squad'a gidiyor.
+    const satirlar = ciktiSatirlari(formatBanList({ entries: [], now: NOW, kip: 'altai' }));
+    expect(satirlar.every((l) => l.startsWith('//'))).toBe(true);
+  });
+});
