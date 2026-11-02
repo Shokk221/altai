@@ -3,6 +3,7 @@ import { logger } from '@altai/shared';
 import { analyzeArchive } from './analyze.js';
 import { countTables, runImport } from './import.js';
 import { fileExists } from './ndjson.js';
+import { uzlastir } from './uzlastir.js';
 
 /**
  * BM arşivi -> Postgres ETL — plan Bölüm 5.5-A/2 ve /3.
@@ -12,6 +13,10 @@ import { fileExists } from './ndjson.js';
  *                 yapacağını + veride hangi sorunların olduğunu raporlar.
  *                 Postgres GEREKTİRMEZ.
  *   --write       Gerçek import. DATABASE_URL ve BM_SERVER_MAP ister.
+ *   --uzlastir    Arşivi BM'nin ŞU ANKİ hâliyle uzlaştırır: değişen banları
+ *                 günceller, BM'de artık olmayanları düşürür. Tek başına
+ *                 KURU KOŞU (rapor verir, yazmaz); `--write` ile uygular.
+ *                 DATABASE_URL ister — bizdeki banları okuması gerekiyor.
  *
  * Kullanım:
  *   pnpm bm:analyze
@@ -28,6 +33,42 @@ if (!fileExists(`${dir}/manifest.json`)) {
     'arşiv bulunamadı — BM_EXPORT_DIR doğru mu? (manifest.json içeren dizin olmalı)',
   );
   process.exit(1);
+}
+
+// ------------------------------------------------------------- uzlaştırma
+/**
+ * Ayrı mod, çünkü `runImport`tan farklı bir soru soruyor: "arşivde ne var"
+ * değil, "bizdeki ile BM'deki arasındaki fark ne". İçe aktarım yalnızca
+ * EKLİYOR (onConflictDoNothing); bu mod güncelleyip düşürüyor.
+ */
+if (args.includes('--uzlastir')) {
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    logger.error('--uzlastir DATABASE_URL ister (bizdeki banları okuyacak)');
+    process.exit(1);
+  }
+  const ozet = await uzlastir({ db: createDb(url), dir }, { yaz: write });
+  const l: string[] = [''];
+  l.push(write ? 'UZLAŞTIRMA UYGULANDI' : 'UZLAŞTIRMA — KURU KOŞU (hiçbir şey değişmedi)');
+  l.push('');
+  l.push(`  arşivdeki ban        ${String(ozet.arsivdeki).padStart(8)}`);
+  l.push(`  bizdeki aktif ban    ${String(ozet.bizdekiAktif).padStart(8)}`);
+  l.push(`  eklenecek (yeni)     ${String(ozet.yeni.length).padStart(8)}`);
+  l.push(`  güncellenecek        ${String(ozet.guncellenecek.length).padStart(8)}`);
+  l.push(`  düşecek (BM'de yok)  ${String(ozet.dusecek.length).padStart(8)}`);
+  l.push('');
+  if (ozet.karar.guvenli) {
+    l.push('  düşürme GÜVENLİ sayıldı.');
+  } else {
+    l.push(`  DÜŞÜRME YAPILMADI: ${ozet.karar.gerekce}`);
+    l.push('  (güncelleme yine de uygulanır; düşürme toplu ban kalkması riski taşır)');
+  }
+  if (write) {
+    l.push('');
+    l.push(`  güncellenen ${ozet.guncellenen}, düşürülen ${ozet.dusurulen}`);
+  }
+  process.stdout.write(`${l.join('\n')}\n`);
+  process.exit(ozet.karar.guvenli ? 0 : 1);
 }
 
 if (!write) {
