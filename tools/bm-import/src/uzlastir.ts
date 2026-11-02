@@ -195,16 +195,32 @@ export async function uzlastir(
     .select({
       externalId: moderationSchema.bans.externalId,
       revokedAt: moderationSchema.bans.revokedAt,
+      expiresAt: moderationSchema.bans.expiresAt,
     })
     .from(moderationSchema.bans)
     .where(eq(moderationSchema.bans.source, SOURCE));
 
+  /**
+   * SÜRESİ DOLMUŞ BAN DÜŞÜRÜLECEKLERE GİRMİYOR.
+   *
+   * "Kaldırılmamış" ile "aktif" aynı şey değil: canlıda 25.641 kaldırılmamış
+   * ban var ama bunların 21.796'sı aktif, gerisinin süresi dolmuş. Süresi
+   * dolmuş ban zaten kimseyi engellemiyor; onu "BM'de yok" diye düşürmek bir
+   * şey değiştirmezdi ama düşecek sayısını şişirip güvenlik kapısını boş yere
+   * tetiklerdi. Aktiflik tanımı panelin geri kalanıyla aynı: kaldırılmamış VE
+   * (kalıcı VEYA bitişi gelecekte).
+   *
+   * Süresi dolmuş kayıt `tumu` içinde kalıyor: BM süreyi uzatmışsa arşivde
+   * görünür ve `guncellenecek`e düşer, yeni bitişi yazılır.
+   */
+  const simdi = new Date();
   const tumu: string[] = [];
   const aktifler: string[] = [];
   for (const b of bizdeki) {
     if (!b.externalId) continue;
     tumu.push(b.externalId);
-    if (!b.revokedAt) aktifler.push(b.externalId);
+    const gecerli = !b.revokedAt && (!b.expiresAt || b.expiresAt.getTime() > simdi.getTime());
+    if (gecerli) aktifler.push(b.externalId);
   }
 
   const fark = uzlastirmaFarki(arsiv.keys(), aktifler, tumu);
@@ -229,11 +245,11 @@ export async function uzlastir(
     }
 
     if (karar.guvenli && fark.dusecek.length > 0) {
-      const simdi = new Date();
+      const dusurmeAni = new Date();
       for (const parca of parcala(fark.dusecek, PARCA)) {
         await db
           .update(moderationSchema.bans)
-          .set({ revokedAt: simdi })
+          .set({ revokedAt: dusurmeAni })
           .where(
             and(
               eq(moderationSchema.bans.source, SOURCE),
