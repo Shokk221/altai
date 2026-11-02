@@ -19,6 +19,7 @@
     "bm:report": "pnpm --filter @altai/bm-export start -- --report",
     "bm:analyze": "pnpm --filter @altai/bm-import start --",
     "bm:import": "pnpm --filter @altai/bm-import start --",
+    "yetkili:uzlastir": "pnpm --filter @altai/mongo-import yetkili-uzlastir --",
     "bm:uzlastir": "pnpm --filter @altai/bm-import start -- --uzlastir",
     "mongo:import": "pnpm --filter @altai/mongo-import start --",
     "db:seed:role-mapping": "pnpm --filter @altai/db seed:role-mapping --",
