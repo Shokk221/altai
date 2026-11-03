@@ -38,7 +38,7 @@ export function PlayerMenu({
   /** Takım değiştirme onay kutusunu açar; kutu panelin üstünde duruyor. */
   takimaAt?: (hedefTakim: 1 | 2) => void;
   /** Oyuncunun şu anki takımı — kendi takımı seçenek olarak gösterilmiyor. */
-  oyuncuTakimi?: 1 | 2;
+  oyuncuTakimi?: 1 | 2 | undefined;
 }) {
   const [acik, setAcik] = useState(false);
   const [eylem, setEylem] = useState<Eylem>(null);

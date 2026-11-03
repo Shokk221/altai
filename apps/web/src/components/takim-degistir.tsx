@@ -21,7 +21,7 @@ export interface Aday {
   steamId: string;
   name: string;
   /** Şu anki takımı; kaçının gerçekten taşınacağını göstermek için. */
-  takim?: 1 | 2;
+  takim?: 1 | 2 | undefined;
 }
 
 export interface Istek {

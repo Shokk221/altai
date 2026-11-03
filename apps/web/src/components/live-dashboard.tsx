@@ -71,13 +71,14 @@ const SURUKLE_TURU = 'application/x-altai-takim';
 export interface SeciliKayit {
   steamId: string;
   name: string;
-  takim: 1 | 2;
+  /** Takımı HENÜZ bilinmiyorsa yok — bkz. TakimsizSerit. */
+  takim?: 1 | 2 | undefined;
 }
 
 interface SurukleYuku {
   /** Her adayın o anki takımı da taşınıyor: hedef panel neyi taşıyacağını
    *  ve neyin zaten yerinde olduğunu bırakma anında bilmeli. */
-  adaylar: { steamId: string; name: string; takim: 1 | 2 }[];
+  adaylar: { steamId: string; name: string; takim?: 1 | 2 | undefined }[];
   baslik?: string;
 }
 
@@ -306,11 +307,11 @@ export function LiveDashboard({
    * takımda topla" olduğu için karışık seçimin anlamı net — hepsi
    * bırakıldığı panelin takımına gider, zaten orada olanlara dokunulmaz.
    */
-  const seciliDegistir = useCallback((steamId: string, name: string, takim: 1 | 2) => {
+  const seciliDegistir = useCallback((steamId: string, name: string, takim?: 1 | 2) => {
     setSecili((eski) => {
       const yeni = new Map(eski);
       if (yeni.has(steamId)) yeni.delete(steamId);
-      else yeni.set(steamId, { steamId, name, takim });
+      else yeni.set(steamId, { steamId, name, ...(takim ? { takim } : {}) });
       return yeni;
     });
   }, []);
@@ -424,6 +425,9 @@ export function LiveDashboard({
           takim={2}
           oyuncular={gosterilenOyuncular}
           toplam={tumOyuncular.length}
+          // Arama kutusu yalnızca ilk panelde ama SÜZGEÇ İKİSİNİ DE eliyor;
+          // değeri buraya da veriyoruz ki boş panel doğru sebebi yazsın.
+          arama={oyuncuArama}
           apiUrl={apiUrl}
           kickYetkisi={kickYetkisi}
           warnYetkisi={warnYetkisi}
@@ -511,7 +515,84 @@ export function LiveDashboard({
           </div>
         </section>
       </div>
+
+      <TakimsizSerit
+        oyuncular={gosterilenOyuncular}
+        apiUrl={apiUrl}
+        kickYetkisi={kickYetkisi}
+        warnYetkisi={warnYetkisi}
+        takimYetkisi={takimYetkisi}
+        takimaSurukle={setTakimIstegi}
+        secili={secili}
+        seciliDegistir={seciliDegistir}
+      />
     </main>
+  );
+}
+
+/**
+ * Takımı HENÜZ bilinmeyen oyuncular.
+ *
+ * BU ŞERİT OLMADAN BÖYLE BİR OYUNCU EKRANDA HİÇBİR YERDE GÖRÜNMÜYORDU.
+ * İki tahta da `p.teamId === takim` ile süzüyor; `teamId` null olan kayıt
+ * iki süzgece de takılmıyor. Oyuncu sunucuda, sayımda var, ama yetkili
+ * onu ne görüyor ne de üzerine işlem yapabiliyor — ve eksik olduğunu
+ * söyleyen bir şey yok.
+ *
+ * `teamId` iki yoldan null kalıyor:
+ *   1. Oyuncu yeni bağlandı. Takımı bir sonraki RCON tazelemesine kadar
+ *      bilinmiyor — `applyPlayerConnected` onu bilerek null yazıyor ve
+ *      tazeleme 20 saniyede bir.
+ *   2. RCON `Team ID: N/A` döndürüyor (rcon.js'teki ListPlayers deseni
+ *      bunu açıkça kabul ediyor): oyuncu dağıtım ekranında.
+ *
+ * İkisi de tam yetkilinin en çok baktığı anda oluyor — harita geçişi ve
+ * seed. "Bazen tahta boş geliyor"un sebebi buydu.
+ */
+function TakimsizSerit({
+  oyuncular,
+  apiUrl,
+  kickYetkisi,
+  warnYetkisi,
+  takimYetkisi,
+  takimaSurukle,
+  secili,
+  seciliDegistir,
+}: {
+  oyuncular: (LivePlayer & { serverSlug: string })[];
+  apiUrl: string;
+  kickYetkisi: boolean;
+  warnYetkisi: boolean;
+  takimYetkisi: boolean;
+  takimaSurukle: (istek: Istek) => void;
+  secili: Map<string, SeciliKayit>;
+  seciliDegistir: (steamId: string, name: string, takim?: 1 | 2) => void;
+}) {
+  // 1 ve 2 DIŞINDAKİ her şey: null, undefined ve ileride çıkabilecek
+  // beklenmedik bir takım numarası. Beklenmedik değeri de göstermek,
+  // sessizce yutmaktan iyi.
+  const takimsizlar = oyuncular.filter((p) => p.teamId !== 1 && p.teamId !== 2);
+  if (takimsizlar.length === 0) return null;
+
+  return (
+    <section className="shrink-0 rounded border border-border bg-surface px-4 py-3">
+      {/* Yükseklik sınırlı: harita geçişinde herkes aynı anda takımsız
+          görünebiliyor ve şerit tahtaları ekrandan itmemeli. */}
+      <div className="max-h-28 overflow-y-auto">
+        <Manga
+          baslik="Takım bekliyor"
+          uyeler={takimsizlar}
+          sonuk
+          apiUrl={apiUrl}
+          kickYetkisi={kickYetkisi}
+          warnYetkisi={warnYetkisi}
+          takimYetkisi={takimYetkisi}
+          takimaSurukle={takimaSurukle}
+          secili={secili}
+          seciliDegistir={seciliDegistir}
+        />
+      </div>
+    </section>
   );
 }
 
@@ -562,7 +643,7 @@ function TakimPaneli({
   takimYetkisi: boolean;
   takimaSurukle: (istek: Istek) => void;
   secili: Map<string, SeciliKayit>;
-  seciliDegistir: (steamId: string, name: string, takim: 1 | 2) => void;
+  seciliDegistir: (steamId: string, name: string, takim?: 1 | 2) => void;
 }) {
   const benimkiler = oyuncular.filter((p) => p.teamId === takim);
   // Üzerine sürüklenirken panelin kenarı yanıyor: bırakmanın nereye
@@ -647,7 +728,16 @@ function TakimPaneli({
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
         {benimkiler.length === 0 ? (
           <p className="py-8 text-center text-xs text-fg-muted">
-            {toplam === 0 ? 'Sunucuda kimse yok' : 'Bu takımda eşleşen yok'}
+            {/* Üçü AYRI durum ve yetkili için farklı anlama geliyor.
+                Eskiden ikisi "Bu takımda eşleşen yok" diyordu: arama
+                kutusu boşken bile "eşleşen" denmesi, sunucuda gerçekten
+                kimse yok mu yoksa süzgeç mi eledi sorusunu cevapsız
+                bırakıyordu. */}
+            {toplam === 0
+              ? 'Sunucuda kimse yok'
+              : arama
+                ? 'Aramaya uyan oyuncu yok'
+                : 'Bu takımda kimse yok'}
           </p>
         ) : (
           <div className="flex flex-col gap-3">
@@ -708,10 +798,11 @@ function Manga({
   kickYetkisi: boolean;
   warnYetkisi: boolean;
   takimYetkisi: boolean;
-  takim: 1 | 2;
+  /** Takımsız kutusunda yok: oyuncunun takımı henüz bilinmiyor. */
+  takim?: 1 | 2 | undefined;
   takimaSurukle: (istek: Istek) => void;
   secili: Map<string, SeciliKayit>;
-  seciliDegistir: (steamId: string, name: string, takim: 1 | 2) => void;
+  seciliDegistir: (steamId: string, name: string, takim?: 1 | 2) => void;
 }) {
   // Manga lideri başta: skor tahtasında da öyle ve "kime yazayım" sorusunun
   // cevabı o.
