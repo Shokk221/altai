@@ -2,18 +2,22 @@
  * Eski sistemin YAYINLADIĞI yetkili listesini bizim grant'larımızla uzlaştırır.
  *
  * NEDEN BU DOSYA VAR: `index.ts` yetkileri Mongo DÖKÜMÜNDEN aktardı ve o
- * döküm alındığı güne dondu. Canlıda ölçtüm — fark küçük değil:
+ * döküm alındığı güne dondu. Canlıda ölçtüm (3 Kasım 2026) — fark küçük
+ * değil. Aşağıdakiler kişi+grup ÇİFTİ sayısı, aracın kendi diliyle:
  *
- *   eski sistemin şu an sunduğu liste   530 kişi
- *   bizim ürettiğimiz liste             493 kişi
- *   eskide olup bizde HİÇ olmayan       163 kişi
- *   KlanWL                              327 kişi (bizde 324 grant, 135'i farklı)
- *   SeedWL, BicakWL                     bizde grup olarak HİÇ YOK
+ *   kaynaktaki üye satırı               548
+ *   bizdeki aktif grant                 488
+ *   kaynakta var, bizde yok             161   <- geçişte ayrıcalığı GİDER
+ *   bizde var, kaynakta yok             135   <- hak sahibi olmayana veriyoruz
+ *   iki tarafta aynı                    353
+ *   bizde grup olarak hiç yok           BicakWL
+ *   bizde var, kaynakta tanımsız        dumduzWL
  *
- * Yani `RemoteAdminListHosts.cfg`'yi bugün bize çevirsek 163 kişi oyun içi
- * ayrıcalığını kaybederdi. Ban listesindeki hatanın aynısı, ters yönde:
- * orada af görmüş insanlar banlı kalıyordu, burada hak sahibi insanlar
- * haksız kalıyor.
+ * Sayılar günceldir diye varsayma: ölçüm aracın kendisi, kuru koşu her
+ * seferinde yeniden sayıyor. Durum şu: `RemoteAdminListHosts.cfg`'yi
+ * bugün bize çevirsek 161 eşleşme oyun içi ayrıcalığını kaybederdi. Ban
+ * listesindeki hatanın aynısı, ters yönde: orada af görmüş insanlar banlı
+ * kalıyordu, burada hak sahibi insanlar haksız kalıyor.
  *
  * KAYNAK NEDEN MONGO DEĞİL: eski sistem yetkili listesini halka açık bir
  * adreste sunuyor ve oyun sunucusu TAM O DOSYAYI okuyor. Yani o dosya
@@ -114,10 +118,11 @@ export function kaynakSagligi(kaynak: KaynakListe, bizdekiKisi: number): SaglikK
       gerekce: 'kaynak listede hiç grup tanımı yok — biçim değişmiş olabilir',
     };
   }
-  if (kaynak.anlasilmayan.length > 0) {
+  const toplamSatir = kaynak.uyeler.length + kaynak.gruplar.length + kaynak.anlasilmayan.length;
+  if (kaynak.anlasilmayan.length > toplamSatir * EN_COK_ANLASILMAYAN_ORANI) {
     return {
       guvenli: false,
-      gerekce: `kaynakta ayrıştırılamayan ${kaynak.anlasilmayan.length} satır var (ilki: ${kaynak.anlasilmayan[0]?.slice(0, 60)}) — biçim değişmiş olabilir`,
+      gerekce: `${toplamSatir} satırın ${kaynak.anlasilmayan.length}'i ayrıştırılamadı (ilki: ${kaynak.anlasilmayan[0]?.slice(0, 60)}) — biçim değişmiş olabilir`,
     };
   }
   // Bizde hiç kayıt yoksa karşılaştıracak bir şey yok; ilk doldurma serbest.
@@ -140,6 +145,26 @@ export function kaynakSagligi(kaynak: KaynakListe, bizdekiKisi: number): SaglikK
  * inmiş dosyayı yakalamak, ince farkı değil.
  */
 const EN_AZ_KAYNAK_ORANI = 0.5;
+
+/**
+ * Ayrıştırılamayan satırların bu orandan fazlası biçim değişikliği sayılıyor.
+ *
+ * NEDEN ORAN, NEDEN SIFIR TOLERANS DEĞİL: canlıda ölçtüm, eski sistemin
+ * listesinde 560 satırın BİRİ bozuk:
+ *
+ *   Admin=PARMAKSIZ Veteran:VeteranWL //76561198427772079
+ *
+ * Kimlik alanına isim, yoruma SteamID yazılmış — bir veri girişi hatası.
+ * O satır Squad'ın kendi ayrıştırıcısında da geçersiz, yani o kişinin şu
+ * an OYUNDA da whitelist'i yok; biz bir şey kaybetmiyoruz. Ama sıfır
+ * tolerans bu tek satır yüzünden aracı kalıcı olarak kilitliyordu ve
+ * kimse eski sistemi düzeltmeyeceği için liste hiç uzlaşmıyordu.
+ *
+ * Ayırt edici olan şu: biçim değişikliği tek satırı değil YIĞINI bozar.
+ * Eşiğin altında kalan satırlar yok sayılmıyor — çağıran taraf hepsini
+ * tek tek basıyor (bkz. `yetkili-uzlastir.ts`).
+ */
+const EN_COK_ANLASILMAYAN_ORANI = 0.02;
 
 /** Bu orandan fazlası düşecekse insan onayı isteniyor. */
 export const ONAY_ESIGI = 0.2;

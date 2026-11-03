@@ -174,6 +174,22 @@ async function main() {
   bilgi(`  eklenecek              ${fark.eklenecek.length}`);
   bilgi(`  düşecek                ${fark.dusecek.length}`);
   bilgi(`  değişmeyen             ${fark.ayni}`);
+  // Düşecek sayısı tek başına onaylanabilir bir şey değil: 135 grant'ın
+  // tek bir eski gruptan mı geldiği, yoksa her gruba mı dağıldığı kararı
+  // değiştirir. Grup dağılımı bu yüzden basılıyor.
+  if (fark.dusecek.length > 0) {
+    const sayim = new Map<string, number>();
+    for (const c of fark.dusecek) {
+      const grup = c.split('|')[1] ?? '?';
+      sayim.set(grup, (sayim.get(grup) ?? 0) + 1);
+    }
+    bilgi(
+      `  düşecek dağılımı       ${[...sayim]
+        .sort((a, b) => b[1] - a[1])
+        .map(([g, n]) => `${g}:${n}`)
+        .join(', ')}`,
+    );
+  }
   if (eksikGruplar.length > 0) {
     bilgi(
       `  bizde OLMAYAN grup     ${eksikGruplar.length}: ${eksikGruplar
@@ -199,6 +215,18 @@ async function main() {
     for (const [g, us] of [...grupla].sort((a, b) => b[1].length - a[1].length)) {
       bilgi(`    ${g}: ${us.length} kişi — ${us.map((u) => u.not ?? u.kimlik).join(', ')}`);
     }
+  }
+
+  // Eşiğin altında kalan bozuk satırlar sessizce atlanmıyor: tek tek
+  // basılıyor. Bu satırlar Squad'ın ayrıştırıcısında da geçersiz, yani bu
+  // kişilerin oyunda zaten yetkisi yok — ama hak sahibiyse biri bunu
+  // görüp panelden vermeli.
+  if (kaynak.anlasilmayan.length > 0) {
+    bilgi('');
+    bilgi(`  AYRIŞTIRILAMAYAN ${kaynak.anlasilmayan.length} SATIR — eski sistemdeki veri hatası.`);
+    bilgi('  Squad da bu satırları okuyamıyor, bu kişilerin oyunda yetkisi YOK.');
+    bilgi('  Hak sahibiyse panelden elle verilmeli:');
+    for (const s of kaynak.anlasilmayan) bilgi(`    ${s}`);
   }
 
   if (!saglik.guvenli) {

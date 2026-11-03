@@ -98,10 +98,41 @@ describe('kaynakSagligi', () => {
     expect(k.gerekce).toContain('hiç grup');
   });
 
-  it('ayrıştırılamayan satır varsa reddediyor', () => {
+  /**
+   * Bozuk satırda eşik ORANDA: biçim değişikliği yığını bozar, veri giriş
+   * hatası tek satırı. İkisini ayırmayan bir kural ya aracı tek yazım
+   * hatasıyla kilitler ya da biçim değişikliğini kaçırır.
+   */
+  it('bozuk satır yığınını reddediyor', () => {
     const k = kaynakSagligi(liste({ anlasilmayan: ['Admin 123 KlanWL'] }), 1);
     expect(k.guvenli).toBe(false);
-    expect(k.gerekce).toContain('ayrıştırılamayan');
+    expect(k.gerekce).toContain('ayrıştırılamadı');
+  });
+
+  it('tek bozuk satırı geçiriyor (canlıda böyle bir satır var)', () => {
+    // Gerçek satır: kimlik alanına isim, yoruma SteamID yazılmış. Squad da
+    // okuyamıyor; bu yüzden tek başına uzlaştırmayı durdurmamalı.
+    const uyeler = Array.from({ length: 548 }, (_, i) => ({
+      kimlik: String(i),
+      grup: 'KlanWL',
+    }));
+    const k = kaynakSagligi(
+      liste({ uyeler, anlasilmayan: ['Admin=PARMAKSIZ Veteran:VeteranWL //76561198427772079'] }),
+      488,
+    );
+    expect(k.guvenli, k.gerekce).toBe(true);
+  });
+
+  it('bozuk satır eşiği aşarsa yine duruyor', () => {
+    const uyeler = Array.from({ length: 100 }, (_, i) => ({
+      kimlik: String(i),
+      grup: 'KlanWL',
+    }));
+    // 100 üye + 1 grup + 5 bozuk = 106 satır, %4.7 -> eşiğin üstünde.
+    const anlasilmayan = Array.from({ length: 5 }, (_, i) => `Admin ${i} KlanWL`);
+    const k = kaynakSagligi(liste({ uyeler, anlasilmayan }), 100);
+    expect(k.guvenli).toBe(false);
+    expect(k.gerekce).toContain('ayrıştırılamadı');
   });
 
   it('yarım inmiş dosyayı reddediyor', () => {
